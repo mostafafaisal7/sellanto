@@ -1,0 +1,415 @@
+<!-- C:\Users\Trust computer\Desktop\Final_version_socialSync\templates\accounts\login.html -->
+
+{% extends 'base.html' %}
+
+
+<!-- {% block extra_css %} -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+    }
+
+    body {
+        background: #0d0d0d;
+        color: #e5e7eb;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        line-height: 1.6;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
+    }
+
+    .auth-container {
+        max-width: 500px;
+        width: 100%;
+    }
+
+    .auth-card {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        border-radius: 2rem;
+        padding: 3rem 2.5rem;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        position: relative;
+        overflow: hidden;
+    }
+
+    .auth-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 200%;
+        height: 100%;
+        background: linear-gradient(90deg,
+                transparent,
+                rgba(239, 68, 68, 0.03),
+                transparent);
+        animation: shimmer 8s infinite;
+    }
+
+    @keyframes shimmer {
+        0% {
+            left: -100%;
+        }
+
+        100% {
+            left: 100%;
+        }
+    }
+
+    .auth-card::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg,
+                transparent,
+                #ff6b6b,
+                #ee5a6f,
+                #f06595,
+                transparent);
+        background-size: 200% 100%;
+        animation: gradient-shift 3s linear infinite;
+    }
+
+    @keyframes gradient-shift {
+        0% {
+            background-position: 0% 0%;
+        }
+
+        100% {
+            background-position: 200% 0%;
+        }
+    }
+
+    .auth-header {
+        text-align: center;
+        margin-bottom: 2.5rem;
+        position: relative;
+        z-index: 1;
+    }
+
+    .auth-logo {
+        width: 70px;
+        height: 70px;
+        background: linear-gradient(135deg, #ff6b6b, #f06595);
+        border-radius: 1.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 1.5rem;
+        box-shadow: 0 10px 30px rgba(239, 68, 68, 0.4);
+        animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+
+        0%,
+        100% {
+            transform: scale(1);
+        }
+
+        50% {
+            transform: scale(1.05);
+        }
+    }
+
+    .auth-logo i {
+        font-size: 2rem;
+        color: white;
+    }
+
+    .auth-header h1 {
+        font-size: 2.25rem;
+        font-weight: 800;
+        background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 50%, #f06595 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 0.75rem;
+        letter-spacing: -0.03em;
+    }
+
+    .auth-header p {
+        color: #94a3b8;
+        font-size: 1.05rem;
+        font-weight: 500;
+    }
+
+    .features {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem;
+        margin: 2rem 0;
+        position: relative;
+        z-index: 1;
+    }
+
+    .feature {
+        text-align: center;
+        padding: 1.25rem;
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: 1rem;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        transition: all 0.3s;
+    }
+
+    .feature:hover {
+        background: rgba(239, 68, 68, 0.05);
+        border-color: rgba(239, 68, 68, 0.2);
+        transform: translateY(-3px);
+    }
+
+    .feature-icon {
+        width: 45px;
+        height: 45px;
+        margin: 0 auto 0.75rem;
+        background: linear-gradient(135deg, #ef4444, #f59e0b);
+        border-radius: 0.75rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 8px 20px rgba(239, 68, 68, 0.3);
+    }
+
+    .feature-icon i {
+        font-size: 1.25rem;
+        color: white;
+    }
+
+    .feature-text {
+        font-size: 0.9rem;
+        color: #94a3b8;
+        font-weight: 600;
+    }
+
+    form {
+        position: relative;
+        z-index: 1;
+    }
+
+    .form-group {
+        margin-bottom: 1.5rem;
+    }
+
+    .form-label {
+        display: block;
+        margin-bottom: 0.75rem;
+        font-weight: 700;
+        color: #e5e7eb;
+        font-size: 0.9rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .form-label i {
+        color: #f59e0b;
+        font-size: 0.85rem;
+    }
+
+    .form-control {
+        width: 100%;
+        padding: 1rem 1.25rem;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 0.75rem;
+        font-size: 1rem;
+        color: #e5e7eb;
+        font-family: 'Inter', sans-serif;
+        transition: all 0.3s;
+    }
+
+    .form-control::placeholder {
+        color: #64748b;
+    }
+
+    .form-control:focus {
+        outline: none;
+        background: rgba(255, 255, 255, 0.08);
+        border-color: rgba(239, 68, 68, 0.5);
+        box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+    }
+
+    .btn-login {
+        width: 100%;
+        padding: 1.125rem 1.5rem;
+        background: linear-gradient(135deg, #ef4444, #f59e0b);
+        color: white;
+        border: none;
+        border-radius: 0.875rem;
+        font-size: 1.05rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.75rem;
+        box-shadow: 0 10px 30px rgba(239, 68, 68, 0.3);
+        margin-top: 2rem;
+    }
+
+    .btn-login:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 15px 40px rgba(239, 68, 68, 0.5);
+    }
+
+    .btn-login:active {
+        transform: translateY(-1px);
+    }
+
+    .btn-login i {
+        font-size: 1.1rem;
+    }
+
+    .auth-footer {
+        text-align: center;
+        margin-top: 2rem;
+        padding-top: 2rem;
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+        position: relative;
+        z-index: 1;
+    }
+
+    .auth-footer p {
+        color: #94a3b8;
+        font-size: 0.95rem;
+    }
+
+    .auth-footer a {
+        color: #ff6b6b;
+        text-decoration: none;
+        font-weight: 700;
+        transition: all 0.3s;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .auth-footer a:hover {
+        color: #f06595;
+        transform: translateX(3px);
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+        width: 12px;
+    }
+
+    ::-webkit-scrollbar-track {
+        background: #0d0d0d;
+    }
+
+    ::-webkit-scrollbar-thumb {
+        background: linear-gradient(135deg, #ef4444, #f59e0b);
+        border-radius: 10px;
+        border: 2px solid #0d0d0d;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+        background: linear-gradient(135deg, #dc2626, #d97706);
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+        body {
+            padding: 1rem;
+        }
+
+        .auth-card {
+            padding: 2rem 1.5rem;
+        }
+
+        .auth-header h1 {
+            font-size: 1.75rem;
+        }
+
+        .features {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+
+<div class="auth-container">
+    <div class="auth-card">
+        <div class="auth-header">
+            <div class="auth-logo">
+                <i class="fas fa-rocket"></i>
+            </div>
+            <h1>Welcome Back!</h1>
+            <p>Login to manage your social media</p>
+        </div>
+
+        <div class="features">
+            <div class="feature">
+                <div class="feature-icon">
+                    <i class="fas fa-share-alt"></i>
+                </div>
+                <div class="feature-text">8 Platforms</div>
+            </div>
+            <div class="feature">
+                <div class="feature-icon">
+                    <i class="fas fa-magic"></i>
+                </div>
+                <div class="feature-text">AI Captions</div>
+            </div>
+            <div class="feature">
+                <div class="feature-icon">
+                    <i class="fas fa-clock"></i>
+                </div>
+                <div class="feature-text">Auto Schedule</div>
+            </div>
+            <div class="feature">
+                <div class="feature-icon">
+                    <i class="fas fa-chart-line"></i>
+                </div>
+                <div class="feature-text">Analytics</div>
+            </div>
+        </div>
+
+        <form method="POST">
+            {% csrf_token %}
+
+            <div class="form-group">
+                <label class="form-label" for="username">
+                    <i class="fas fa-user"></i>
+                    Username
+                </label>
+                <input type="text" id="username" name="username" class="form-control" placeholder="Enter your username"
+                    required autofocus>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="password">
+                    <i class="fas fa-lock"></i>
+                    Password
+                </label>
+                <input type="password" id="password" name="password" class="form-control"
+                    placeholder="Enter your password" required>
+            </div>
+
+            <button type="submit" class="btn-login">
+                <i class="fas fa-sign-in-alt"></i>
+                <span>Login to Dashboard</span>
+            </button>
+        </form>
+
+        <div class="auth-footer">
+            <p>Don't have an account? <a href="{% url 'register' %}">Register Now <i class="fas fa-arrow-right"></i></a>
+            </p>
+        </div>
+    </div>
+</div>
+<!-- {% endblock %} -->

@@ -1,0 +1,285 @@
+# accounts/models.py
+
+from django.db import models
+from django.contrib.auth.models import User
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+from django.utils import timezone
+from datetime import timedelta
+
+
+class SiteConfiguration(models.Model):
+    """Store site-wide configuration in database"""
+    
+    key = models.CharField(max_length=100, unique=True, help_text='Configuration key')
+    value = models.TextField(blank=True, help_text='Configuration value')
+    description = models.CharField(max_length=255, blank=True, help_text='What this setting does')
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'site_configuration'
+        verbose_name = 'Site Configuration'
+        verbose_name_plural = 'Site Configurations'
+        ordering = ['key']
+    
+    def __str__(self):
+        return f"{self.key}: {self.value[:50]}"
+    
+    @staticmethod
+    def get(key, default=''):
+        """Get configuration value"""
+        try:
+            config = SiteConfiguration.objects.get(key=key, is_active=True)
+            return config.value
+        except SiteConfiguration.DoesNotExist:
+            return default
+    
+    @staticmethod
+    def set(key, value, description=''):
+        """Set configuration value"""
+        config, created = SiteConfiguration.objects.update_or_create(
+            key=key,
+            defaults={'value': value, 'description': description, 'is_active': True}
+        )
+        return config
+
+
+class UserProfile(models.Model):
+    """Extended user profile with approval system and API management"""
+    
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
+    is_approved = models.BooleanField(default=False, help_text='Admin approval required')
+    phone = models.CharField(max_length=20, blank=True, null=True)
+    company = models.CharField(max_length=200, blank=True, null=True)
+    avatar = models.ImageField(upload_to='avatars/', blank=True, null=True)
+    
+    # Subscription & Limits
+    PLAN_CHOICES = [
+        ('free', 'Free'),
+        ('starter', 'Starter'),
+        ('pro', 'Pro'),
+        ('business', 'Business'),
+        ('enterprise', 'Enterprise'),
+    ]
+    subscription_plan = models.CharField(max_length=20, choices=PLAN_CHOICES, default='free')
+    plan_start_date = models.DateField(null=True, blank=True)
+    plan_end_date = models.DateField(null=True, blank=True)
+    plan_duration_months = models.IntegerField(default=1, help_text='Plan duration in months')
+    
+    # Limits
+    max_social_accounts = models.IntegerField(default=3)
+    max_posts_per_month = models.IntegerField(default=30)
+    posts_this_month = models.IntegerField(default=0)
+    max_captions_per_month = models.IntegerField(default=50)
+    captions_this_month = models.IntegerField(default=0)
+    max_videos_per_month = models.IntegerField(default=10)
+    videos_this_month = models.IntegerField(default=0)
+    max_images_per_month = models.IntegerField(default=20)
+    images_this_month = models.IntegerField(default=0)
+    max_messenger_messages = models.IntegerField(default=500)
+    messenger_messages_this_month = models.IntegerField(default=0)
+    
+    # API Settings - Admin can provide or let user setup
+    API_MODE_CHOICES = [
+        ('admin', 'Admin Provided'),
+        ('user', 'User Provided'),
+    ]
+    api_mode = models.CharField(max_length=20, choices=API_MODE_CHOICES, default='user')
+    
+    # Admin provided API keys (stored for admin-provided mode)
+    admin_openai_key = models.TextField(blank=True, null=True, help_text='Admin provided OpenAI key')
+    admin_gemini_key = models.TextField(blank=True, null=True, help_text='Admin provided Gemini key')
+    
+    # Token usage tracking
+    total_openai_tokens_used = models.BigIntegerField(default=0)
+    total_gemini_tokens_used = models.BigIntegerField(default=0)
+    openai_tokens_this_month = models.BigIntegerField(default=0)
+    gemini_tokens_this_month = models.BigIntegerField(default=0)
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    last_activity = models.DateTimeField(null=True, blank=True)
+    
+    class Meta:
+        db_table = 'user_profiles'
+        verbose_name = 'User Profile'
+        verbose_name_plural = 'User Profiles'
+    
+    def __str__(self):
+        return f"{self.user.username} - {'Approved' if self.is_approved else 'Pending'}"
+    
+    @property
+    def is_admin(self):
+        return self.user.is_staff or self.user.is_superuser
+    
+    @property
+    def is_plan_active(self):
+        """Check if user's plan is still active"""
+        if not self.plan_end_date:
+            return True
+        return self.plan_end_date >= timezone.now().date()
+    
+    @property
+    def days_remaining(self):
+        """Calculate remaining days in plan"""
+        if not self.plan_end_date:
+            return None
+        delta = self.plan_end_date - timezone.now().date()
+        return max(0, delta.days)
+    
+    @property
+    def can_use_api_settings(self):
+        """Check if user can configure their own API settings"""
+        return self.api_mode == 'user'
+    
+    def hash_api_key(self, key):
+        """Hash API key for display purposes"""
+        if not key:
+            return ''
+        if len(key) <= 8:
+            return '*' * len(key)
+        return key[:4] + '*' * (len(key) - 8) + key[-4:]
+    
+    def get_masked_openai_key(self):
+        return self.hash_api_key(self.admin_openai_key)
+    
+    def get_masked_gemini_key(self):
+        return self.hash_api_key(self.admin_gemini_key)
+    
+    def can_add_account(self):
+        from platforms.models import SocialAccount
+        current_count = SocialAccount.objects.filter(user=self.user, is_active=True).count()
+        return current_count < self.max_social_accounts
+    
+    def can_create_post(self):
+        return self.posts_this_month < self.max_posts_per_month
+    
+    def can_generate_caption(self):
+        return self.captions_this_month < self.max_captions_per_month
+    
+    def can_generate_video(self):
+        return self.videos_this_month < self.max_videos_per_month
+    
+    def can_generate_image(self):
+        return self.images_this_month < self.max_images_per_month
+    
+    def increment_usage(self, usage_type, count=1):
+        if usage_type == 'post':
+            self.posts_this_month += count
+        elif usage_type == 'caption':
+            self.captions_this_month += count
+        elif usage_type == 'video':
+            self.videos_this_month += count
+        elif usage_type == 'image':
+            self.images_this_month += count
+        elif usage_type == 'messenger':
+            self.messenger_messages_this_month += count
+        self.save()
+    
+    def add_token_usage(self, service, tokens):
+        if service == 'openai':
+            self.openai_tokens_this_month += tokens
+            self.total_openai_tokens_used += tokens
+        elif service == 'gemini':
+            self.gemini_tokens_this_month += tokens
+            self.total_gemini_tokens_used += tokens
+        self.save()
+    
+    def reset_monthly_counters(self):
+        self.posts_this_month = 0
+        self.captions_this_month = 0
+        self.videos_this_month = 0
+        self.images_this_month = 0
+        self.messenger_messages_this_month = 0
+        self.openai_tokens_this_month = 0
+        self.gemini_tokens_this_month = 0
+        self.save()
+    
+    def set_plan(self, plan, duration_months=1, start_date=None):
+        self.subscription_plan = plan
+        self.plan_duration_months = duration_months
+        self.plan_start_date = start_date or timezone.now().date()
+        self.plan_end_date = self.plan_start_date + timedelta(days=30*duration_months)
+        
+        plan_limits = {
+            'free': {'posts': 10, 'captions': 20, 'videos': 5, 'images': 10, 'messenger': 100, 'accounts': 1},
+            'starter': {'posts': 50, 'captions': 100, 'videos': 20, 'images': 50, 'messenger': 500, 'accounts': 3},
+            'pro': {'posts': 200, 'captions': 500, 'videos': 50, 'images': 200, 'messenger': 2000, 'accounts': 5},
+            'business': {'posts': 500, 'captions': 1000, 'videos': 100, 'images': 500, 'messenger': 5000, 'accounts': 10},
+            'enterprise': {'posts': 99999, 'captions': 99999, 'videos': 99999, 'images': 99999, 'messenger': 99999, 'accounts': 50},
+        }
+        
+        limits = plan_limits.get(plan, plan_limits['free'])
+        self.max_posts_per_month = limits['posts']
+        self.max_captions_per_month = limits['captions']
+        self.max_videos_per_month = limits['videos']
+        self.max_images_per_month = limits['images']
+        self.max_messenger_messages = limits['messenger']
+        self.max_social_accounts = limits['accounts']
+        
+        self.save()
+
+
+class APIUsageLog(models.Model):
+    """Track detailed API usage for each user"""
+    
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='api_usage_logs')
+    
+    SERVICE_CHOICES = [
+        ('openai', 'OpenAI'),
+        ('gemini', 'Gemini'),
+        ('whisper', 'Whisper'),
+        ('tts', 'Text-to-Speech'),
+    ]
+    service = models.CharField(max_length=20, choices=SERVICE_CHOICES)
+    
+    FEATURE_CHOICES = [
+        ('caption', 'Caption Generation'),
+        ('video', 'Video Generation'),
+        ('image', 'Image Generation'),
+        ('messenger', 'Messenger Bot'),
+        ('transcription', 'Voice Transcription'),
+        ('tts', 'Voice Reply'),
+    ]
+    feature = models.CharField(max_length=30, choices=FEATURE_CHOICES)
+    
+    tokens_used = models.IntegerField(default=0)
+    estimated_cost = models.DecimalField(max_digits=10, decimal_places=6, default=0)
+    request_data = models.TextField(blank=True, null=True, help_text='Request summary')
+    response_status = models.CharField(max_length=20, default='success')
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        db_table = 'api_usage_logs'
+        ordering = ['-created_at']
+        verbose_name = 'API Usage Log'
+        verbose_name_plural = 'API Usage Logs'
+    
+    def __str__(self):
+        return f"{self.user.username} - {self.service} - {self.tokens_used} tokens"
+    
+    @staticmethod
+    def log_usage(user, service, feature, tokens, cost=0, request_data=''):
+        return APIUsageLog.objects.create(
+            user=user,
+            service=service,
+            feature=feature,
+            tokens_used=tokens,
+            estimated_cost=cost,
+            request_data=request_data[:500] if request_data else ''
+        )
+
+
+@receiver(post_save, sender=User)
+def create_user_profile(sender, instance, created, **kwargs):
+    if created:
+        UserProfile.objects.create(user=instance)
+
+
+@receiver(post_save, sender=User)
+def save_user_profile(sender, instance, **kwargs):
+    UserProfile.objects.get_or_create(user=instance)

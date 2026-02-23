@@ -1,0 +1,1256 @@
+{% extends 'base.html' %}
+
+{% block title %}My Posts - SocialSync{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+    }
+
+    body {
+        background: #0d0d0d;
+        color: #e5e7eb;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        line-height: 1.6;
+    }
+    
+    .posts-container {
+        max-width: 1600px;
+        margin: 0 auto;
+        padding: 3rem 2.5rem;
+    }
+    
+    .posts-header {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        padding: 3rem 2.5rem;
+        border-radius: 2rem;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        margin-bottom: 3rem;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .posts-header::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 200%;
+        height: 100%;
+        background: linear-gradient(90deg, 
+            transparent, 
+            rgba(239, 68, 68, 0.03), 
+            transparent
+        );
+        animation: shimmer 8s infinite;
+    }
+
+    @keyframes shimmer {
+        0% { left: -100%; }
+        100% { left: 100%; }
+    }
+
+    .posts-header::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, 
+            transparent,
+            #ff6b6b,
+            #ee5a6f,
+            #f06595,
+            transparent
+        );
+        background-size: 200% 100%;
+        animation: gradient-shift 3s linear infinite;
+    }
+
+    @keyframes gradient-shift {
+        0% { background-position: 0% 0%; }
+        100% { background-position: 200% 0%; }
+    }
+
+    .header-content {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+    }
+
+    .header-icon {
+        width: 70px;
+        height: 70px;
+        background: linear-gradient(135deg, #ff6b6b, #f06595);
+        border-radius: 1.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2rem;
+        color: white;
+        box-shadow: 0 10px 30px rgba(239, 68, 68, 0.4);
+    }
+    
+    .posts-header h1 {
+        font-size: 2.5rem;
+        font-weight: 800;
+        background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 50%, #f06595 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 0.5rem;
+        letter-spacing: -0.03em;
+    }
+
+    .posts-header p {
+        color: #94a3b8;
+        font-size: 1.05rem;
+        font-weight: 500;
+    }
+    
+    .stats-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 2rem;
+        margin-bottom: 3rem;
+    }
+    
+    .stat-box {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        padding: 2rem;
+        border-radius: 1.5rem;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        text-align: center;
+        transition: all 0.4s;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .stat-box::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: radial-gradient(circle at 20% 20%, rgba(239, 68, 68, 0.1), transparent 70%);
+        opacity: 0;
+        transition: opacity 0.5s;
+    }
+
+    .stat-box:hover {
+        transform: translateY(-8px);
+        box-shadow: 0 20px 50px rgba(239, 68, 68, 0.3);
+    }
+
+    .stat-box:hover::before {
+        opacity: 1;
+    }
+    
+    .stat-value {
+        font-size: 3rem;
+        font-weight: 900;
+        background: linear-gradient(135deg, #ff6b6b, #f06595);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        position: relative;
+        z-index: 1;
+    }
+    
+    .stat-label {
+        color: #94a3b8;
+        font-size: 0.9rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        margin-top: 0.5rem;
+        position: relative;
+        z-index: 1;
+    }
+    
+    .filters {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        padding: 2rem;
+        border-radius: 1.5rem;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        margin-bottom: 3rem;
+        display: flex;
+        gap: 1rem;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+    
+    .filter-btn {
+        padding: 0.875rem 1.5rem;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: 0.75rem;
+        cursor: pointer;
+        font-weight: 700;
+        font-size: 0.9rem;
+        transition: all 0.3s;
+        text-decoration: none;
+        color: #94a3b8;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .filter-btn:hover {
+        border-color: rgba(239, 68, 68, 0.5);
+        color: #fff;
+        background: rgba(239, 68, 68, 0.1);
+        transform: translateY(-2px);
+    }
+    
+    .filter-btn.active {
+        background: linear-gradient(135deg, #ef4444, #f59e0b);
+        color: white;
+        border-color: transparent;
+        box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3);
+    }
+
+    .new-post-btn {
+        margin-left: auto;
+        background: linear-gradient(135deg, #10b981, #059669) !important;
+        color: white !important;
+        border: none !important;
+        box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+    }
+
+    .new-post-btn:hover {
+        box-shadow: 0 8px 25px rgba(16, 185, 129, 0.5) !important;
+        background: linear-gradient(135deg, #059669, #047857) !important;
+    }
+    
+    .posts-list {
+        display: grid;
+        gap: 2rem;
+    }
+    
+    .post-card {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        padding: 2.5rem;
+        border-radius: 1.5rem;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        transition: all 0.4s;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .post-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: radial-gradient(circle at 20% 20%, rgba(99, 102, 241, 0.05), transparent 70%);
+        opacity: 0;
+        transition: opacity 0.5s;
+    }
+    
+    .post-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 20px 50px rgba(99, 102, 241, 0.2);
+    }
+
+    .post-card:hover::before {
+        opacity: 1;
+    }
+    
+    .post-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: start;
+        margin-bottom: 1.5rem;
+        position: relative;
+        z-index: 1;
+    }
+    
+    .post-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.75rem 1.25rem;
+        border-radius: 0.75rem;
+        font-size: 0.875rem;
+        font-weight: 700;
+        border: 1px solid;
+    }
+    
+    .status-scheduled {
+        background: rgba(59, 130, 246, 0.1);
+        color: #60a5fa;
+        border-color: rgba(59, 130, 246, 0.3);
+    }
+    
+    .status-posted {
+        background: rgba(16, 185, 129, 0.1);
+        color: #34d399;
+        border-color: rgba(16, 185, 129, 0.3);
+    }
+    
+    .status-failed {
+        background: rgba(239, 68, 68, 0.1);
+        color: #fca5a5;
+        border-color: rgba(239, 68, 68, 0.3);
+    }
+    
+    .status-cancelled {
+        background: rgba(156, 163, 175, 0.1);
+        color: #9ca3af;
+        border-color: rgba(156, 163, 175, 0.3);
+    }
+    
+    .status-posting {
+        background: rgba(245, 158, 11, 0.1);
+        color: #fbbf24;
+        border-color: rgba(245, 158, 11, 0.3);
+    }
+    
+    .post-time {
+        font-size: 0.875rem;
+        color: #94a3b8;
+        margin-top: 0.75rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .post-time i {
+        color: #64748b;
+    }
+    
+    .post-caption {
+        color: #cbd5e1;
+        margin-bottom: 1.5rem;
+        line-height: 1.7;
+        position: relative;
+        z-index: 1;
+    }
+    
+    .post-platforms {
+        display: flex;
+        gap: 0.75rem;
+        margin-bottom: 1.5rem;
+        flex-wrap: wrap;
+        position: relative;
+        z-index: 1;
+    }
+    
+    .platform-badge {
+        padding: 0.5rem 1rem;
+        border-radius: 0.75rem;
+        font-size: 0.8rem;
+        font-weight: 700;
+        color: white;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    }
+    
+    .badge-facebook { background: #1877f2; }
+    .badge-twitter { background: #1da1f2; }
+    .badge-instagram { background: linear-gradient(45deg, #f09433, #e6683c, #dc2743); }
+    .badge-linkedin { background: #0a66c2; }
+    
+    .post-actions {
+        display: flex;
+        gap: 1rem;
+        margin-top: 1.5rem;
+        padding-top: 1.5rem;
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+        position: relative;
+        z-index: 1;
+    }
+    
+    .btn-action {
+        padding: 0.75rem 1.5rem;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: 0.75rem;
+        cursor: pointer;
+        font-weight: 700;
+        font-size: 0.9rem;
+        transition: all 0.3s;
+        text-decoration: none;
+        color: #94a3b8;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .btn-action:hover {
+        border-color: rgba(99, 102, 241, 0.5);
+        color: #a5b4fc;
+        background: rgba(99, 102, 241, 0.1);
+        transform: translateY(-2px);
+    }
+    
+    .btn-delete {
+        border-color: rgba(239, 68, 68, 0.3);
+        color: #fca5a5;
+    }
+    
+    .btn-delete:hover {
+        background: linear-gradient(135deg, #ef4444, #dc2626);
+        color: white;
+        border-color: transparent;
+    }
+    
+    .empty-state {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        padding: 5rem 3rem;
+        border-radius: 1.5rem;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        text-align: center;
+    }
+    
+    .empty-icon {
+        font-size: 5rem;
+        margin-bottom: 1.5rem;
+        opacity: 0.5;
+    }
+
+    .empty-state h3 {
+        color: #fff;
+        font-size: 1.75rem;
+        margin-bottom: 1rem;
+    }
+
+    .empty-state p {
+        color: #94a3b8;
+        margin-bottom: 2rem;
+        font-size: 1.05rem;
+    }
+
+    .empty-state a {
+        padding: 1.125rem 2rem;
+        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        color: white;
+        border-radius: 0.875rem;
+        text-decoration: none;
+        font-weight: 700;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.75rem;
+        box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
+        transition: all 0.3s;
+    }
+
+    .empty-state a:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 25px rgba(99, 102, 241, 0.5);
+    }
+    
+    .post-results {
+        margin-top: 1.5rem;
+        padding: 1.5rem;
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: 0.75rem;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        position: relative;
+        z-index: 1;
+    }
+
+    .post-results strong {
+        color: #fff;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+    }
+    
+    .result-item {
+        display: flex;
+        justify-content: space-between;
+        padding: 0.75rem;
+        font-size: 0.875rem;
+        background: rgba(255, 255, 255, 0.02);
+        border-radius: 0.5rem;
+        margin-bottom: 0.5rem;
+    }
+    
+    .result-success {
+        color: #34d399;
+        font-weight: 700;
+    }
+    
+    .result-error {
+        color: #fca5a5;
+        font-weight: 700;
+    }
+
+    .ai-badge {
+        background: rgba(99, 102, 241, 0.1);
+        color: #a5b4fc;
+        padding: 0.5rem 1rem;
+        border-radius: 0.75rem;
+        font-size: 0.8rem;
+        font-weight: 700;
+        border: 1px solid rgba(99, 102, 241, 0.3);
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    /* Media Display */
+    .media-container {
+        margin: 1.5rem 0;
+        position: relative;
+        z-index: 1;
+    }
+
+    .media-single img,
+    .media-single video {
+        width: 100%;
+        max-height: 350px;
+        border-radius: 1rem;
+        object-fit: cover;
+        cursor: pointer;
+        transition: all 0.3s;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .media-single img:hover,
+    .media-single video:hover {
+        transform: scale(1.02);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    }
+
+    .media-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+        gap: 0.75rem;
+    }
+
+    .media-grid-item {
+        position: relative;
+        aspect-ratio: 1;
+        border-radius: 0.75rem;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+
+    .media-grid-item:hover {
+        transform: scale(1.05);
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+        z-index: 2;
+    }
+
+    .media-grid-item img,
+    .media-grid-item video {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        pointer-events: none;
+    }
+
+    .media-type-badge {
+        position: absolute;
+        top: 0.5rem;
+        right: 0.5rem;
+        background: rgba(0, 0, 0, 0.8);
+        color: white;
+        padding: 0.35rem 0.75rem;
+        border-radius: 0.5rem;
+        font-size: 0.7rem;
+        font-weight: 700;
+    }
+
+    .media-info {
+        margin-top: 0.75rem;
+        color: #94a3b8;
+        font-size: 0.875rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .media-info a {
+        color: #60a5fa;
+        font-weight: 700;
+    }
+
+    /* Modal */
+    .modal {
+        display: none;
+        position: fixed;
+        z-index: 9999;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.95);
+        overflow: auto;
+        backdrop-filter: blur(10px);
+    }
+    
+    .modal.active {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .modal-content {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        border-radius: 1.5rem;
+        max-width: 900px;
+        width: 90%;
+        max-height: 90vh;
+        overflow-y: auto;
+        position: relative;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    
+    .modal-close {
+        position: absolute;
+        top: 1.5rem;
+        right: 1.5rem;
+        width: 45px;
+        height: 45px;
+        background: rgba(239, 68, 68, 0.2);
+        border: none;
+        border-radius: 50%;
+        font-size: 24px;
+        color: #fca5a5;
+        cursor: pointer;
+        z-index: 10;
+        transition: all 0.3s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .modal-close:hover {
+        background: rgba(239, 68, 68, 0.4);
+        transform: rotate(90deg);
+        color: white;
+    }
+    
+    .modal-header {
+        padding: 2.5rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .modal-header h2 {
+        color: #fff;
+        font-size: 1.75rem;
+        font-weight: 700;
+    }
+    
+    .modal-body {
+        padding: 2.5rem;
+    }
+    
+    .modal-media {
+        width: 100%;
+        max-height: 450px;
+        object-fit: contain;
+        border-radius: 1rem;
+        margin-bottom: 2rem;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    
+    .modal-caption {
+        font-size: 1.125rem;
+        line-height: 1.8;
+        color: #cbd5e1;
+        margin-bottom: 2rem;
+        white-space: pre-wrap;
+    }
+    
+    .modal-info-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1.5rem;
+        margin-top: 2rem;
+        padding-top: 2rem;
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    
+    .modal-info-item {
+        background: rgba(255, 255, 255, 0.03);
+        padding: 1.5rem;
+        border-radius: 1rem;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    
+    .modal-info-label {
+        font-size: 0.75rem;
+        color: #94a3b8;
+        text-transform: uppercase;
+        font-weight: 700;
+        margin-bottom: 0.5rem;
+        letter-spacing: 0.1em;
+    }
+    
+    .modal-info-value {
+        font-size: 1.05rem;
+        color: #fff;
+        font-weight: 600;
+    }
+
+    /* Refresh Indicator */
+    #refresh-indicator {
+        position: fixed;
+        bottom: 2rem;
+        right: 2rem;
+        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        color: white;
+        padding: 0.75rem 1.5rem;
+        border-radius: 2rem;
+        font-size: 0.875rem;
+        font-weight: 700;
+        z-index: 9999;
+        box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4);
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: all 0.3s;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+        width: 12px;
+    }
+
+    ::-webkit-scrollbar-track {
+        background: #0d0d0d;
+    }
+
+    ::-webkit-scrollbar-thumb {
+        background: linear-gradient(135deg, #ef4444, #f59e0b);
+        border-radius: 10px;
+        border: 2px solid #0d0d0d;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+        background: linear-gradient(135deg, #dc2626, #d97706);
+    }
+
+    /* Responsive */
+    @media (max-width: 1200px) {
+        .stats-row {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+
+    @media (max-width: 768px) {
+        .posts-container {
+            padding: 1.5rem;
+        }
+
+        .posts-header {
+            padding: 2rem 1.5rem;
+        }
+
+        .posts-header h1 {
+            font-size: 1.75rem;
+        }
+
+        .header-content {
+            flex-direction: column;
+            text-align: center;
+        }
+
+        .stats-row {
+            grid-template-columns: 1fr;
+        }
+
+        .filters {
+            padding: 1.5rem;
+        }
+
+        .filter-btn {
+            flex: 1;
+            min-width: 120px;
+        }
+
+        .new-post-btn {
+            width: 100%;
+            margin-left: 0 !important;
+        }
+
+        .post-card {
+            padding: 1.5rem;
+        }
+
+        .post-actions {
+            flex-direction: column;
+        }
+
+        .modal-info-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="posts-container">
+    <!-- Header -->
+    <div class="posts-header">
+        <div class="header-content">
+            <div class="header-icon">
+                <i class="fas fa-clipboard-list"></i>
+            </div>
+            <div>
+                <h1>My Posts</h1>
+                <p>Manage and track your scheduled posts</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Stats -->
+    <div class="stats-row">
+        <div class="stat-box">
+            <div class="stat-value">{{ total_posts }}</div>
+            <div class="stat-label">Total Posts</div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-value">{{ scheduled_posts }}</div>
+            <div class="stat-label">Scheduled</div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-value">{{ posted_posts }}</div>
+            <div class="stat-label">Posted</div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-value">{{ failed_posts }}</div>
+            <div class="stat-label">Failed</div>
+        </div>
+    </div>
+    
+    <!-- Filters -->
+    <div class="filters">
+        <a href="?status=all" class="filter-btn {% if status_filter == 'all' %}active{% endif %}">
+            <i class="fas fa-list"></i>
+            All Posts
+        </a>
+        <a href="?status=scheduled" class="filter-btn {% if status_filter == 'scheduled' %}active{% endif %}">
+            <i class="fas fa-clock"></i>
+            Scheduled
+        </a>
+        <a href="?status=posted" class="filter-btn {% if status_filter == 'posted' %}active{% endif %}">
+            <i class="fas fa-check-circle"></i>
+            Posted
+        </a>
+        <a href="?status=failed" class="filter-btn {% if status_filter == 'failed' %}active{% endif %}">
+            <i class="fas fa-exclamation-circle"></i>
+            Failed
+        </a>
+        <a href="{% url 'create_post' %}" class="filter-btn new-post-btn">
+            <i class="fas fa-plus-circle"></i>
+            New Post
+        </a>
+    </div>
+    
+    <!-- Posts List -->
+    <div class="posts-list">
+        {% if posts %}
+            {% for post in posts %}
+            <div class="post-card">
+                <div class="post-header">
+                    <div>
+                        <span class="post-status status-{{ post.status }}">
+                            {% if post.status == 'scheduled' %}
+                                <i class="fas fa-clock"></i> Scheduled
+                            {% elif post.status == 'posted' %}
+                                <i class="fas fa-check-circle"></i> Posted
+                            {% elif post.status == 'failed' %}
+                                <i class="fas fa-exclamation-circle"></i> Failed
+                            {% elif post.status == 'cancelled' %}
+                                <i class="fas fa-ban"></i> Cancelled
+                            {% elif post.status == 'posting' %}
+                                <i class="fas fa-spinner fa-spin"></i> Posting...
+                            {% endif %}
+                        </span>
+                        <div class="post-time">
+                            {% if post.status == 'scheduled' %}
+                                <i class="fas fa-calendar-alt"></i>
+                                Scheduled for {{ post.scheduled_time|date:"F d, Y" }} at {{ post.scheduled_time|date:"h:i A" }}
+                            {% elif post.status == 'posted' %}
+                                <i class="fas fa-check"></i>
+                                Posted on {{ post.posted_at|date:"F d, Y" }} at {{ post.posted_at|date:"h:i A" }}
+                            {% else %}
+                                <i class="fas fa-calendar-alt"></i>
+                                {{ post.scheduled_time|date:"F d, Y" }} at {{ post.scheduled_time|date:"h:i A" }}
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% if post.ai_generated %}
+                    <span class="ai-badge">
+                        <i class="fas fa-robot"></i>
+                        AI Generated
+                    </span>
+                    {% endif %}
+                </div>
+                
+                <div class="post-caption">
+                    {{ post.caption|truncatewords:50 }}
+                </div>
+                
+                <!-- Media Display -->
+                {% if post.media_files and post.media_files|length > 0 %}
+                <div class="media-container">
+                    {% if post.media_files|length == 1 %}
+                        <div class="media-single">
+                            {% with media=post.media_files.0 %}
+                                {% if '.mp4' in media or '.mov' in media or '.avi' in media %}
+                                    <video controls onclick="openPostModal('{{ post.id }}')">
+                                        <source src="{{ MEDIA_URL }}{{ media }}" type="video/mp4">
+                                    </video>
+                                {% else %}
+                                    <img src="{{ MEDIA_URL }}{{ media }}" onclick="openPostModal('{{ post.id }}')">
+                                {% endif %}
+                            {% endwith %}
+                        </div>
+                    {% else %}
+                        <div class="media-grid">
+                            {% for media in post.media_files|slice:":4" %}
+                                <div class="media-grid-item" onclick="openPostModal('{{ post.id }}')">
+                                    {% if '.mp4' in media or '.mov' in media or '.avi' in media %}
+                                        <video>
+                                            <source src="{{ MEDIA_URL }}{{ media }}" type="video/mp4">
+                                        </video>
+                                        <div class="media-type-badge"><i class="fas fa-video"></i></div>
+                                    {% else %}
+                                        <img src="{{ MEDIA_URL }}{{ media }}">
+                                    {% endif %}
+                                </div>
+                            {% endfor %}
+                        </div>
+                        {% if post.media_files|length > 4 %}
+                            <p class="media-info">
+                                +{{ post.media_files|length|add:"-4" }} more • <a href="#" onclick="openPostModal('{{ post.id }}'); return false;">View all</a>
+                            </p>
+                        {% endif %}
+                    {% endif %}
+                    
+                    <p class="media-info">
+                        <i class="fas fa-paperclip"></i>
+                        {{ post.media_files|length }} file{{ post.media_files|length|pluralize }} • <a href="#" onclick="openPostModal('{{ post.id }}'); return false;">View details</a>
+                    </p>
+                </div>
+                {% endif %}
+
+                <div class="post-platforms">
+                    {% for platform in post.platforms_list %}
+                    <span class="platform-badge badge-{{ platform }}">
+                        {% if platform == 'facebook' %}
+                            <i class="fab fa-facebook-f"></i> Facebook
+                        {% elif platform == 'twitter' %}
+                            <i class="fab fa-twitter"></i> Twitter
+                        {% elif platform == 'instagram' %}
+                            <i class="fab fa-instagram"></i> Instagram
+                        {% elif platform == 'linkedin' %}
+                            <i class="fab fa-linkedin-in"></i> LinkedIn
+                        {% endif %}
+                    </span>
+                    {% endfor %}
+                </div>
+                
+                <!-- Post Results -->
+                {% if post.status == 'posted' or post.status == 'failed' %}
+                <div class="post-results">
+                    <strong><i class="fas fa-chart-bar"></i> Results:</strong>
+                    {% for platform in post.platforms_list %}
+                    <div class="result-item">
+                        <span>
+                            {% if platform == 'facebook' %}
+                                <i class="fab fa-facebook-f"></i> Facebook
+                            {% elif platform == 'twitter' %}
+                                <i class="fab fa-twitter"></i> Twitter
+                            {% elif platform == 'instagram' %}
+                                <i class="fab fa-instagram"></i> Instagram
+                            {% elif platform == 'linkedin' %}
+                                <i class="fab fa-linkedin-in"></i> LinkedIn
+                            {% endif %}
+                        </span>
+                        <span>
+                            {% if platform == 'facebook' %}
+                                {% if post.facebook_post_id %}
+                                    <span class="result-success"><i class="fas fa-check"></i> Posted</span>
+                                {% elif post.facebook_error %}
+                                    <span class="result-error"><i class="fas fa-times"></i> {{ post.facebook_error|truncatewords:5 }}</span>
+                                {% endif %}
+                            {% elif platform == 'twitter' %}
+                                {% if post.twitter_post_id %}
+                                    <span class="result-success"><i class="fas fa-check"></i> Posted</span>
+                                {% elif post.twitter_error %}
+                                    <span class="result-error"><i class="fas fa-times"></i> {{ post.twitter_error|truncatewords:5 }}</span>
+                                {% endif %}
+                            {% elif platform == 'instagram' %}
+                                {% if post.instagram_post_id %}
+                                    <span class="result-success"><i class="fas fa-check"></i> Posted</span>
+                                {% elif post.instagram_error %}
+                                    <span class="result-error"><i class="fas fa-times"></i> {{ post.instagram_error|truncatewords:5 }}</span>
+                                {% endif %}
+                            {% elif platform == 'linkedin' %}
+                                {% if post.linkedin_post_id %}
+                                    <span class="result-success"><i class="fas fa-check"></i> Posted</span>
+                                {% elif post.linkedin_error %}
+                                    <span class="result-error"><i class="fas fa-times"></i> {{ post.linkedin_error|truncatewords:5 }}</span>
+                                {% endif %}
+                            {% endif %}
+                        </span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                
+                <!-- Actions -->
+                <div class="post-actions">
+                    {% if post.can_be_edited %}
+                    <a href="{% url 'edit_post' post.id %}" class="btn-action">
+                        <i class="fas fa-edit"></i>
+                        Edit
+                    </a>
+                    {% endif %}
+                    
+                    {% if post.can_be_cancelled %}
+                    <form method="POST" action="{% url 'cancel_post' post.id %}" style="display: inline;">
+                        {% csrf_token %}
+                        <button type="submit" class="btn-action" onclick="return confirm('Cancel this post?')">
+                            <i class="fas fa-ban"></i>
+                            Cancel
+                        </button>
+                    </form>
+                    {% endif %}
+                    
+                    <form method="POST" action="{% url 'delete_post' post.id %}" style="display: inline;">
+                        {% csrf_token %}
+                        <button type="submit" class="btn-action btn-delete" onclick="return confirm('Delete this post permanently?')">
+                            <i class="fas fa-trash"></i>
+                            Delete
+                        </button>
+                    </form>
+                </div>
+            </div>
+            {% endfor %}
+        {% else %}
+            <div class="empty-state">
+                <div class="empty-icon"><i class="fas fa-inbox"></i></div>
+                <h3>No Posts Yet</h3>
+                <p>
+                    {% if status_filter != 'all' %}
+                        No {{ status_filter }} posts found.
+                    {% else %}
+                        You haven't created any posts yet. Get started now!
+                    {% endif %}
+                </p>
+                <a href="{% url 'create_post' %}">
+                    <i class="fas fa-plus-circle"></i>
+                    Create Your First Post
+                </a>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Post Details Modal -->
+<div id="postModal" class="modal">
+    <div class="modal-content">
+        <button class="modal-close" onclick="closeModal()">×</button>
+        
+        <div class="modal-header">
+            <h2 id="modalTitle">Post Details</h2>
+        </div>
+        
+        <div class="modal-body">
+            <div id="modalMediaContainer"></div>
+            <div class="modal-caption" id="modalCaption"></div>
+            
+            <div class="modal-info-grid">
+                <div class="modal-info-item">
+                    <div class="modal-info-label">Status</div>
+                    <div class="modal-info-value" id="modalStatus"></div>
+                </div>
+                
+                <div class="modal-info-item">
+                    <div class="modal-info-label">Scheduled Time</div>
+                    <div class="modal-info-value" id="modalTime"></div>
+                </div>
+                
+                <div class="modal-info-item">
+                    <div class="modal-info-label">Platforms</div>
+                    <div class="modal-info-value" id="modalPlatforms"></div>
+                </div>
+                
+                <div class="modal-info-item">
+                    <div class="modal-info-label">Media Files</div>
+                    <div class="modal-info-value" id="modalMediaCount"></div>
+                </div>
+            </div>
+            
+            <div id="modalResults" style="margin-top: 2rem; display: none;">
+                <div style="font-weight: 600; margin-bottom: 1rem; color: #fff; display: flex; align-items: center; gap: 0.5rem;">
+                    <i class="fas fa-chart-bar"></i> Posting Results:
+                </div>
+                <div id="modalResultsContent"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Auto-refresh every 10 seconds
+setInterval(function() {
+    location.reload();
+}, 10000);
+
+document.addEventListener('visibilitychange', function() {
+    if (!document.hidden) {
+        location.reload();
+    }
+});
+
+// Refresh indicator
+window.addEventListener('load', function() {
+    let indicator = document.createElement('div');
+    indicator.id = 'refresh-indicator';
+    indicator.innerHTML = '<i class="fas fa-sync-alt"></i> Auto-refresh ON';
+    document.body.appendChild(indicator);
+    
+    setInterval(function() {
+        indicator.style.opacity = '0.5';
+        setTimeout(function() {
+            indicator.style.opacity = '1';
+        }, 500);
+    }, 9000);
+});
+
+// Post data
+const postsData = {
+    {% for post in posts %}
+    '{{ post.id }}': {
+        id: '{{ post.id }}',
+        caption: `{{ post.caption|escapejs }}`,
+        status: '{{ post.status }}',
+        scheduledTime: '{{ post.scheduled_time|date:"F d, Y" }} at {{ post.scheduled_time|date:"h:i A" }}',
+        postedAt: '{% if post.posted_at %}{{ post.posted_at|date:"F d, Y" }} at {{ post.posted_at|date:"h:i A" }}{% endif %}',
+        platforms: [{% for platform in post.platforms_list %}'{{ platform }}',{% endfor %}],
+        mediaFiles: [{% for media in post.media_files %}'{{ MEDIA_URL }}{{ media }}',{% endfor %}],
+        aiGenerated: {{ post.ai_generated|lower }},
+        results: {
+            facebook: { success: {{ post.facebook_post_id|yesno:"true,false" }}, error: '{{ post.facebook_error|escapejs }}' },
+            twitter: { success: {{ post.twitter_post_id|yesno:"true,false" }}, error: '{{ post.twitter_error|escapejs }}' },
+            instagram: { success: {{ post.instagram_post_id|yesno:"true,false" }}, error: '{{ post.instagram_error|escapejs }}' },
+            linkedin: { success: {{ post.linkedin_post_id|yesno:"true,false" }}, error: '{{ post.linkedin_error|escapejs }}' }
+        }
+    },
+    {% endfor %}
+};
+
+function openPostModal(postId) {
+    const post = postsData[postId];
+    if (!post) return;
+    
+    document.getElementById('modalTitle').innerHTML = '<i class="fas fa-file-alt"></i> Post #' + post.id;
+    document.getElementById('modalCaption').textContent = post.caption;
+    
+    const statusEl = document.getElementById('modalStatus');
+    statusEl.textContent = post.status.toUpperCase();
+    statusEl.style.color = post.status === 'posted' ? '#34d399' : post.status === 'failed' ? '#fca5a5' : '#60a5fa';
+    
+    document.getElementById('modalTime').textContent = post.status === 'posted' && post.postedAt ? post.postedAt : post.scheduledTime;
+    
+    const platformIcons = {
+        facebook: '<i class="fab fa-facebook-f"></i>',
+        twitter: '<i class="fab fa-twitter"></i>',
+        instagram: '<i class="fab fa-instagram"></i>',
+        linkedin: '<i class="fab fa-linkedin-in"></i>'
+    };
+    const platformsText = post.platforms.map(p => platformIcons[p] + ' ' + p.charAt(0).toUpperCase() + p.slice(1)).join(', ');
+    document.getElementById('modalPlatforms').innerHTML = platformsText;
+    
+    document.getElementById('modalMediaCount').textContent = post.mediaFiles.length + ' file' + (post.mediaFiles.length > 1 ? 's' : '');
+    
+    const mediaContainer = document.getElementById('modalMediaContainer');
+    mediaContainer.innerHTML = '';
+    
+    post.mediaFiles.forEach(mediaUrl => {
+        const isVideo = mediaUrl.match(/\.(mp4|mov|avi)$/i);
+        
+        if (isVideo) {
+            const video = document.createElement('video');
+            video.src = mediaUrl;
+            video.controls = true;
+            video.className = 'modal-media';
+            mediaContainer.appendChild(video);
+        } else {
+            const img = document.createElement('img');
+            img.src = mediaUrl;
+            img.className = 'modal-media';
+            mediaContainer.appendChild(img);
+        }
+    });
+    
+    if (post.status === 'posted' || post.status === 'failed') {
+        const resultsDiv = document.getElementById('modalResults');
+        const resultsContent = document.getElementById('modalResultsContent');
+        resultsDiv.style.display = 'block';
+        
+        let resultsHTML = '';
+        post.platforms.forEach(platform => {
+            const result = post.results[platform];
+            const icon = platformIcons[platform];
+            const statusIcon = result.success ? '<i class="fas fa-check-circle"></i>' : '<i class="fas fa-times-circle"></i>';
+            const statusText = result.success ? 'Posted' : (result.error || 'Failed');
+            const color = result.success ? '#34d399' : '#fca5a5';
+            
+            resultsHTML += `
+                <div style="display: flex; justify-content: space-between; padding: 0.75rem; margin-bottom: 0.75rem; background: rgba(255, 255, 255, 0.03); border-radius: 0.75rem; border: 1px solid rgba(255, 255, 255, 0.06);">
+                    <span>${icon} ${platform.charAt(0).toUpperCase() + platform.slice(1)}</span>
+                    <span style="color: ${color}; font-weight: 700;">${statusIcon} ${statusText}</span>
+                </div>
+            `;
+        });
+        
+        resultsContent.innerHTML = resultsHTML;
+    } else {
+        document.getElementById('modalResults').style.display = 'none';
+    }
+    
+    document.getElementById('postModal').classList.add('active');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeModal() {
+    document.getElementById('postModal').classList.remove('active');
+    document.body.style.overflow = 'auto';
+}
+
+document.getElementById('postModal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeModal();
+    }
+});
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeModal();
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,678 @@
+{% extends 'base.html' %}
+
+{% block title %}API Settings - AI Image Generator{% endblock %}
+
+{% block extra_css %}
+<style>
+    .settings-container {
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: 2rem 2.5rem;
+    }
+
+    .settings-hero {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        padding: 2.5rem;
+        border-radius: 2rem;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        margin-bottom: 2rem;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .settings-hero::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, transparent, #10b981, #8b5cf6, #10b981, transparent);
+        background-size: 200% 100%;
+        animation: gradient-shift 3s linear infinite;
+    }
+
+    @keyframes gradient-shift {
+        0% { background-position: 0% 0%; }
+        100% { background-position: 200% 0%; }
+    }
+
+    .hero-content {
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+    }
+
+    .hero-icon {
+        width: 70px;
+        height: 70px;
+        background: linear-gradient(135deg, #10b981, #8b5cf6);
+        border-radius: 1.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2rem;
+        color: white;
+        box-shadow: 0 10px 30px rgba(139, 92, 246, 0.4);
+    }
+
+    .hero-text h1 {
+        font-size: 2rem;
+        font-weight: 800;
+        background: linear-gradient(135deg, #10b981, #8b5cf6);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 0.25rem;
+    }
+
+    .hero-text p {
+        color: #94a3b8;
+        font-size: 1rem;
+    }
+
+    .providers-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+
+    @media (max-width: 768px) {
+        .providers-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .settings-card {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        border-radius: 1.5rem;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        overflow: hidden;
+        margin-bottom: 1.5rem;
+    }
+
+    .settings-card.openai {
+        border-color: rgba(16, 185, 129, 0.3);
+    }
+
+    .settings-card.gemini {
+        border-color: rgba(59, 130, 246, 0.3);
+    }
+
+    .card-header {
+        padding: 1.5rem 2rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .card-header-left {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .card-header.openai i { color: #10b981; }
+    .card-header.gemini i { color: #3b82f6; }
+
+    .card-header h2 {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: #fff;
+    }
+
+    .status-badge {
+        padding: 0.35rem 0.75rem;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+
+    .status-badge.active {
+        background: rgba(16, 185, 129, 0.2);
+        color: #34d399;
+    }
+
+    .status-badge.inactive {
+        background: rgba(239, 68, 68, 0.2);
+        color: #f87171;
+    }
+
+    .card-body {
+        padding: 2rem;
+    }
+
+    .api-key-display {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 1rem 1.25rem;
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: 0.75rem;
+        margin-bottom: 1.25rem;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .masked-key {
+        font-family: 'Monaco', 'Menlo', monospace;
+        background: rgba(16, 185, 129, 0.1);
+        color: #34d399;
+        padding: 0.25rem 0.75rem;
+        border-radius: 0.5rem;
+        font-size: 0.85rem;
+    }
+
+    .form-group {
+        margin-bottom: 1.25rem;
+    }
+
+    .form-label {
+        display: block;
+        margin-bottom: 0.5rem;
+        font-weight: 600;
+        color: #e5e7eb;
+        font-size: 0.85rem;
+    }
+
+    .form-control {
+        width: 100%;
+        padding: 0.875rem 1rem;
+        background: rgba(255, 255, 255, 0.05);
+        border: 2px solid rgba(255, 255, 255, 0.1);
+        border-radius: 0.75rem;
+        font-size: 0.95rem;
+        color: #e5e7eb;
+        font-family: 'Monaco', 'Menlo', monospace;
+        transition: all 0.3s;
+    }
+
+    .form-control::placeholder {
+        color: #64748b;
+        font-family: inherit;
+    }
+
+    .form-control:focus {
+        outline: none;
+        background: rgba(255, 255, 255, 0.08);
+        border-color: rgba(16, 185, 129, 0.5);
+        box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.1);
+    }
+
+    .form-control.gemini:focus {
+        border-color: rgba(59, 130, 246, 0.5);
+        box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
+    }
+
+    .form-hint {
+        margin-top: 0.5rem;
+        font-size: 0.8rem;
+        color: #64748b;
+    }
+
+    .form-hint a {
+        color: #60a5fa;
+        text-decoration: none;
+    }
+
+    .form-hint a:hover {
+        text-decoration: underline;
+    }
+
+    .btn-row {
+        display: flex;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+    }
+
+    .btn {
+        padding: 0.75rem 1.25rem;
+        border-radius: 0.75rem;
+        font-size: 0.9rem;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        transition: all 0.3s;
+        border: none;
+    }
+
+    .btn-primary {
+        background: linear-gradient(135deg, #10b981, #34d399);
+        color: white;
+        box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+    }
+
+    .btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(16, 185, 129, 0.4);
+    }
+
+    .btn-primary.gemini {
+        background: linear-gradient(135deg, #3b82f6, #60a5fa);
+        box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
+    }
+
+    .btn-primary.gemini:hover {
+        box-shadow: 0 8px 25px rgba(59, 130, 246, 0.4);
+    }
+
+    .btn-success {
+        background: rgba(16, 185, 129, 0.1);
+        color: #34d399;
+        border: 1px solid rgba(16, 185, 129, 0.2);
+    }
+
+    .btn-success:hover {
+        background: rgba(16, 185, 129, 0.2);
+    }
+
+    .btn-danger {
+        background: rgba(239, 68, 68, 0.1);
+        color: #f87171;
+        border: 1px solid rgba(239, 68, 68, 0.2);
+    }
+
+    .btn-danger:hover {
+        background: rgba(239, 68, 68, 0.2);
+    }
+
+    .btn-secondary {
+        background: rgba(255, 255, 255, 0.05);
+        color: #94a3b8;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .btn-secondary:hover {
+        background: rgba(255, 255, 255, 0.1);
+    }
+
+    .alert {
+        padding: 1rem 1.25rem;
+        border-radius: 0.75rem;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .alert-success {
+        background: rgba(16, 185, 129, 0.1);
+        border: 1px solid rgba(16, 185, 129, 0.2);
+        color: #34d399;
+    }
+
+    .alert-error {
+        background: rgba(239, 68, 68, 0.1);
+        border: 1px solid rgba(239, 68, 68, 0.2);
+        color: #f87171;
+    }
+
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1rem;
+    }
+
+    @media (max-width: 768px) {
+        .stats-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+
+    .stat-card {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: 1rem;
+        padding: 1.25rem;
+        text-align: center;
+    }
+
+    .stat-icon {
+        width: 45px;
+        height: 45px;
+        border-radius: 0.75rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 0.75rem;
+        font-size: 1.1rem;
+    }
+
+    .stat-icon.green { background: linear-gradient(135deg, #10b981, #34d399); color: white; }
+    .stat-icon.blue { background: linear-gradient(135deg, #3b82f6, #60a5fa); color: white; }
+    .stat-icon.purple { background: linear-gradient(135deg, #8b5cf6, #a78bfa); color: white; }
+
+    .stat-value {
+        font-size: 1.5rem;
+        font-weight: 800;
+        color: #e5e7eb;
+    }
+
+    .stat-label {
+        font-size: 0.75rem;
+        color: #64748b;
+        margin-top: 0.25rem;
+    }
+
+    .provider-radio {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .provider-option {
+        flex: 1;
+        position: relative;
+    }
+
+    .provider-option input {
+        position: absolute;
+        opacity: 0;
+    }
+
+    .provider-option label {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 1rem 1.25rem;
+        background: rgba(255, 255, 255, 0.03);
+        border: 2px solid rgba(255, 255, 255, 0.1);
+        border-radius: 0.75rem;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+
+    .provider-option input:checked + label {
+        border-color: #10b981;
+        background: rgba(16, 185, 129, 0.1);
+    }
+
+    .provider-option input:checked + label.gemini {
+        border-color: #3b82f6;
+        background: rgba(59, 130, 246, 0.1);
+    }
+
+    .provider-option label:hover {
+        border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .provider-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 0.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.1rem;
+    }
+
+    .provider-icon.openai { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+    .provider-icon.gemini { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
+
+    .provider-name {
+        font-weight: 600;
+        color: #e5e7eb;
+    }
+
+    .provider-desc {
+        font-size: 0.75rem;
+        color: #64748b;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="settings-container">
+    <div class="settings-hero">
+        <div class="hero-content">
+            <div class="hero-icon"><i class="fas fa-key"></i></div>
+            <div class="hero-text">
+                <h1>API Settings</h1>
+                <p>Configure OpenAI DALL-E and Google Gemini for image generation</p>
+            </div>
+        </div>
+    </div>
+
+    {% if messages %}
+    {% for message in messages %}
+    <div class="alert {% if message.tags == 'error' %}alert-error{% else %}alert-success{% endif %}">
+        <i class="fas {% if message.tags == 'error' %}fa-exclamation-triangle{% else %}fa-check-circle{% endif %}"></i>
+        {{ message }}
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    <!-- Provider API Keys -->
+    <div class="providers-grid">
+        <!-- OpenAI Card -->
+        <div class="settings-card openai">
+            <div class="card-header openai">
+                <div class="card-header-left">
+                    <i class="fas fa-robot"></i>
+                    <h2>OpenAI DALL-E</h2>
+                </div>
+                <span class="status-badge {% if img_settings.has_openai_key %}active{% else %}inactive{% endif %}">
+                    {% if img_settings.has_openai_key %}Connected{% else %}Not Set{% endif %}
+                </span>
+            </div>
+            <div class="card-body">
+                {% if img_settings.has_openai_key %}
+                <div class="api-key-display">
+                    <i class="fas fa-key" style="color:#34d399;"></i>
+                    <span class="masked-key">{{ img_settings.masked_openai_key }}</span>
+                </div>
+                {% endif %}
+
+                <form method="POST">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="save_openai_key">
+                    
+                    <div class="form-group">
+                        <label class="form-label">OpenAI API Key</label>
+                        <input type="password" name="openai_api_key" class="form-control" placeholder="sk-proj-...">
+                        <p class="form-hint">
+                            Get your key from <a href="https://platform.openai.com/api-keys" target="_blank">OpenAI Platform</a>
+                        </p>
+                    </div>
+
+                    <div class="btn-row">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save"></i> Save
+                        </button>
+                        {% if img_settings.has_openai_key %}
+                        <button type="submit" name="action" value="test_openai_key" class="btn btn-success">
+                            <i class="fas fa-vial"></i> Test
+                        </button>
+                        <button type="submit" name="action" value="delete_openai_key" class="btn btn-danger" onclick="return confirm('Delete OpenAI key?')">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                        {% endif %}
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Gemini Card -->
+        <div class="settings-card gemini">
+            <div class="card-header gemini">
+                <div class="card-header-left">
+                    <i class="fas fa-gem"></i>
+                    <h2>Google Gemini</h2>
+                </div>
+                <span class="status-badge {% if img_settings.has_gemini_key %}active{% else %}inactive{% endif %}">
+                    {% if img_settings.has_gemini_key %}Connected{% else %}Not Set{% endif %}
+                </span>
+            </div>
+            <div class="card-body">
+                {% if img_settings.has_gemini_key %}
+                <div class="api-key-display">
+                    <i class="fas fa-key" style="color:#60a5fa;"></i>
+                    <span class="masked-key" style="background:rgba(59,130,246,0.1); color:#60a5fa;">{{ img_settings.masked_gemini_key }}</span>
+                </div>
+                {% endif %}
+
+                <form method="POST">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="save_gemini_key">
+                    
+                    <div class="form-group">
+                        <label class="form-label">Gemini API Key</label>
+                        <input type="password" name="gemini_api_key" class="form-control gemini" placeholder="AIzaSy...">
+                        <p class="form-hint">
+                            Get your key from <a href="https://makersuite.google.com/app/apikey" target="_blank">Google AI Studio</a>
+                        </p>
+                    </div>
+
+                    <div class="btn-row">
+                        <button type="submit" class="btn btn-primary gemini">
+                            <i class="fas fa-save"></i> Save
+                        </button>
+                        {% if img_settings.has_gemini_key %}
+                        <button type="submit" name="action" value="test_gemini_key" class="btn btn-success">
+                            <i class="fas fa-vial"></i> Test
+                        </button>
+                        <button type="submit" name="action" value="delete_gemini_key" class="btn btn-danger" onclick="return confirm('Delete Gemini key?')">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                        {% endif %}
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Default Settings -->
+    <div class="settings-card">
+        <div class="card-header">
+            <div class="card-header-left">
+                <i class="fas fa-sliders-h" style="color:#a78bfa;"></i>
+                <h2>Default Settings</h2>
+            </div>
+        </div>
+        <div class="card-body">
+            <form method="POST">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="update_defaults">
+                
+                <div class="form-group">
+                    <label class="form-label">Default Provider</label>
+                    <div class="provider-radio">
+                        <div class="provider-option">
+                            <input type="radio" name="default_provider" id="provider_openai" value="openai" 
+                                   {% if img_settings.default_provider == 'openai' %}checked{% endif %}>
+                            <label for="provider_openai">
+                                <div class="provider-icon openai"><i class="fas fa-robot"></i></div>
+                                <div>
+                                    <div class="provider-name">OpenAI DALL-E</div>
+                                    <div class="provider-desc">Best quality, HD support</div>
+                                </div>
+                            </label>
+                        </div>
+                        <div class="provider-option">
+                            <input type="radio" name="default_provider" id="provider_gemini" value="gemini"
+                                   {% if img_settings.default_provider == 'gemini' %}checked{% endif %}>
+                            <label for="provider_gemini" class="gemini">
+                                <div class="provider-icon gemini"><i class="fas fa-gem"></i></div>
+                                <div>
+                                    <div class="provider-name">Google Gemini</div>
+                                    <div class="provider-desc">Flexible, experimental</div>
+                                </div>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="display:grid; grid-template-columns:repeat(2,1fr); gap:1rem;">
+                    <div class="form-group">
+                        <label class="form-label">Default Style</label>
+                        <select name="default_style" class="form-control" style="font-family:inherit;">
+                            <option value="realistic" {% if img_settings.default_style == 'realistic' %}selected{% endif %}>Realistic</option>
+                            <option value="artistic" {% if img_settings.default_style == 'artistic' %}selected{% endif %}>Artistic</option>
+                            <option value="anime" {% if img_settings.default_style == 'anime' %}selected{% endif %}>Anime/Manga</option>
+                            <option value="cartoon" {% if img_settings.default_style == 'cartoon' %}selected{% endif %}>Cartoon</option>
+                            <option value="digital_art" {% if img_settings.default_style == 'digital_art' %}selected{% endif %}>Digital Art</option>
+                            <option value="3d_render" {% if img_settings.default_style == '3d_render' %}selected{% endif %}>3D Render</option>
+                            <option value="cinematic" {% if img_settings.default_style == 'cinematic' %}selected{% endif %}>Cinematic</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">Default Size</label>
+                        <select name="default_size" class="form-control" style="font-family:inherit;">
+                            <option value="1024x1024" {% if img_settings.default_size == '1024x1024' %}selected{% endif %}>1024x1024 (Square)</option>
+                            <option value="1792x1024" {% if img_settings.default_size == '1792x1024' %}selected{% endif %}>1792x1024 (Wide)</option>
+                            <option value="1024x1792" {% if img_settings.default_size == '1024x1792' %}selected{% endif %}>1024x1792 (Tall)</option>
+                            <option value="512x512" {% if img_settings.default_size == '512x512' %}selected{% endif %}>512x512 (Small)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">OpenAI Model</label>
+                        <select name="openai_model" class="form-control" style="font-family:inherit;">
+                            <option value="dall-e-3" {% if img_settings.openai_model == 'dall-e-3' %}selected{% endif %}>DALL-E 3 (Best)</option>
+                            <option value="dall-e-2" {% if img_settings.openai_model == 'dall-e-2' %}selected{% endif %}>DALL-E 2 (Faster)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label">OpenAI Quality</label>
+                        <select name="openai_quality" class="form-control" style="font-family:inherit;">
+                            <option value="standard" {% if img_settings.openai_quality == 'standard' %}selected{% endif %}>Standard</option>
+                            <option value="hd" {% if img_settings.openai_quality == 'hd' %}selected{% endif %}>HD (Higher Detail)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary" style="background:linear-gradient(135deg,#8b5cf6,#a78bfa); box-shadow:0 4px 15px rgba(139,92,246,0.3);">
+                    <i class="fas fa-check"></i> Save Defaults
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Usage Stats -->
+    <div class="settings-card">
+        <div class="card-header">
+            <div class="card-header-left">
+                <i class="fas fa-chart-bar" style="color:#f472b6;"></i>
+                <h2>Usage Statistics</h2>
+            </div>
+        </div>
+        <div class="card-body">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-icon purple"><i class="fas fa-image"></i></div>
+                    <div class="stat-value">{{ img_settings.total_images_generated }}</div>
+                    <div class="stat-label">Total Images</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon green"><i class="fas fa-robot"></i></div>
+                    <div class="stat-value">{{ img_settings.openai_images_generated }}</div>
+                    <div class="stat-label">OpenAI Images</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon blue"><i class="fas fa-gem"></i></div>
+                    <div class="stat-value">{{ img_settings.gemini_images_generated }}</div>
+                    <div class="stat-label">Gemini Images</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-icon purple"><i class="fas fa-cloud"></i></div>
+                    <div class="stat-value">{{ img_settings.total_api_calls }}</div>
+                    <div class="stat-label">API Calls</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div style="text-align:center; margin-top:1rem;">
+        <a href="{% url 'ai_image:generator' %}" class="btn btn-secondary">
+            <i class="fas fa-arrow-left"></i> Back to Generator
+        </a>
+    </div>
+</div>
+{% endblock %}

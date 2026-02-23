@@ -1,0 +1,556 @@
+{% extends 'base.html' %}
+
+{% block title %}Caption History - Sellanto{% endblock %}
+
+{% block extra_css %}
+<style>
+    .history-container {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 2rem 2.5rem;
+    }
+
+    .history-hero {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        padding: 2.5rem;
+        border-radius: 2rem;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        margin-bottom: 2rem;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .history-hero::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, transparent, #3b82f6, #60a5fa, #3b82f6, transparent);
+        background-size: 200% 100%;
+        animation: gradient-shift 3s linear infinite;
+    }
+
+    @keyframes gradient-shift {
+        0% { background-position: 0% 0%; }
+        100% { background-position: 200% 0%; }
+    }
+
+    .hero-content {
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+        position: relative;
+        z-index: 1;
+    }
+
+    .hero-icon {
+        width: 70px;
+        height: 70px;
+        background: linear-gradient(135deg, #3b82f6, #60a5fa);
+        border-radius: 1.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2rem;
+        color: white;
+        box-shadow: 0 10px 30px rgba(59, 130, 246, 0.4);
+    }
+
+    .hero-text h1 {
+        font-size: 2.25rem;
+        font-weight: 800;
+        background: linear-gradient(135deg, #3b82f6, #60a5fa);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 0.25rem;
+    }
+
+    .hero-text p {
+        color: #94a3b8;
+        font-size: 1rem;
+    }
+
+    .hero-actions {
+        margin-left: auto;
+    }
+
+    .btn-new {
+        padding: 1rem 2rem;
+        background: linear-gradient(135deg, #8b5cf6, #a855f7);
+        color: white;
+        border: none;
+        border-radius: 1rem;
+        font-size: 1rem;
+        font-weight: 700;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        text-decoration: none;
+        box-shadow: 0 4px 15px rgba(139, 92, 246, 0.3);
+        transition: all 0.3s;
+    }
+
+    .btn-new:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(139, 92, 246, 0.4);
+    }
+
+    /* Filters */
+    .filters-bar {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        padding: 1.25rem 1.5rem;
+        border-radius: 1rem;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        margin-bottom: 2rem;
+        display: flex;
+        gap: 1rem;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+
+    .filter-group {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .filter-label {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #94a3b8;
+    }
+
+    .filter-select {
+        padding: 0.6rem 2.5rem 0.6rem 1rem;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 0.5rem;
+        color: #e5e7eb;
+        font-size: 0.9rem;
+        cursor: pointer;
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%239ca3af' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+        background-position: right 0.5rem center;
+        background-repeat: no-repeat;
+        background-size: 1.5em 1.5em;
+    }
+
+    .filter-select:focus {
+        outline: none;
+        border-color: rgba(59, 130, 246, 0.5);
+    }
+
+    /* History Grid */
+    .history-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+        gap: 1.5rem;
+    }
+
+    .history-card {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        border-radius: 1.5rem;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        overflow: hidden;
+        transition: all 0.3s;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    }
+
+    .history-card:hover {
+        transform: translateY(-5px);
+        border-color: rgba(59, 130, 246, 0.2);
+        box-shadow: 0 20px 60px rgba(59, 130, 246, 0.15);
+    }
+
+    .card-header {
+        padding: 1.25rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        display: flex;
+        /* justify-content: space-between; */
+        align-items: center;
+    }
+
+    .badges {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+
+    .badge {
+        padding: 0.35rem 0.75rem;
+        border-radius: 0.5rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+
+    .badge-platform {
+        background: rgba(139, 92, 246, 0.1);
+        color: #a855f7;
+        border: 1px solid rgba(139, 92, 246, 0.2);
+    }
+
+    .badge-image {
+        background: rgba(59, 130, 246, 0.1);
+        color: #60a5fa;
+    }
+
+    .badge-video {
+        background: rgba(236, 72, 153, 0.1);
+        color: #f472b6;
+    }
+
+    .badge-text {
+        background: rgba(16, 185, 129, 0.1);
+        color: #34d399;
+    }
+
+    .card-date {
+        font-size: 0.8rem;
+        color: #64748b;
+    }
+
+    .card-body {
+        padding: 1.25rem;
+    }
+
+    .card-media {
+        width: 100%;
+        height: 150px;
+        border-radius: 0.75rem;
+        overflow: hidden;
+        margin-bottom: 1rem;
+        background: rgba(0, 0, 0, 0.3);
+    }
+
+    .card-media img,
+    .card-media video {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .card-caption {
+        font-size: 0.95rem;
+        color: #e5e7eb;
+        line-height: 1.6;
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        padding: 1rem;
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: 0.75rem;
+    }
+
+    .card-meta {
+        display: flex;
+        gap: 1rem;
+        margin-top: 1rem;
+        font-size: 0.8rem;
+        color: #64748b;
+    }
+
+    .card-meta span i {
+        color: #a855f7;
+        margin-right: 0.25rem;
+    }
+
+    .card-footer {
+        padding: 1rem 1.25rem;
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+        display: flex;
+        gap: 0.75rem;
+    }
+
+    .card-btn {
+        flex: 1;
+        padding: 0.7rem;
+        border-radius: 0.5rem;
+        font-size: 0.85rem;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.35rem;
+        transition: all 0.3s;
+        border: none;
+        text-decoration: none;
+    }
+
+    .btn-view {
+        background: linear-gradient(135deg, #3b82f6, #60a5fa);
+        color: white;
+    }
+
+    .btn-view:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
+    }
+
+    .btn-delete {
+        background: rgba(239, 68, 68, 0.1);
+        color: #f87171;
+        border: 1px solid rgba(239, 68, 68, 0.2);
+        flex: 0;
+        padding: 0.7rem;
+    }
+
+    .btn-delete:hover {
+        background: rgba(239, 68, 68, 0.2);
+    }
+
+    /* Empty State */
+    .empty-state {
+        text-align: center;
+        padding: 4rem 2rem;
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        border-radius: 2rem;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .empty-icon {
+        width: 100px;
+        height: 100px;
+        background: linear-gradient(135deg, #3b82f6, #60a5fa);
+        border-radius: 2rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 1.5rem;
+        font-size: 2.5rem;
+        color: white;
+    }
+
+    .empty-state h3 {
+        font-size: 1.5rem;
+        color: #e5e7eb;
+        margin-bottom: 0.5rem;
+    }
+
+    .empty-state p {
+        color: #64748b;
+        margin-bottom: 1.5rem;
+    }
+
+    /* Pagination */
+    .pagination {
+        display: flex;
+        justify-content: center;
+        gap: 0.5rem;
+        margin-top: 2rem;
+    }
+
+    .page-link {
+        padding: 0.6rem 1rem;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 0.5rem;
+        color: #94a3b8;
+        text-decoration: none;
+        font-weight: 600;
+        transition: all 0.3s;
+    }
+
+    .page-link:hover,
+    .page-link.active {
+        background: linear-gradient(135deg, #3b82f6, #60a5fa);
+        border-color: transparent;
+        color: white;
+    }
+
+    .toast {
+        position: fixed;
+        bottom: 2rem;
+        right: 2rem;
+        padding: 1rem 1.5rem;
+        background: linear-gradient(135deg, #10b981, #34d399);
+        color: white;
+        border-radius: 1rem;
+        font-weight: 600;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        transform: translateY(100px);
+        opacity: 0;
+        transition: all 0.3s ease;
+        z-index: 1000;
+    }
+
+    .toast.show {
+        transform: translateY(0);
+        opacity: 1;
+    }
+
+    @media (max-width: 768px) {
+        .history-container {
+            padding: 1.5rem;
+        }
+
+        .hero-content {
+            flex-direction: column;
+            text-align: center;
+        }
+
+        .hero-actions {
+            margin-left: 0;
+        }
+
+        .history-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .filters-bar {
+            flex-direction: column;
+            align-items: stretch;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="history-container">
+    <div class="history-hero">
+        <div class="hero-content">
+            <div class="hero-icon"><i class="fas fa-history"></i></div>
+            <div class="hero-text">
+                <h1>Caption History</h1>
+                <p>View all your generated captions</p>
+            </div>
+            <div class="hero-actions">
+                <a href="{% url 'ai_caption:generator' %}" class="btn-new">
+                    <i class="fas fa-plus"></i> New Caption
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="filters-bar">
+        <form method="GET" style="display: contents;">
+            <div class="filter-group">
+                <span class="filter-label">Status:</span>
+                <select name="status" class="filter-select" onchange="this.form.submit()">
+                    <option value="">All</option>
+                    <option value="completed" {% if status_filter == 'completed' %}selected{% endif %}>Completed</option>
+                    <option value="failed" {% if status_filter == 'failed' %}selected{% endif %}>Failed</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <span class="filter-label">Platform:</span>
+                <select name="platform" class="filter-select" onchange="this.form.submit()">
+                    <option value="">All</option>
+                    <option value="instagram" {% if platform_filter == 'instagram' %}selected{% endif %}>Instagram</option>
+                    <option value="facebook" {% if platform_filter == 'facebook' %}selected{% endif %}>Facebook</option>
+                    <option value="twitter" {% if platform_filter == 'twitter' %}selected{% endif %}>Twitter</option>
+                    <option value="linkedin" {% if platform_filter == 'linkedin' %}selected{% endif %}>LinkedIn</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <span class="filter-label">Media:</span>
+                <select name="media_type" class="filter-select" onchange="this.form.submit()">
+                    <option value="">All</option>
+                    <option value="image" {% if media_type_filter == 'image' %}selected{% endif %}>Image</option>
+                    <option value="video" {% if media_type_filter == 'video' %}selected{% endif %}>Video</option>
+                    <option value="none" {% if media_type_filter == 'none' %}selected{% endif %}>Text Only</option>
+                </select>
+            </div>
+        </form>
+    </div>
+
+    {% if generations %}
+    <div class="history-grid">
+        {% for gen in generations %}
+        <div class="history-card" data-id="{{ gen.pk }}">
+            <div class="card-header">
+                <div class="badges">
+                    <span class="badge badge-platform">{{ gen.platform }}</span>
+                    {% if gen.media_type == 'image' %}
+                    <span class="badge badge-image"><i class="fas fa-image"></i></span>
+                    {% elif gen.media_type == 'video' %}
+                    <span class="badge badge-video"><i class="fas fa-video"></i></span>
+                    {% else %}
+                    <span class="badge badge-text"><i class="fas fa-font"></i></span>
+                    {% endif %}
+                </div>
+                <span class="card-date">{{ gen.created_at|date:"M d, Y" }}</span>
+            </div>
+            <div class="card-body">
+                {% if gen.media_file %}
+                <div class="card-media">
+                    {% if gen.media_type == 'video' %}
+                    <video src="{{ gen.media_file.url }}" muted></video>
+                    {% else %}
+                    <img src="{{ gen.media_file.url }}" alt="Media">
+                    {% endif %}
+                </div>
+                {% endif %}
+                <div class="card-caption">{{ gen.generated_caption|truncatewords:25 }}</div>
+                <div class="card-meta">
+                    <span><i class="fas fa-palette"></i> {{ gen.get_tone_display }}</span>
+                    <span><i class="fas fa-clock"></i> {{ gen.processing_time|floatformat:1 }}s</span>
+                </div>
+            </div>
+            <div class="card-footer">
+                <a href="{% url 'ai_caption:result' gen.pk %}" class="card-btn btn-view">
+                    <i class="fas fa-eye"></i> View
+                </a>
+                <button class="card-btn btn-delete" onclick="deleteGen({{ gen.pk }})">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    {% if generations.has_other_pages %}
+    <nav class="pagination">
+        {% if generations.has_previous %}
+        <a href="?page={{ generations.previous_page_number }}" class="page-link">← Previous</a>
+        {% endif %}
+        {% for num in generations.paginator.page_range %}
+            {% if generations.number == num %}
+            <span class="page-link active">{{ num }}</span>
+            {% elif num > generations.number|add:'-3' and num < generations.number|add:'3' %}
+            <a href="?page={{ num }}" class="page-link">{{ num }}</a>
+            {% endif %}
+        {% endfor %}
+        {% if generations.has_next %}
+        <a href="?page={{ generations.next_page_number }}" class="page-link">Next →</a>
+        {% endif %}
+    </nav>
+    {% endif %}
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-icon"><i class="fas fa-inbox"></i></div>
+        <h3>No captions yet</h3>
+        <p>Start generating AI-powered captions</p>
+        <a href="{% url 'ai_caption:generator' %}" class="btn-new">
+            <i class="fas fa-magic"></i> Generate First Caption
+        </a>
+    </div>
+    {% endif %}
+</div>
+
+<div class="toast" id="toast">Deleted</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    async function deleteGen(id) {
+        if (!confirm('Delete this caption?')) return;
+        try {
+            const response = await fetch(`/ai-caption/delete/${id}/`, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+            });
+            if (response.ok) {
+                document.querySelector(`.history-card[data-id="${id}"]`).remove();
+                document.getElementById('toast').classList.add('show');
+                setTimeout(() => document.getElementById('toast').classList.remove('show'), 3000);
+            }
+        } catch (e) {}
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,321 @@
+<!-- C:\Users\Trust computer\Desktop\Final_version_socialSync\ai_caption\templates\ai_caption\template_form.html -->
+
+{% extends 'base.html' %}
+
+{% block title %}Create Template - Sellanto{% endblock %}
+
+{% block extra_css %}
+<style>
+    .form-container {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 2rem 2.5rem;
+    }
+
+    .form-hero {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        padding: 2rem;
+        border-radius: 1.5rem;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        margin-bottom: 2rem;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .form-hero::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, transparent, #8b5cf6, #a855f7, #8b5cf6, transparent);
+    }
+
+    .hero-content {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .hero-icon {
+        width: 55px;
+        height: 55px;
+        background: linear-gradient(135deg, #8b5cf6, #a855f7);
+        border-radius: 1rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        color: white;
+    }
+
+    .hero-text h1 {
+        font-size: 1.5rem;
+        font-weight: 800;
+        color: #e5e7eb;
+        margin-bottom: 0.25rem;
+    }
+
+    .hero-text p {
+        color: #94a3b8;
+        font-size: 0.9rem;
+    }
+
+    .form-card {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        border-radius: 1.5rem;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        overflow: hidden;
+    }
+
+    .card-body {
+        padding: 2rem;
+    }
+
+    .form-group {
+        margin-bottom: 1.5rem;
+    }
+
+    .form-label {
+        display: block;
+        margin-bottom: 0.75rem;
+        font-weight: 600;
+        color: #e5e7eb;
+        font-size: 0.9rem;
+    }
+
+    .form-control {
+        width: 100%;
+        padding: 1rem 1.25rem;
+        background: rgba(255, 255, 255, 0.05);
+        border: 2px solid rgba(255, 255, 255, 0.1);
+        border-radius: 0.875rem;
+        font-size: 1rem;
+        color: #e5e7eb;
+        transition: all 0.3s;
+    }
+
+    .form-control:focus {
+        outline: none;
+        background: rgba(255, 255, 255, 0.08);
+        border-color: rgba(139, 92, 246, 0.5);
+        box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.1);
+    }
+
+    textarea.form-control {
+        min-height: 150px;
+        resize: vertical;
+    }
+
+    select.form-control {
+        cursor: pointer;
+    }
+
+    .form-hint {
+        margin-top: 0.5rem;
+        font-size: 0.85rem;
+        color: #64748b;
+    }
+
+    .form-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+    }
+
+    .btn-row {
+        display: flex;
+        gap: 1rem;
+        margin-top: 2rem;
+    }
+
+    .btn {
+        padding: 1rem 2rem;
+        border-radius: 0.875rem;
+        font-size: 1rem;
+        font-weight: 700;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        transition: all 0.3s;
+        border: none;
+        text-decoration: none;
+    }
+
+    .btn-primary {
+        background: linear-gradient(135deg, #8b5cf6, #a855f7);
+        color: white;
+        box-shadow: 0 4px 15px rgba(139, 92, 246, 0.3);
+    }
+
+    .btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(139, 92, 246, 0.4);
+    }
+
+    .btn-secondary {
+        background: rgba(255, 255, 255, 0.05);
+        color: #94a3b8;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .btn-secondary:hover {
+        background: rgba(255, 255, 255, 0.1);
+        color: #e5e7eb;
+    }
+
+    .placeholder-hint {
+        background: rgba(139, 92, 246, 0.05);
+        border: 1px solid rgba(139, 92, 246, 0.2);
+        border-radius: 0.75rem;
+        padding: 1rem;
+        margin-top: 1rem;
+    }
+
+    .placeholder-hint h4 {
+        font-size: 0.9rem;
+        font-weight: 700;
+        color: #a855f7;
+        margin-bottom: 0.5rem;
+    }
+
+    .placeholder-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+
+    .placeholder-tag {
+        padding: 0.35rem 0.75rem;
+        background: rgba(139, 92, 246, 0.1);
+        border-radius: 0.5rem;
+        font-size: 0.85rem;
+        font-family: monospace;
+        color: #c084fc;
+    }
+
+    @media (max-width: 768px) {
+        .form-container {
+            padding: 1.5rem;
+        }
+
+        .form-row {
+            grid-template-columns: 1fr;
+        }
+
+        .btn-row {
+            flex-direction: column;
+        }
+
+        .btn {
+            width: 100%;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="form-container">
+    <div class="form-hero">
+        <div class="hero-content">
+            <div class="hero-icon"><i class="fas fa-plus"></i></div>
+            <div class="hero-text">
+                <h1>Create Caption Template</h1>
+                <p>Build reusable templates for quick caption generation</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="form-card">
+        <div class="card-body">
+            <form method="POST">
+                {% csrf_token %}
+                
+                <div class="form-group">
+                    <label class="form-label">Template Name</label>
+                    <input type="text" name="name" class="form-control" placeholder="e.g., Product Launch" required>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Category</label>
+                        <select name="category" class="form-control" required>
+                            <option value="product">Product Launch</option>
+                            <option value="promotion">Promotion/Sale</option>
+                            <option value="event">Event</option>
+                            <option value="announcement">Announcement</option>
+                            <option value="engagement">Engagement</option>
+                            <option value="educational">Educational</option>
+                            <option value="behind_scenes">Behind the Scenes</option>
+                            <option value="testimonial">Testimonial</option>
+                            <option value="holiday">Holiday</option>
+                            <option value="motivational">Motivational</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Tone</label>
+                        <select name="tone" class="form-control" required>
+                            <option value="professional">Professional</option>
+                            <option value="casual">Casual</option>
+                            <option value="friendly" selected>Friendly</option>
+                            <option value="enthusiastic">Enthusiastic</option>
+                            <option value="humorous">Humorous</option>
+                            <option value="inspirational">Inspirational</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Platform</label>
+                    <select name="platform" class="form-control" required>
+                        <option value="general">General</option>
+                        <option value="facebook">Facebook</option>
+                        <option value="instagram" selected>Instagram</option>
+                        <option value="twitter">Twitter/X</option>
+                        <option value="linkedin">LinkedIn</option>
+                        <option value="tiktok">TikTok</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">Template Text</label>
+                    <textarea name="template_text" class="form-control" rows="6" required
+                        placeholder="Write your template here. Use placeholders like {topic}, {brand}, {product} that will be replaced when using the template.
+
+Example:
+Introducing {product} by {brand}! 🎉
+
+This {topic} is designed to help you achieve your goals. Don't miss out on this amazing opportunity!"></textarea>
+                    <p class="form-hint">Use placeholders that will be filled in when generating</p>
+                </div>
+
+                <div class="placeholder-hint">
+                    <h4><i class="fas fa-info-circle"></i> Available Placeholders</h4>
+                    <div class="placeholder-list">
+                        <span class="placeholder-tag">{topic}</span>
+                        <span class="placeholder-tag">{brand}</span>
+                        <span class="placeholder-tag">{product}</span>
+                        <span class="placeholder-tag">{name}</span>
+                        <span class="placeholder-tag">{date}</span>
+                        <span class="placeholder-tag">{offer}</span>
+                    </div>
+                </div>
+
+                <div class="btn-row">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Create Template
+                    </button>
+                    <a href="{% url 'ai_caption:templates' %}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> Cancel
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

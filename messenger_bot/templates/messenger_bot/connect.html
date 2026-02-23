@@ -1,0 +1,557 @@
+<!-- C:\Users\Trust computer\Desktop\Final_version_socialSync\messenger_bot\templates\messenger_bot\connect.html -->
+
+{% extends 'base.html' %}
+
+{% block title %}Connect Messenger Bot - SocialSync{% endblock %}
+
+{% block extra_css %}
+<style>
+    .connect-container {
+        max-width: 1400px;
+        margin: 2rem auto;
+        padding: 0 1rem;
+    }
+
+    .page-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 3rem 2rem;
+        border-radius: 1rem;
+        margin-bottom: 2rem;
+        text-align: center;
+    }
+
+    .page-header h1 {
+        font-size: 2.5rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .page-header p {
+        font-size: 1.1rem;
+        opacity: 0.9;
+    }
+
+    .steps-container {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 1.5rem;
+        margin-bottom: 3rem;
+    }
+
+    .step-card {
+        background: white;
+        padding: 1.5rem;
+        border-radius: 1rem;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        text-align: center;
+    }
+
+    .step-number {
+        width: 50px;
+        height: 50px;
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        color: white;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        font-weight: bold;
+        margin: 0 auto 1rem;
+    }
+
+    .step-card h3 {
+        margin-bottom: 0.5rem;
+        color: #1f2937;
+    }
+
+    .step-card p {
+        color: #6b7280;
+        font-size: 0.9rem;
+    }
+
+    .form-section {
+        background: white;
+        padding: 2rem;
+        border-radius: 1rem;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        margin-bottom: 2rem;
+    }
+
+    .section-title {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 1.5rem;
+        padding-bottom: 1rem;
+        border-bottom: 2px solid #e5e7eb;
+    }
+
+    .section-icon {
+        font-size: 2rem;
+    }
+
+    .section-title h2 {
+        margin: 0;
+        color: #1f2937;
+    }
+
+    .form-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+
+    @media (max-width: 768px) {
+        .form-row {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .form-group {
+        margin-bottom: 1.5rem;
+    }
+
+    .form-group.full-width {
+        grid-column: 1 / -1;
+    }
+
+    .form-label {
+        display: block;
+        margin-bottom: 0.5rem;
+        font-weight: 600;
+        color: #374151;
+    }
+
+    .form-label .required {
+        color: #ef4444;
+    }
+
+    .form-control {
+        width: 100%;
+        padding: 0.75rem 1rem;
+        border: 2px solid #e5e7eb;
+        border-radius: 0.5rem;
+        font-size: 1rem;
+        transition: all 0.3s;
+    }
+
+    .form-control:focus {
+        outline: none;
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    }
+
+    .form-help {
+        font-size: 0.875rem;
+        color: #6b7280;
+        margin-top: 0.25rem;
+    }
+
+    .form-check {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+    }
+
+    .form-check-input {
+        width: 20px;
+        height: 20px;
+        cursor: pointer;
+    }
+
+    .form-check-label {
+        cursor: pointer;
+        color: #374151;
+    }
+
+    .info-box {
+        background: #eff6ff;
+        border-left: 4px solid #3b82f6;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .info-box strong {
+        color: #1e40af;
+    }
+
+    .info-box ul {
+        margin: 0.5rem 0 0 1.5rem;
+        color: #1f2937;
+    }
+
+    .file-upload-box {
+        border: 2px dashed #d1d5db;
+        border-radius: 0.5rem;
+        padding: 2rem;
+        text-align: center;
+        transition: all 0.3s;
+        cursor: pointer;
+    }
+
+    .file-upload-box:hover {
+        border-color: #667eea;
+        background: #f9fafb;
+    }
+
+    .file-upload-box.dragover {
+        border-color: #667eea;
+        background: #eff6ff;
+    }
+
+    .upload-icon {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+    }
+
+    .btn-submit {
+        width: 100%;
+        padding: 1rem 2rem;
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        color: white;
+        border: none;
+        border-radius: 0.5rem;
+        font-size: 1.1rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+
+    .btn-submit:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+    }
+
+    .btn-submit:active {
+        transform: translateY(0);
+    }
+
+    select.form-control {
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23374151' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 1rem center;
+        padding-right: 2.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="connect-container">
+    <!-- Page Header -->
+    <div class="page-header">
+        <h1>🤖 Connect Facebook Messenger AI Bot</h1>
+        <p>Set up your intelligent chatbot in 4 easy steps</p>
+    </div>
+
+    <!-- Steps Overview -->
+    <div class="steps-container">
+        <div class="step-card">
+            <div class="step-number">1</div>
+            <h3>Connect Page</h3>
+            <p>Link your Facebook Page</p>
+        </div>
+        <div class="step-card">
+            <div class="step-number">2</div>
+            <h3>Configure AI</h3>
+            <p>Set up OpenAI integration</p>
+        </div>
+        <div class="step-card">
+            <div class="step-number">3</div>
+            <h3>Create Prompt</h3>
+            <p>Define AI personality</p>
+        </div>
+        <div class="step-card">
+            <div class="step-number">4</div>
+            <h3>Upload PDFs</h3>
+            <p>Build knowledge base</p>
+        </div>
+    </div>
+
+    <!-- Main Form -->
+    <form method="POST" enctype="multipart/form-data">
+        {% csrf_token %}
+
+        <!-- Section 1: Facebook Messenger Connection -->
+        <div class="form-section">
+            <div class="section-title">
+                <span class="section-icon">💬</span>
+                <h2>Step 1: Connect Facebook Messenger</h2>
+            </div>
+
+            <div class="info-box">
+                <strong>ℹ️ How to get your credentials:</strong>
+                <ul>
+                    <li>Go to <a href="https://developers.facebook.com/tools/explorer/" target="_blank">Graph API
+                            Explorer</a></li>
+                    <li>Select your app and generate a Page Access Token</li>
+                    <li>Add permissions: <code>pages_manage_posts</code>, <code>pages_messaging</code></li>
+                    <li>Use <code>/me/accounts</code> query to get Page ID and Token</li>
+                </ul>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">
+                        Facebook Page Name <span class="required">*</span>
+                    </label>
+                    {{ connection_form.page_name }}
+                    <div class="form-help">{{ connection_form.page_name.help_text }}</div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">
+                        Page ID <span class="required">*</span>
+                    </label>
+                    {{ connection_form.page_id }}
+                    <div class="form-help">{{ connection_form.page_id.help_text }}</div>
+                </div>
+            </div>
+
+            <div class="form-group full-width">
+                <label class="form-label">
+                    Page Access Token <span class="required">*</span>
+                </label>
+                {{ connection_form.page_access_token }}
+                <div class="form-help">{{ connection_form.page_access_token.help_text }}</div>
+            </div>
+
+            <div class="form-group full-width">
+                <label class="form-label">
+                    Greeting Message <span class="required">*</span>
+                </label>
+                {{ connection_form.greeting_text }}
+                <div class="form-help">{{ connection_form.greeting_text.help_text }}</div>
+            </div>
+        </div>
+
+        <!-- Section 2: AI Configuration -->
+        <div class="form-section">
+            <div class="section-title">
+                <span class="section-icon">⚙️</span>
+                <h2>Step 2: Configure AI Settings</h2>
+            </div>
+
+            <div class="info-box">
+                <strong>ℹ️ OpenAI API Key:</strong>
+                Get your API key from <a href="https://platform.openai.com/api-keys" target="_blank">OpenAI Platform</a>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">
+                        OpenAI API Key <span class="required">*</span>
+                    </label>
+                    {{ ai_form.openai_api_key }}
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">
+                        OpenAI Model <span class="required">*</span>
+                    </label>
+                    {{ ai_form.openai_model }}
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">
+                        Embedding Model <span class="required">*</span>
+                    </label>
+                    {{ ai_form.embedding_model }}
+                    <div class="form-help">Used for RAG knowledge base</div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">
+                        Top K Results
+                    </label>
+                    {{ ai_form.top_k_results }}
+                    <div class="form-help">Number of relevant chunks to retrieve</div>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">
+                        Similarity Threshold <span class="required">*</span>
+                    </label>
+                    {{ ai_form.similarity_threshold }}
+                    <div class="form-help">Minimum similarity score (0-1)</div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">
+                        Temperature (Creativity)
+                    </label>
+                    {{ ai_form.temperature }}
+                    <div class="form-help">0 = Focused, 2 = Creative</div>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">
+                        Temperature (Creativity)
+                    </label>
+                    {{ ai_form.temperature }}
+                    <div class="form-help">0 = Focused, 2 = Creative</div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">
+                        Max Tokens (Response Length)
+                    </label>
+                    {{ ai_form.max_tokens }}
+                    <div class="form-help">Maximum response length</div>
+                </div>
+            </div>
+
+            <div class="form-check">
+                {{ ai_form.rag_enabled }}
+                <label class="form-check-label" for="{{ ai_form.rag_enabled.id_for_label }}">
+                    Enable RAG (Retrieval-Augmented Generation)
+                </label>
+            </div>
+
+            <div class="form-check">
+                {{ ai_form.image_understanding_enabled }}
+                <label class="form-check-label" for="{{ ai_form.image_understanding_enabled.id_for_label }}">
+                    Enable Image Understanding
+                </label>
+            </div>
+        </div>
+
+        <!-- Section 3: Custom Prompt -->
+        <div class="form-section">
+            <div class="section-title">
+                <span class="section-icon">📝</span>
+                <h2>Step 3: Create AI Personality</h2>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">
+                        Prompt Name <span class="required">*</span>
+                    </label>
+                    {{ prompt_form.name }}
+                    <div class="form-help">{{ prompt_form.name.help_text }}</div>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label">
+                        Conversation Tone <span class="required">*</span>
+                    </label>
+                    {{ prompt_form.tone }}
+                    <div class="form-help">{{ prompt_form.tone.help_text }}</div>
+                </div>
+            </div>
+
+            <div class="form-group full-width">
+                <label class="form-label">
+                    System Prompt <span class="required">*</span>
+                </label>
+                {{ prompt_form.system_prompt }}
+                <div class="form-help">{{ prompt_form.system_prompt.help_text }}</div>
+            </div>
+
+            <div class="form-check">
+                {{ prompt_form.is_active }}
+                <label class="form-check-label" for="{{ prompt_form.is_active.id_for_label }}">
+                    Set as active prompt
+                </label>
+            </div>
+        </div>
+
+        <!-- Section 4: PDF Upload -->
+        <div class="form-section">
+            <div class="section-title">
+                <span class="section-icon">📄</span>
+                <h2>Step 4: Upload Knowledge Base (Optional)</h2>
+            </div>
+
+            <div class="info-box">
+                <strong>ℹ️ Knowledge Base:</strong>
+                Upload PDF files to build your AI's knowledge base. The bot will use RAG to answer questions based on
+                these documents.
+            </div>
+
+            <div class="file-upload-box" id="fileUploadBox">
+                <div class="upload-icon">📁</div>
+                <p><strong>Click to upload</strong> or drag and drop</p>
+                <p style="color: #6b7280; font-size: 0.9rem;">PDF files only (max 50MB each)</p>
+                {{ pdf_form.pdfs }}
+            </div>
+
+            <div id="fileList" style="margin-top: 1rem;"></div>
+        </div>
+
+        <!-- Submit Button -->
+        <button type="submit" class="btn-submit">
+            🚀 Connect Messenger Bot
+        </button>
+    </form>
+</div>
+
+<script>
+    // File upload handling
+    const fileInput = document.querySelector('input[type="file"]');
+    const uploadBox = document.getElementById('fileUploadBox');
+    const fileList = document.getElementById('fileList');
+
+    // Hide file input, make box clickable
+    fileInput.style.display = 'none';
+    uploadBox.addEventListener('click', () => fileInput.click());
+
+    // Show selected files
+    fileInput.addEventListener('change', (e) => {
+        const files = Array.from(e.target.files);
+        displayFiles(files);
+    });
+
+    // Drag and drop
+    uploadBox.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        uploadBox.classList.add('dragover');
+    });
+
+    uploadBox.addEventListener('dragleave', () => {
+        uploadBox.classList.remove('dragover');
+    });
+
+    uploadBox.addEventListener('drop', (e) => {
+        e.preventDefault();
+        uploadBox.classList.remove('dragover');
+
+        const files = Array.from(e.dataTransfer.files).filter(f => f.type === 'application/pdf');
+        fileInput.files = e.dataTransfer.files;
+        displayFiles(files);
+    });
+
+    function displayFiles(files) {
+        if (files.length === 0) {
+            fileList.innerHTML = '';
+            return;
+        }
+
+        const html = files.map((file, index) => `
+        <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem; background: #f9fafb; border-radius: 0.5rem; margin-bottom: 0.5rem;">
+            <span style="font-size: 1.5rem;">📄</span>
+            <span style="flex: 1;"><strong>${file.name}</strong> (${(file.size / 1024 / 1024).toFixed(2)} MB)</span>
+            <span style="color: #10b981;">✅</span>
+        </div>
+    `).join('');
+
+        fileList.innerHTML = `
+        <div style="padding: 1rem; background: #f9fafb; border-radius: 0.5rem;">
+            <p style="margin-bottom: 0.5rem;"><strong>${files.length} file(s) selected:</strong></p>
+            ${html}
+        </div>
+    `;
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,397 @@
+{% extends 'base.html' %}
+
+{% block title %}Business Profile - Sellanto{% endblock %}
+
+{% block extra_css %}
+<style>
+    .bp-container {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 2rem 1.5rem;
+    }
+
+    .bp-header {
+        margin-bottom: 2rem;
+    }
+
+    .bp-header h1 {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: #f8f9fa;
+        margin-bottom: 0.5rem;
+    }
+
+    .bp-header p {
+        color: #adb5bd;
+        font-size: 0.95rem;
+    }
+
+    .bp-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1.5rem;
+        margin-bottom: 2rem;
+    }
+
+    @media (max-width: 768px) {
+        .bp-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .bp-card {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        border-radius: 1.25rem;
+        padding: 1.75rem;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    }
+
+    .bp-card-header {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 1.25rem;
+    }
+
+    .bp-card-header i {
+        font-size: 1.25rem;
+        color: #ff6b6b;
+    }
+
+    .bp-card-header h2 {
+        font-size: 1.15rem;
+        font-weight: 600;
+        color: #f8f9fa;
+    }
+
+    .bp-card-full {
+        grid-column: 1 / -1;
+    }
+
+    .bp-empty {
+        text-align: center;
+        padding: 2rem 1rem;
+        color: #6c757d;
+    }
+
+    .bp-empty i {
+        font-size: 2.5rem;
+        margin-bottom: 0.75rem;
+        display: block;
+        color: #4a4a5a;
+    }
+
+    .bp-item {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: 0.75rem;
+        padding: 1rem 1.25rem;
+        margin-bottom: 0.75rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .bp-item:last-child {
+        margin-bottom: 0;
+    }
+
+    .bp-item-info h3 {
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: #f8f9fa;
+        margin-bottom: 0.25rem;
+    }
+
+    .bp-item-info p {
+        font-size: 0.8rem;
+        color: #6c757d;
+    }
+
+    .bp-item-badge {
+        font-size: 0.7rem;
+        padding: 0.25rem 0.6rem;
+        border-radius: 2rem;
+        background: rgba(255, 107, 107, 0.15);
+        color: #ff6b6b;
+        font-weight: 600;
+    }
+
+    .bp-form {
+        margin-top: 1rem;
+        padding-top: 1rem;
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .bp-form-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.75rem;
+        margin-bottom: 0.75rem;
+    }
+
+    @media (max-width: 600px) {
+        .bp-form-row {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .bp-input-group {
+        margin-bottom: 0.75rem;
+    }
+
+    .bp-input-group label {
+        display: block;
+        font-size: 0.8rem;
+        font-weight: 500;
+        color: #adb5bd;
+        margin-bottom: 0.35rem;
+    }
+
+    .bp-input-group input,
+    .bp-input-group select {
+        width: 100%;
+        padding: 0.6rem 0.85rem;
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 0.5rem;
+        color: #f8f9fa;
+        font-size: 0.85rem;
+        font-family: inherit;
+        transition: border-color 0.2s;
+    }
+
+    .bp-input-group input:focus,
+    .bp-input-group select:focus {
+        outline: none;
+        border-color: #ff6b6b;
+    }
+
+    .bp-input-group select option {
+        background: #1a1a1a;
+        color: #f8f9fa;
+    }
+
+    .bp-btn {
+        padding: 0.6rem 1.25rem;
+        border: none;
+        border-radius: 0.5rem;
+        font-size: 0.85rem;
+        font-weight: 600;
+        cursor: pointer;
+        font-family: inherit;
+        transition: all 0.2s;
+    }
+
+    .bp-btn-primary {
+        background: linear-gradient(135deg, #ff6b6b, #f06595);
+        color: white;
+    }
+
+    .bp-btn-primary:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3);
+    }
+
+    .bp-btn-outline {
+        background: transparent;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        color: #adb5bd;
+    }
+
+    .bp-btn-outline:hover {
+        border-color: #ff6b6b;
+        color: #ff6b6b;
+    }
+
+    .bp-toggle-btn {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-top: 1rem;
+        cursor: pointer;
+        background: none;
+        border: 1px dashed rgba(255, 255, 255, 0.1);
+        padding: 0.6rem 1rem;
+        border-radius: 0.5rem;
+        color: #adb5bd;
+        font-size: 0.85rem;
+        font-family: inherit;
+        width: 100%;
+        justify-content: center;
+        transition: all 0.2s;
+    }
+
+    .bp-toggle-btn:hover {
+        border-color: #ff6b6b;
+        color: #ff6b6b;
+    }
+
+    .bp-form-hidden {
+        display: none;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="bp-container">
+    <div class="bp-header">
+        <h1>Business Profile</h1>
+        <p>Manage your workspaces, brands, and business settings</p>
+    </div>
+
+    <div class="bp-grid">
+        <!-- Workspaces Card -->
+        <div class="bp-card">
+            <div class="bp-card-header">
+                <i class="fas fa-building"></i>
+                <h2>Workspaces</h2>
+            </div>
+
+            {% if workspaces %}
+                {% for ws in workspaces %}
+                <div class="bp-item">
+                    <div class="bp-item-info">
+                        <h3>{{ ws.name }}</h3>
+                        <p>{{ ws.timezone }} &middot; {{ ws.default_language|upper }}</p>
+                    </div>
+                    <span class="bp-item-badge">Active</span>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="bp-empty">
+                    <i class="fas fa-folder-open"></i>
+                    <p>No workspaces yet. Create one to get started.</p>
+                </div>
+            {% endif %}
+
+            <button class="bp-toggle-btn" onclick="toggleForm('workspace-form')">
+                <i class="fas fa-plus"></i> New Workspace
+            </button>
+
+            <div id="workspace-form" class="bp-form bp-form-hidden">
+                <form method="POST" action="{% url 'brands:create_workspace' %}">
+                    {% csrf_token %}
+                    <div class="bp-input-group">
+                        <label>Workspace Name *</label>
+                        <input type="text" name="name" placeholder="e.g. My Agency" required>
+                    </div>
+                    <div class="bp-form-row">
+                        <div class="bp-input-group">
+                            <label>Timezone</label>
+                            <select name="timezone">
+                                <option value="UTC">UTC</option>
+                                <option value="Asia/Kolkata" selected>Asia/Kolkata (IST)</option>
+                                <option value="America/New_York">America/New_York (EST)</option>
+                                <option value="Europe/London">Europe/London (GMT)</option>
+                                <option value="Asia/Dubai">Asia/Dubai (GST)</option>
+                                <option value="Asia/Tokyo">Asia/Tokyo (JST)</option>
+                            </select>
+                        </div>
+                        <div class="bp-input-group">
+                            <label>Language</label>
+                            <select name="language">
+                                <option value="en" selected>English</option>
+                                <option value="bn">Bengali</option>
+                                <option value="hi">Hindi</option>
+                                <option value="es">Spanish</option>
+                                <option value="fr">French</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button type="submit" class="bp-btn bp-btn-primary">Create Workspace</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Brands Card -->
+        <div class="bp-card">
+            <div class="bp-card-header">
+                <i class="fas fa-tag"></i>
+                <h2>Brands</h2>
+            </div>
+
+            {% if brands %}
+                {% for brand in brands %}
+                <div class="bp-item">
+                    <div class="bp-item-info">
+                        <h3>{{ brand.brand_name }}</h3>
+                        <p>{{ brand.industry }} &middot; {{ brand.target_region }}</p>
+                    </div>
+                    <span class="bp-item-badge">{{ brand.voice_tone }}</span>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="bp-empty">
+                    <i class="fas fa-store"></i>
+                    {% if workspaces %}
+                        <p>No brands yet. Create a brand under your workspace.</p>
+                    {% else %}
+                        <p>Create a workspace first, then add brands.</p>
+                    {% endif %}
+                </div>
+            {% endif %}
+
+            {% if workspaces %}
+            <button class="bp-toggle-btn" onclick="toggleForm('brand-form')">
+                <i class="fas fa-plus"></i> New Brand
+            </button>
+
+            <div id="brand-form" class="bp-form bp-form-hidden">
+                <form method="POST" action="{% url 'brands:create_brand' %}">
+                    {% csrf_token %}
+                    <div class="bp-input-group">
+                        <label>Workspace *</label>
+                        <select name="workspace_id" required>
+                            {% for ws in workspaces %}
+                            <option value="{{ ws.id }}">{{ ws.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="bp-input-group">
+                        <label>Brand Name *</label>
+                        <input type="text" name="brand_name" placeholder="e.g. My Brand" required>
+                    </div>
+                    <div class="bp-form-row">
+                        <div class="bp-input-group">
+                            <label>Industry *</label>
+                            <input type="text" name="industry" placeholder="e.g. Technology" required>
+                        </div>
+                        <div class="bp-input-group">
+                            <label>Target Region</label>
+                            <input type="text" name="target_region" placeholder="e.g. India, Global">
+                        </div>
+                    </div>
+                    <div class="bp-form-row">
+                        <div class="bp-input-group">
+                            <label>Website URL</label>
+                            <input type="url" name="website_url" placeholder="https://...">
+                        </div>
+                        <div class="bp-input-group">
+                            <label>Voice & Tone</label>
+                            <select name="voice_tone">
+                                <option value="professional">Professional</option>
+                                <option value="casual">Casual</option>
+                                <option value="friendly">Friendly</option>
+                                <option value="authoritative">Authoritative</option>
+                                <option value="humorous">Humorous</option>
+                                <option value="inspirational">Inspirational</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button type="submit" class="bp-btn bp-btn-primary">Create Brand</button>
+                </form>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleForm(formId) {
+    const form = document.getElementById(formId);
+    form.classList.toggle('bp-form-hidden');
+}
+</script>
+{% endblock %}

@@ -1,0 +1,1222 @@
+{% extends 'base.html' %}
+
+{% block title %}Create Post - SocialSync{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Page Header */
+    .page-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 2rem;
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+    
+    .page-header-left {
+        display: flex;
+        align-items: center;
+        gap: 1.25rem;
+    }
+    
+    .page-icon {
+        width: 56px;
+        height: 56px;
+        background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+        border-radius: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        color: white;
+        box-shadow: 0 8px 25px rgba(255, 107, 107, 0.35);
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .page-icon::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        left: -50%;
+        width: 200%;
+        height: 200%;
+        background: linear-gradient(45deg, transparent 30%, rgba(255, 255, 255, 0.15) 50%, transparent 70%);
+        animation: icon-shine 3s infinite;
+    }
+    
+    @keyframes icon-shine {
+        0% { transform: translateX(-100%) rotate(45deg); }
+        100% { transform: translateX(100%) rotate(45deg); }
+    }
+    
+    .page-title {
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin-bottom: 0.25rem;
+    }
+    
+    .page-subtitle {
+        font-size: 0.95rem;
+        color: var(--text-muted);
+    }
+    
+    .page-header-actions {
+        display: flex;
+        gap: 0.75rem;
+    }
+    
+    /* Alert Box */
+    .alert-warning-box {
+        background: linear-gradient(135deg, rgba(252, 196, 25, 0.08) 0%, rgba(245, 158, 11, 0.05) 100%);
+        border: 1px solid rgba(252, 196, 25, 0.25);
+        border-radius: 16px;
+        padding: 1.25rem 1.5rem;
+        margin-bottom: 2rem;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+    
+    .alert-warning-box .alert-icon {
+        width: 44px;
+        height: 44px;
+        background: rgba(252, 196, 25, 0.15);
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--warning);
+        font-size: 1.25rem;
+        flex-shrink: 0;
+    }
+    
+    .alert-warning-box .alert-content h4 {
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: var(--warning);
+        margin-bottom: 0.25rem;
+    }
+    
+    .alert-warning-box .alert-content p {
+        font-size: 0.875rem;
+        color: var(--text-muted);
+    }
+    
+    .alert-warning-box .alert-content a {
+        color: var(--info);
+        font-weight: 600;
+        text-decoration: none;
+        transition: color 0.2s;
+    }
+    
+    .alert-warning-box .alert-content a:hover {
+        color: #a5b4fc;
+    }
+    
+    /* Create Post Layout */
+    .create-layout {
+        display: grid;
+        grid-template-columns: 1fr 380px;
+        gap: 1.5rem;
+        align-items: start;
+    }
+    
+    /* Card Styles */
+    .card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-subtle);
+        border-radius: 20px;
+        overflow: hidden;
+        transition: all 0.3s ease;
+    }
+    
+    .card:hover {
+        border-color: var(--border-default);
+    }
+    
+    .card-header {
+        padding: 1.25rem 1.5rem;
+        border-bottom: 1px solid var(--border-subtle);
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+    
+    .card-header-icon {
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1rem;
+    }
+    
+    .card-header-icon.primary {
+        background: rgba(255, 107, 107, 0.1);
+        color: var(--primary);
+    }
+    
+    .card-header-icon.purple {
+        background: rgba(167, 139, 250, 0.1);
+        color: #a78bfa;
+    }
+    
+    .card-header-icon.blue {
+        background: rgba(96, 165, 250, 0.1);
+        color: #60a5fa;
+    }
+    
+    .card-header-icon.green {
+        background: rgba(81, 207, 102, 0.1);
+        color: var(--success);
+    }
+    
+    .card-header-icon.orange {
+        background: rgba(251, 146, 60, 0.1);
+        color: #fb923c;
+    }
+    
+    .card-title {
+        font-size: 1rem;
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+    
+    .card-body {
+        padding: 1.5rem;
+    }
+    
+    /* Form Elements */
+    .form-group {
+        margin-bottom: 1.25rem;
+    }
+    
+    .form-group:last-child {
+        margin-bottom: 0;
+    }
+    
+    .form-label {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 0.625rem;
+    }
+    
+    .form-label i {
+        font-size: 0.75rem;
+        color: var(--text-muted);
+    }
+    
+    .form-control {
+        width: 100%;
+        padding: 0.875rem 1rem;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-default);
+        border-radius: 12px;
+        font-size: 0.95rem;
+        color: var(--text-primary);
+        font-family: inherit;
+        transition: all 0.2s ease;
+    }
+    
+    .form-control::placeholder {
+        color: var(--text-muted);
+    }
+    
+    .form-control:focus {
+        outline: none;
+        border-color: var(--primary);
+        background: var(--bg-hover);
+        box-shadow: 0 0 0 3px rgba(255, 107, 107, 0.1);
+    }
+    
+    textarea.form-control {
+        resize: vertical;
+        min-height: 160px;
+        line-height: 1.6;
+    }
+    
+    select.form-control {
+        cursor: pointer;
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%236c757d' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10l-5 5z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 1rem center;
+        padding-right: 2.5rem;
+    }
+    
+    select.form-control option {
+        background: var(--bg-card);
+        color: var(--text-primary);
+    }
+    
+    .char-counter {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: 0.5rem;
+        font-size: 0.8rem;
+        color: var(--text-muted);
+    }
+    
+    .char-counter span {
+        color: var(--text-secondary);
+        font-weight: 600;
+    }
+    
+    /* AI Caption Generator */
+    .ai-generator {
+        background: linear-gradient(135deg, rgba(167, 139, 250, 0.08) 0%, rgba(139, 92, 246, 0.05) 100%);
+        border: 1px solid rgba(167, 139, 250, 0.2);
+        border-radius: 16px;
+        padding: 1.25rem;
+        margin-top: 1.25rem;
+    }
+    
+    .ai-generator-header {
+        display: flex;
+        align-items: center;
+        gap: 0.625rem;
+        margin-bottom: 1rem;
+    }
+    
+    .ai-generator-header i {
+        color: #a78bfa;
+        font-size: 1rem;
+    }
+    
+    .ai-generator-header span {
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+    
+    .ai-controls {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+    }
+    
+    .ai-controls .form-control {
+        padding: 0.75rem 1rem;
+        font-size: 0.875rem;
+    }
+    
+    .btn-ai {
+        width: 100%;
+        padding: 0.875rem 1.25rem;
+        background: linear-gradient(135deg, #8b5cf6 0%, #a78bfa 100%);
+        color: white;
+        border: none;
+        border-radius: 10px;
+        font-size: 0.9rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.625rem;
+        box-shadow: 0 4px 15px rgba(139, 92, 246, 0.3);
+    }
+    
+    .btn-ai:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(139, 92, 246, 0.4);
+    }
+    
+    .btn-ai:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+    }
+    
+    /* Media Upload */
+    .upload-area {
+        border: 2px dashed var(--border-default);
+        border-radius: 16px;
+        padding: 2.5rem 2rem;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        background: var(--glass);
+    }
+    
+    .upload-area:hover {
+        border-color: var(--primary);
+        background: rgba(255, 107, 107, 0.03);
+    }
+    
+    .upload-area.dragover {
+        border-color: var(--primary);
+        background: rgba(255, 107, 107, 0.05);
+    }
+    
+    .upload-icon {
+        width: 64px;
+        height: 64px;
+        background: linear-gradient(135deg, rgba(255, 107, 107, 0.1) 0%, rgba(240, 101, 149, 0.05) 100%);
+        border-radius: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 1rem;
+    }
+    
+    .upload-icon i {
+        font-size: 1.75rem;
+        color: var(--primary);
+    }
+    
+    .upload-title {
+        font-size: 1rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 0.375rem;
+    }
+    
+    .upload-subtitle {
+        font-size: 0.85rem;
+        color: var(--text-muted);
+    }
+    
+    .upload-formats {
+        display: flex;
+        justify-content: center;
+        gap: 0.5rem;
+        margin-top: 1rem;
+        flex-wrap: wrap;
+    }
+    
+    .format-tag {
+        padding: 0.25rem 0.625rem;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: 6px;
+        font-size: 0.7rem;
+        font-weight: 600;
+        color: var(--text-muted);
+        text-transform: uppercase;
+    }
+    
+    /* Preview Grid */
+    .preview-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+        gap: 0.75rem;
+        margin-top: 1rem;
+    }
+    
+    .preview-item {
+        position: relative;
+        aspect-ratio: 1;
+        border-radius: 12px;
+        overflow: hidden;
+        border: 1px solid var(--border-default);
+        background: var(--bg-elevated);
+    }
+    
+    .preview-item img,
+    .preview-item video {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+    
+    .preview-item .remove-btn {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        width: 24px;
+        height: 24px;
+        background: rgba(239, 68, 68, 0.9);
+        color: white;
+        border: none;
+        border-radius: 50%;
+        cursor: pointer;
+        font-size: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s ease;
+        opacity: 0;
+    }
+    
+    .preview-item:hover .remove-btn {
+        opacity: 1;
+    }
+    
+    .preview-item .remove-btn:hover {
+        background: var(--danger);
+        transform: scale(1.1);
+    }
+    
+    .preview-item .media-type {
+        position: absolute;
+        bottom: 6px;
+        left: 6px;
+        padding: 0.25rem 0.5rem;
+        background: rgba(0, 0, 0, 0.75);
+        border-radius: 6px;
+        font-size: 0.65rem;
+        font-weight: 600;
+        color: white;
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+    }
+    
+    .file-info {
+        margin-top: 0.75rem;
+        font-size: 0.85rem;
+        color: var(--text-muted);
+    }
+    
+    .file-info a {
+        color: var(--info);
+        font-weight: 600;
+        text-decoration: none;
+    }
+    
+    .file-info a:hover {
+        text-decoration: underline;
+    }
+    
+    /* Platform Selection */
+    .platforms-grid {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+    
+    .platform-checkbox {
+        display: none;
+    }
+    
+    .platform-card {
+        display: flex;
+        align-items: center;
+        gap: 0.875rem;
+        padding: 1rem;
+        background: var(--glass);
+        border: 1px solid var(--border-subtle);
+        border-radius: 12px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+    
+    .platform-card:hover {
+        background: var(--glass-strong);
+        border-color: var(--border-default);
+    }
+    
+    .platform-checkbox:checked + .platform-card {
+        background: linear-gradient(135deg, rgba(255, 107, 107, 0.08) 0%, rgba(240, 101, 149, 0.05) 100%);
+        border-color: rgba(255, 107, 107, 0.3);
+    }
+    
+    .platform-icon {
+        width: 42px;
+        height: 42px;
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.25rem;
+        color: white;
+        flex-shrink: 0;
+    }
+    
+    .platform-icon.facebook { background: #1877f2; }
+    .platform-icon.twitter { background: #1da1f2; }
+    .platform-icon.instagram { background: linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888); }
+    .platform-icon.linkedin { background: #0a66c2; }
+    
+    .platform-info {
+        flex: 1;
+        min-width: 0;
+    }
+    
+    .platform-name {
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+    
+    .platform-accounts {
+        font-size: 0.8rem;
+        color: var(--text-muted);
+    }
+    
+    .platform-check {
+        width: 22px;
+        height: 22px;
+        border: 2px solid var(--border-strong);
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: transparent;
+        transition: all 0.2s ease;
+    }
+    
+    .platform-checkbox:checked + .platform-card .platform-check {
+        background: var(--primary);
+        border-color: var(--primary);
+        color: white;
+    }
+    
+    /* Schedule Section */
+    .schedule-info {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-top: 0.75rem;
+        padding: 0.75rem 1rem;
+        background: rgba(96, 165, 250, 0.08);
+        border: 1px solid rgba(96, 165, 250, 0.15);
+        border-radius: 10px;
+        font-size: 0.8rem;
+        color: var(--text-muted);
+    }
+    
+    .schedule-info i {
+        color: #60a5fa;
+    }
+    
+    /* Preview Card */
+    .preview-card {
+        position: sticky;
+        top: calc(var(--navbar-height) + 1.5rem);
+    }
+    
+    .preview-phone {
+        background: #1a1a1a;
+        border-radius: 24px;
+        padding: 12px;
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+    }
+    
+    .preview-screen {
+        background: var(--bg-card);
+        border-radius: 16px;
+        overflow: hidden;
+    }
+    
+    .preview-header {
+        padding: 1rem;
+        border-bottom: 1px solid var(--border-subtle);
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+    
+    .preview-avatar {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, var(--primary), var(--secondary));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: 700;
+        font-size: 0.9rem;
+    }
+    
+    .preview-user-info .name {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+    
+    .preview-user-info .time {
+        font-size: 0.75rem;
+        color: var(--text-muted);
+    }
+    
+    .preview-content {
+        padding: 1rem;
+    }
+    
+    .preview-text {
+        font-size: 0.9rem;
+        color: var(--text-secondary);
+        line-height: 1.6;
+        min-height: 60px;
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+    
+    .preview-text.placeholder {
+        color: var(--text-muted);
+        font-style: italic;
+    }
+    
+    .preview-media {
+        margin-top: 1rem;
+        border-radius: 12px;
+        overflow: hidden;
+        background: var(--bg-elevated);
+        aspect-ratio: 16/9;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .preview-media img,
+    .preview-media video {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+    
+    .preview-media-placeholder {
+        color: var(--text-muted);
+        font-size: 0.85rem;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .preview-media-placeholder i {
+        font-size: 2rem;
+        opacity: 0.5;
+    }
+    
+    .preview-actions {
+        padding: 1rem;
+        border-top: 1px solid var(--border-subtle);
+        display: flex;
+        justify-content: space-around;
+    }
+    
+    .preview-action {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        color: var(--text-muted);
+        font-size: 0.8rem;
+    }
+    
+    .preview-action i {
+        font-size: 1rem;
+    }
+    
+    /* Submit Button */
+    .btn-submit {
+        width: 100%;
+        padding: 1rem 1.5rem;
+        background: linear-gradient(135deg, var(--success) 0%, #34d399 100%);
+        color: white;
+        border: none;
+        border-radius: 12px;
+        font-size: 1rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.75rem;
+        box-shadow: 0 8px 25px rgba(81, 207, 102, 0.35);
+        margin-top: 1.5rem;
+    }
+    
+    .btn-submit:hover:not(:disabled) {
+        transform: translateY(-2px);
+        box-shadow: 0 12px 35px rgba(81, 207, 102, 0.45);
+    }
+    
+    .btn-submit:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        transform: none;
+    }
+    
+    /* Loading Spinner */
+    .loading {
+        display: inline-block;
+        width: 16px;
+        height: 16px;
+        border: 2px solid rgba(255, 255, 255, 0.3);
+        border-radius: 50%;
+        border-top-color: white;
+        animation: spin 0.8s linear infinite;
+    }
+    
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+    
+    /* Responsive */
+    @media (max-width: 1024px) {
+        .create-layout {
+            grid-template-columns: 1fr;
+        }
+        
+        .preview-card {
+            display: none;
+        }
+    }
+    
+    @media (max-width: 768px) {
+        .page-header {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+        
+        .ai-controls {
+            grid-template-columns: 1fr;
+        }
+        
+        .card-body {
+            padding: 1.25rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="page-header">
+    <div class="page-header-left">
+        <div class="page-icon">
+            <i class="fas fa-pen"></i>
+        </div>
+        <div>
+            <h1 class="page-title">Create New Post</h1>
+            <p class="page-subtitle">Schedule your content across multiple platforms</p>
+        </div>
+    </div>
+</div>
+
+{% if not has_accounts %}
+<div class="alert-warning-box">
+    <div class="alert-icon">
+        <i class="fas fa-exclamation-triangle"></i>
+    </div>
+    <div class="alert-content">
+        <h4>No Connected Accounts</h4>
+        <p>You need to connect at least one social media account before creating posts. <a href="{% url 'connect_account' %}">Connect Account <i class="fas fa-arrow-right"></i></a></p>
+    </div>
+</div>
+{% endif %}
+
+<form method="POST" enctype="multipart/form-data" id="createPostForm">
+    {% csrf_token %}
+    
+    <div class="create-layout">
+        <!-- Left Column - Form -->
+        <div class="form-column">
+            <!-- Caption Card -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-header-icon primary">
+                        <i class="fas fa-edit"></i>
+                    </div>
+                    <h3 class="card-title">Post Caption</h3>
+                </div>
+                <div class="card-body">
+                    <div class="form-group">
+                        <label class="form-label">
+                            <i class="fas fa-comment-alt"></i>
+                            Write your caption
+                        </label>
+                        <textarea name="caption" class="form-control" id="captionInput" 
+                            placeholder="What's on your mind? Share something amazing with your audience..."
+                            required maxlength="5000" oninput="updatePreviewAndCount()"></textarea>
+                        <div class="char-counter">
+                            <span id="charCount">0</span> / 5000 characters
+                        </div>
+                    </div>
+                    
+                    <!-- AI Caption Generator -->
+                    <div class="ai-generator">
+                        <div class="ai-generator-header">
+                            <i class="fas fa-wand-magic-sparkles"></i>
+                            <span>AI Caption Generator</span>
+                        </div>
+                        <div class="ai-controls">
+                            <input type="text" class="form-control" id="aiTopic" placeholder="Topic (e.g., Marketing)">
+                            <select class="form-control" id="aiTone">
+                                <option value="professional">Professional</option>
+                                <option value="casual">Casual</option>
+                                <option value="friendly">Friendly</option>
+                                <option value="enthusiastic">Enthusiastic</option>
+                            </select>
+                            <select class="form-control" id="aiLength">
+                                <option value="short">Short</option>
+                                <option value="medium">Medium</option>
+                                <option value="long">Long</option>
+                            </select>
+                        </div>
+                        <button type="button" class="btn-ai" onclick="generateCaption()">
+                            <span id="aiButtonText"><i class="fas fa-sparkles"></i> Generate with AI</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Media Upload Card -->
+            <div class="card" style="margin-top: 1.5rem;">
+                <div class="card-header">
+                    <div class="card-header-icon orange">
+                        <i class="fas fa-image"></i>
+                    </div>
+                    <h3 class="card-title">Media Upload</h3>
+                </div>
+                <div class="card-body">
+                    <input type="file" id="media" name="media" accept="image/*,video/*" multiple style="display: none;">
+                    
+                    <div class="upload-area" id="uploadArea" onclick="document.getElementById('media').click()">
+                        <div class="upload-icon">
+                            <i class="fas fa-cloud-upload-alt"></i>
+                        </div>
+                        <div class="upload-title">Click or drag files to upload</div>
+                        <div class="upload-subtitle">Maximum 10 files</div>
+                        <div class="upload-formats">
+                            <span class="format-tag">JPG</span>
+                            <span class="format-tag">PNG</span>
+                            <span class="format-tag">GIF</span>
+                            <span class="format-tag">MP4</span>
+                            <span class="format-tag">MOV</span>
+                        </div>
+                    </div>
+                    
+                    <div class="preview-grid" id="previewGrid"></div>
+                    <div class="file-info" id="fileInfo"></div>
+                </div>
+            </div>
+            
+            <!-- Platforms Card -->
+            <div class="card" style="margin-top: 1.5rem;">
+                <div class="card-header">
+                    <div class="card-header-icon blue">
+                        <i class="fas fa-share-alt"></i>
+                    </div>
+                    <h3 class="card-title">Select Platforms</h3>
+                </div>
+                <div class="card-body">
+                    {% if has_accounts %}
+                    <div class="platforms-grid">
+                        {% for platform, accounts in platforms.items %}
+                        <div>
+                            <input type="checkbox" class="platform-checkbox" name="platforms" 
+                                value="{{ platform }}" id="platform-{{ platform }}">
+                            <label class="platform-card" for="platform-{{ platform }}">
+                                <div class="platform-icon {{ platform }}">
+                                    {% if platform == 'facebook' %}<i class="fab fa-facebook-f"></i>
+                                    {% elif platform == 'twitter' %}<i class="fab fa-twitter"></i>
+                                    {% elif platform == 'instagram' %}<i class="fab fa-instagram"></i>
+                                    {% elif platform == 'linkedin' %}<i class="fab fa-linkedin-in"></i>
+                                    {% endif %}
+                                </div>
+                                <div class="platform-info">
+                                    <div class="platform-name">
+                                        {% if platform == 'facebook' %}Facebook
+                                        {% elif platform == 'twitter' %}Twitter
+                                        {% elif platform == 'instagram' %}Instagram
+                                        {% elif platform == 'linkedin' %}LinkedIn
+                                        {% endif %}
+                                    </div>
+                                    <div class="platform-accounts">{{ accounts|length }} account{{ accounts|length|pluralize }}</div>
+                                </div>
+                                <div class="platform-check">
+                                    <i class="fas fa-check" style="font-size: 0.7rem;"></i>
+                                </div>
+                            </label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p style="color: var(--text-muted);">No accounts connected. 
+                        <a href="{% url 'connect_account' %}" style="color: var(--info); font-weight: 600;">
+                            Connect now <i class="fas fa-arrow-right"></i>
+                        </a>
+                    </p>
+                    {% endif %}
+                </div>
+            </div>
+            
+            <!-- Schedule Card -->
+            <div class="card" style="margin-top: 1.5rem;">
+                <div class="card-header">
+                    <div class="card-header-icon green">
+                        <i class="fas fa-clock"></i>
+                    </div>
+                    <h3 class="card-title">Schedule Post</h3>
+                </div>
+                <div class="card-body">
+                    <div class="form-group">
+                        <label class="form-label">
+                            <i class="fas fa-calendar-alt"></i>
+                            Post Date & Time
+                        </label>
+                        <input type="datetime-local" name="scheduled_time" class="form-control" required
+                            min="{{ now|date:'Y-m-d' }}T{{ now|date:'H:i' }}">
+                        <div class="schedule-info">
+                            <i class="fas fa-info-circle"></i>
+                            <span>Posts are scheduled in your local timezone</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Submit Button -->
+            <button type="submit" class="btn-submit" {% if not has_accounts %}disabled{% endif %}>
+                <i class="fas fa-rocket"></i>
+                Schedule Post
+            </button>
+        </div>
+        
+        <!-- Right Column - Preview -->
+        <div class="preview-card card">
+            <div class="card-header">
+                <div class="card-header-icon purple">
+                    <i class="fas fa-eye"></i>
+                </div>
+                <h3 class="card-title">Live Preview</h3>
+            </div>
+            <div class="card-body">
+                <div class="preview-phone">
+                    <div class="preview-screen">
+                        <div class="preview-header">
+                            <div class="preview-avatar">{{ user.username|slice:":1"|upper }}</div>
+                            <div class="preview-user-info">
+                                <div class="name">{{ user.username }}</div>
+                                <div class="time">Just now • 🌍</div>
+                            </div>
+                        </div>
+                        <div class="preview-content">
+                            <div class="preview-text placeholder" id="previewText">
+                                Your caption will appear here...
+                            </div>
+                            <div class="preview-media" id="previewMedia">
+                                <div class="preview-media-placeholder">
+                                    <i class="fas fa-image"></i>
+                                    <span>Media preview</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="preview-actions">
+                            <div class="preview-action">
+                                <i class="far fa-heart"></i> Like
+                            </div>
+                            <div class="preview-action">
+                                <i class="far fa-comment"></i> Comment
+                            </div>
+                            <div class="preview-action">
+                                <i class="far fa-share-square"></i> Share
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+
+<script>
+    // File handling
+    let files = [];
+    const maxFiles = 10;
+    
+    // Drag and drop
+    const uploadArea = document.getElementById('uploadArea');
+    
+    uploadArea.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        uploadArea.classList.add('dragover');
+    });
+    
+    uploadArea.addEventListener('dragleave', () => {
+        uploadArea.classList.remove('dragover');
+    });
+    
+    uploadArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        uploadArea.classList.remove('dragover');
+        handleFiles(e.dataTransfer.files);
+    });
+    
+    document.getElementById('media').addEventListener('change', function(e) {
+        handleFiles(e.target.files);
+    });
+    
+    function handleFiles(newFiles) {
+        const fileArray = Array.from(newFiles);
+        
+        if (files.length + fileArray.length > maxFiles) {
+            alert('Maximum ' + maxFiles + ' files allowed!');
+            return;
+        }
+        
+        files = files.concat(fileArray);
+        updatePreview();
+        updateMediaPreview();
+    }
+    
+    function updatePreview() {
+        const grid = document.getElementById('previewGrid');
+        const info = document.getElementById('fileInfo');
+        const uploadArea = document.getElementById('uploadArea');
+        
+        if (files.length === 0) {
+            grid.innerHTML = '';
+            info.style.display = 'none';
+            uploadArea.style.display = 'block';
+            return;
+        }
+        
+        uploadArea.style.display = 'none';
+        info.style.display = 'block';
+        grid.innerHTML = '';
+        
+        files.forEach((file, index) => {
+            const item = document.createElement('div');
+            item.className = 'preview-item';
+            
+            if (file.type.startsWith('image/')) {
+                const img = document.createElement('img');
+                img.src = URL.createObjectURL(file);
+                item.appendChild(img);
+                
+                const tag = document.createElement('div');
+                tag.className = 'media-type';
+                tag.innerHTML = '<i class="fas fa-image"></i> IMG';
+                item.appendChild(tag);
+            } else if (file.type.startsWith('video/')) {
+                const video = document.createElement('video');
+                video.src = URL.createObjectURL(file);
+                video.muted = true;
+                item.appendChild(video);
+                
+                const tag = document.createElement('div');
+                tag.className = 'media-type';
+                tag.innerHTML = '<i class="fas fa-video"></i> VID';
+                item.appendChild(tag);
+            }
+            
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'remove-btn';
+            removeBtn.innerHTML = '×';
+            removeBtn.type = 'button';
+            removeBtn.onclick = function() {
+                files.splice(index, 1);
+                updateFileInput();
+                updatePreview();
+                updateMediaPreview();
+            };
+            item.appendChild(removeBtn);
+            
+            grid.appendChild(item);
+        });
+        
+        info.innerHTML = `
+            <strong>${files.length}</strong> file${files.length > 1 ? 's' : ''} selected
+            ${files.length < maxFiles ? ' • <a href="#" onclick="document.getElementById(\'media\').click(); return false;"><i class="fas fa-plus-circle"></i> Add more</a>' : ''}
+        `;
+    }
+    
+    function updateFileInput() {
+        const dt = new DataTransfer();
+        files.forEach(f => dt.items.add(f));
+        document.getElementById('media').files = dt.files;
+    }
+    
+    function updatePreviewAndCount() {
+        const caption = document.getElementById('captionInput').value;
+        document.getElementById('charCount').textContent = caption.length;
+        
+        const previewText = document.getElementById('previewText');
+        if (caption.trim()) {
+            previewText.textContent = caption;
+            previewText.classList.remove('placeholder');
+        } else {
+            previewText.textContent = 'Your caption will appear here...';
+            previewText.classList.add('placeholder');
+        }
+    }
+    
+    function updateMediaPreview() {
+        const previewMedia = document.getElementById('previewMedia');
+        
+        if (files.length === 0) {
+            previewMedia.innerHTML = `
+                <div class="preview-media-placeholder">
+                    <i class="fas fa-image"></i>
+                    <span>Media preview</span>
+                </div>
+            `;
+            return;
+        }
+        
+        const file = files[0];
+        if (file.type.startsWith('image/')) {
+            previewMedia.innerHTML = `<img src="${URL.createObjectURL(file)}" alt="Preview">`;
+        } else if (file.type.startsWith('video/')) {
+            previewMedia.innerHTML = `<video src="${URL.createObjectURL(file)}" muted autoplay loop></video>`;
+        }
+    }
+    
+    async function generateCaption() {
+        const topic = document.getElementById('aiTopic').value.trim();
+        const tone = document.getElementById('aiTone').value;
+        const length = document.getElementById('aiLength').value;
+        
+        if (!topic) {
+            alert('Please enter a topic first');
+            return;
+        }
+        
+        const button = document.querySelector('.btn-ai');
+        button.disabled = true;
+        document.getElementById('aiButtonText').innerHTML = '<span class="loading"></span> Generating...';
+        
+        try {
+            const response = await fetch('{% url "generate_caption" %}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: JSON.stringify({ topic, tone, length })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                document.getElementById('captionInput').value = data.caption;
+                updatePreviewAndCount();
+            } else {
+                alert('Error: ' + data.error);
+            }
+        } catch (error) {
+            alert('Failed to generate caption: ' + error);
+        } finally {
+            button.disabled = false;
+            document.getElementById('aiButtonText').innerHTML = '<i class="fas fa-sparkles"></i> Generate with AI';
+        }
+    }
+    
+    // Set minimum datetime
+    window.addEventListener('DOMContentLoaded', function() {
+        const now = new Date();
+        now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+        const input = document.querySelector('input[type="datetime-local"]');
+        if (input) input.min = now.toISOString().slice(0, 16);
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,1067 @@
+<!-- C:\Users\Trust computer\Desktop\Final_version_socialSync\messenger_bot\templates\messenger_bot\settings.html -->
+
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Messenger Settings - AI Chatbot{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+    }
+
+    body {
+        background: #0d0d0d;
+        color: #e5e7eb;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        line-height: 1.6;
+    }
+    
+    .settings-container {
+        max-width: 1600px;
+        margin: 0 auto;
+        padding: 3rem 2.5rem;
+    }
+    
+    .header-section {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        padding: 3rem 2.5rem;
+        border-radius: 2rem;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        margin-bottom: 3rem;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .header-section::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 200%;
+        height: 100%;
+        background: linear-gradient(90deg, 
+            transparent, 
+            rgba(239, 68, 68, 0.03), 
+            transparent
+        );
+        animation: shimmer 8s infinite;
+    }
+
+    @keyframes shimmer {
+        0% { left: -100%; }
+        100% { left: 100%; }
+    }
+
+    .header-section::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, 
+            transparent,
+            #ff6b6b,
+            #ee5a6f,
+            #f06595,
+            transparent
+        );
+        background-size: 200% 100%;
+        animation: gradient-shift 3s linear infinite;
+    }
+
+    @keyframes gradient-shift {
+        0% { background-position: 0% 0%; }
+        100% { background-position: 200% 0%; }
+    }
+
+    .header-content {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+    }
+
+    .header-icon {
+        width: 70px;
+        height: 70px;
+        background: linear-gradient(135deg, #ff6b6b, #f06595);
+        border-radius: 1.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2rem;
+        color: white;
+        box-shadow: 0 10px 30px rgba(239, 68, 68, 0.4);
+    }
+
+    .header-section h1 {
+        font-size: 2.5rem;
+        font-weight: 800;
+        background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 50%, #f06595 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 0.5rem;
+        letter-spacing: -0.03em;
+    }
+
+    .header-section p {
+        color: #94a3b8;
+        font-size: 1.05rem;
+        font-weight: 500;
+    }
+    
+    .settings-card {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        border-radius: 1.5rem;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        padding: 2.5rem;
+        margin-bottom: 2rem;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .settings-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 3px;
+        background: linear-gradient(90deg, 
+            transparent,
+            #6366f1,
+            #8b5cf6,
+            #6366f1,
+            transparent
+        );
+        background-size: 200% 100%;
+        animation: gradient-shift 3s linear infinite;
+    }
+    
+    .settings-card h3 {
+        color: #fff;
+        font-weight: 700;
+        font-size: 1.5rem;
+        margin-bottom: 2rem;
+        padding-bottom: 1rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        position: relative;
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .settings-card h3 i {
+        color: #f59e0b;
+        font-size: 1.25rem;
+    }
+
+    .settings-card h5 {
+        color: #fff;
+        font-weight: 700;
+        margin-bottom: 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        position: relative;
+        z-index: 1;
+    }
+
+    .settings-card h5 i {
+        color: #60a5fa;
+    }
+    
+    .form-label {
+        font-weight: 700;
+        color: #e5e7eb;
+        margin-bottom: 0.75rem;
+        font-size: 0.9rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        display: block;
+        position: relative;
+        z-index: 1;
+    }
+    
+    .form-control, .form-select {
+        width: 100%;
+        padding: 1rem 1.25rem;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 0.75rem;
+        color: #e5e7eb;
+        font-family: 'Inter', sans-serif;
+        transition: all 0.3s;
+        font-size: 1rem;
+        position: relative;
+        z-index: 1;
+    }
+
+    .form-control::placeholder {
+        color: #64748b;
+    }
+
+    textarea.form-control {
+        resize: vertical;
+        min-height: 120px;
+    }
+    
+    .form-control:focus, .form-select:focus {
+        outline: none;
+        background: rgba(255, 255, 255, 0.08);
+        border-color: rgba(99, 102, 241, 0.5);
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    }
+
+    .text-muted, small.text-muted {
+        color: #94a3b8 !important;
+        font-size: 0.875rem;
+        margin-top: 0.5rem;
+        display: block;
+    }
+
+    .form-check {
+        margin-bottom: 1rem;
+        position: relative;
+        z-index: 1;
+    }
+
+    .form-check-input {
+        width: 3rem;
+        height: 1.5rem;
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        cursor: pointer;
+    }
+
+    .form-check-input:checked {
+        background: linear-gradient(135deg, #10b981, #059669);
+        border-color: transparent;
+    }
+
+    .form-check-label {
+        color: #cbd5e1;
+        font-weight: 500;
+        margin-left: 0.5rem;
+    }
+    
+    .btn-primary {
+        width: 100%;
+        padding: 1.125rem 2rem;
+        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        border: none;
+        border-radius: 0.875rem;
+        font-weight: 700;
+        font-size: 1rem;
+        color: white;
+        cursor: pointer;
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.75rem;
+        box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
+        position: relative;
+        z-index: 1;
+    }
+    
+    .btn-primary:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 25px rgba(99, 102, 241, 0.5);
+    }
+
+    .btn-sm {
+        padding: 0.4rem 0.6rem;
+        font-size: 0.8rem;
+        border-radius: 0.5rem;
+        border: none;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+    .btn-sm.btn-success { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+    .btn-sm.btn-success:hover { background: rgba(16, 185, 129, 0.4); }
+    .btn-sm.btn-danger { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+    .btn-sm.btn-danger:hover { background: rgba(239, 68, 68, 0.4); }
+
+    .btn-secondary {
+        padding: 1rem 2rem;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 0.875rem;
+        font-weight: 700;
+        color: #94a3b8;
+        cursor: pointer;
+        transition: all 0.3s;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.75rem;
+        text-decoration: none;
+    }
+
+    .btn-secondary:hover {
+        background: rgba(255, 255, 255, 0.08);
+        color: #fff;
+        transform: translateY(-2px);
+    }
+
+    .btn-outline-secondary {
+        padding: 1rem 2rem;
+        background: transparent;
+        border: 2px solid rgba(255, 255, 255, 0.2);
+        border-radius: 0.875rem;
+        font-weight: 700;
+        color: #94a3b8;
+        cursor: pointer;
+        transition: all 0.3s;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.75rem;
+        text-decoration: none;
+    }
+
+    .btn-outline-secondary:hover {
+        border-color: rgba(239, 68, 68, 0.5);
+        background: rgba(239, 68, 68, 0.1);
+        color: #fff;
+    }
+    
+    .pdf-item {
+        background: rgba(255, 255, 255, 0.03);
+        padding: 1.5rem;
+        border-radius: 1rem;
+        margin-bottom: 1rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        transition: all 0.3s;
+        position: relative;
+        z-index: 1;
+    }
+
+    .pdf-item:hover {
+        background: rgba(255, 255, 255, 0.05);
+        transform: translateX(5px);
+    }
+
+    .pdf-item strong {
+        color: #fff;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .status-badge {
+        padding: 0.5rem 1rem;
+        border-radius: 0.75rem;
+        font-size: 0.8rem;
+        font-weight: 700;
+        border: 1px solid;
+    }
+    
+    .status-pending { 
+        background: rgba(245, 158, 11, 0.1); 
+        color: #fbbf24;
+        border-color: rgba(245, 158, 11, 0.3);
+    }
+    
+    .status-processing { 
+        background: rgba(59, 130, 246, 0.1); 
+        color: #60a5fa;
+        border-color: rgba(59, 130, 246, 0.3);
+    }
+    
+    .status-completed { 
+        background: rgba(16, 185, 129, 0.1); 
+        color: #34d399;
+        border-color: rgba(16, 185, 129, 0.3);
+    }
+    
+    .status-failed { 
+        background: rgba(239, 68, 68, 0.1); 
+        color: #fca5a5;
+        border-color: rgba(239, 68, 68, 0.3);
+    }
+    
+    .prompt-item {
+        background: rgba(255, 255, 255, 0.03);
+        padding: 1.5rem;
+        border-radius: 1rem;
+        margin-bottom: 1rem;
+        border-left: 4px solid rgba(99, 102, 241, 0.5);
+        transition: all 0.3s;
+        position: relative;
+        z-index: 1;
+    }
+
+    .prompt-item:hover {
+        background: rgba(255, 255, 255, 0.05);
+        border-left-color: #6366f1;
+    }
+    
+    .prompt-item.active {
+        background: rgba(99, 102, 241, 0.1);
+        border-left-color: #8b5cf6;
+    }
+
+    .prompt-item h5 {
+        margin-bottom: 0.75rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .badge {
+        padding: 0.35rem 0.75rem;
+        border-radius: 0.5rem;
+        font-size: 0.75rem;
+        font-weight: 700;
+    }
+
+    .bg-secondary {
+        background: rgba(156, 163, 175, 0.2) !important;
+        color: #9ca3af !important;
+    }
+
+    .bg-success {
+        background: rgba(16, 185, 129, 0.2) !important;
+        color: #34d399 !important;
+    }
+    
+    .webhook-info {
+        background: rgba(245, 158, 11, 0.1);
+        border: 2px solid rgba(245, 158, 11, 0.3);
+        padding: 2rem;
+        border-radius: 1rem;
+        margin-top: 1.5rem;
+        position: relative;
+        z-index: 1;
+    }
+
+    .webhook-info h5 {
+        color: #fbbf24;
+        margin-bottom: 1rem;
+    }
+
+    .webhook-info p {
+        color: #cbd5e1;
+    }
+    
+    .webhook-code {
+        background: #1a1a1a;
+        color: #34d399;
+        padding: 1.25rem;
+        border-radius: 0.75rem;
+        font-family: 'Courier New', monospace;
+        font-size: 0.9rem;
+        overflow-x: auto;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        word-break: break-all;
+    }
+
+    .mb-3 {
+        margin-bottom: 1.5rem;
+        position: relative;
+        z-index: 1;
+    }
+
+    .mb-2 {
+        margin-bottom: 1rem;
+    }
+
+    .mb-0 {
+        margin-bottom: 0;
+    }
+
+    .row {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 2rem;
+        margin-bottom: 2rem;
+    }
+
+    .col-lg-6 {
+        display: flex;
+        flex-direction: column;
+        gap: 2rem;
+    }
+
+    .col-md-6 {
+        flex: 1;
+    }
+
+    .text-center {
+        text-align: center;
+        margin-top: 3rem;
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+
+    hr {
+        border: none;
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+        margin: 2rem 0;
+    }
+
+    .alert {
+        padding: 1.25rem 1.5rem;
+        border-radius: 1rem;
+        margin-bottom: 2rem;
+        border: 1px solid;
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        position: relative;
+        z-index: 1;
+    }
+
+    .alert-success {
+        background: rgba(16, 185, 129, 0.1);
+        border-color: rgba(16, 185, 129, 0.3);
+        color: #34d399;
+    }
+
+    .alert-error, .alert-danger {
+        background: rgba(239, 68, 68, 0.1);
+        border-color: rgba(239, 68, 68, 0.3);
+        color: #fca5a5;
+    }
+
+    .alert-warning {
+        background: rgba(245, 158, 11, 0.1);
+        border-color: rgba(245, 158, 11, 0.3);
+        color: #fbbf24;
+    }
+
+    .alert-info {
+        background: rgba(59, 130, 246, 0.1);
+        border-color: rgba(59, 130, 246, 0.3);
+        color: #60a5fa;
+    }
+
+    .btn-close {
+        background: transparent;
+        border: none;
+        color: inherit;
+        opacity: 0.7;
+        cursor: pointer;
+        font-size: 1.5rem;
+        line-height: 1;
+        margin-left: auto;
+    }
+
+    .btn-close:hover {
+        opacity: 1;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+        width: 12px;
+    }
+
+    ::-webkit-scrollbar-track {
+        background: #0d0d0d;
+    }
+
+    ::-webkit-scrollbar-thumb {
+        background: linear-gradient(135deg, #ef4444, #f59e0b);
+        border-radius: 10px;
+        border: 2px solid #0d0d0d;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+        background: linear-gradient(135deg, #dc2626, #d97706);
+    }
+
+    /* Responsive */
+    @media (max-width: 1024px) {
+        .row {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    @media (max-width: 768px) {
+        .settings-container {
+            padding: 1.5rem;
+        }
+
+        .header-section {
+            padding: 2rem 1.5rem;
+        }
+
+        .header-section h1 {
+            font-size: 1.75rem;
+        }
+
+        .header-content {
+            flex-direction: column;
+            text-align: center;
+        }
+
+        .settings-card {
+            padding: 1.5rem;
+        }
+
+        .text-center {
+            flex-direction: column;
+        }
+
+        .btn-secondary,
+        .btn-outline-secondary {
+            width: 100%;
+            justify-content: center;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="settings-container">
+    <!-- Header -->
+    <div class="header-section">
+        <div class="header-content">
+            <div class="header-icon">
+                <i class="fas fa-cog"></i>
+            </div>
+            <div>
+                <h1>Messenger Bot Settings</h1>
+                <p>{{ connection.page_name }}</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Messages -->
+    {% if messages %}
+        {% for message in messages %}
+        <div class="alert alert-{{ message.tags }}" role="alert">
+            <i class="fas {% if message.tags == 'success' %}fa-check-circle{% elif message.tags == 'error' or message.tags == 'danger' %}fa-exclamation-circle{% elif message.tags == 'warning' %}fa-exclamation-triangle{% else %}fa-info-circle{% endif %}"></i>
+            <span>{{ message }}</span>
+            <button type="button" class="btn-close" onclick="this.parentElement.remove()">×</button>
+        </div>
+        {% endfor %}
+    {% endif %}
+
+    <div class="row">
+        <div class="col-lg-6">
+            <!-- Connection Settings -->
+            <div class="settings-card">
+                <h3><i class="fab fa-facebook-messenger"></i> Connection Settings</h3>
+                <form method="POST">
+                    {% csrf_token %}
+                    <input type="hidden" name="form_type" value="connection">
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Page Name</label>
+                        {{ connection_form.page_name }}
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Page ID</label>
+                        {{ connection_form.page_id }}
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Auto Reply</label>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" 
+                                   {% if connection.auto_reply_enabled %}checked{% endif %}
+                                   disabled>
+                            <label class="form-check-label">
+                                {% if connection.auto_reply_enabled %}
+                                    <i class="fas fa-check-circle" style="color: #34d399;"></i> Enabled
+                                {% else %}
+                                    <i class="fas fa-times-circle" style="color: #9ca3af;"></i> Disabled
+                                {% endif %}
+                            </label>
+                        </div>
+                        <small class="text-muted">Toggle in admin panel to change</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Greeting Message</label>
+                        {{ connection_form.greeting_text }}
+                    </div>
+                    
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-save"></i> Save Connection Settings
+                    </button>
+                </form>
+            </div>
+
+            <!-- AI Configuration -->
+            <div class="settings-card">
+                <h3><i class="fas fa-robot"></i> AI Configuration</h3>
+                <form method="POST">
+                    {% csrf_token %}
+                    <input type="hidden" name="form_type" value="ai_config">
+                    
+                    <div class="mb-3">
+                        <label class="form-label">OpenAI API Key</label>
+                        {{ ai_form.openai_api_key }}
+                        <small class="text-muted">Your OpenAI API key (kept secure)</small>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">GPT Model</label>
+                        {{ ai_form.openai_model }}
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Embedding Model</label>
+                        {{ ai_form.embedding_model }}
+                    </div>
+                    
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.5rem;">
+                        <div class="mb-3">
+                            <label class="form-label">Temperature (0-2)</label>
+                            {{ ai_form.temperature }}
+                            <small class="text-muted">0 = Focused, 2 = Creative</small>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">Max Tokens</label>
+                            {{ ai_form.max_tokens }}
+                            <small class="text-muted">Max response length</small>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <div class="form-check">
+                            {{ ai_form.rag_enabled }}
+                            <label class="form-check-label">
+                                <i class="fas fa-database"></i> Enable RAG (Knowledge Base)
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <div class="form-check">
+                            {{ ai_form.image_understanding_enabled }}
+                            <label class="form-check-label">
+                                <i class="fas fa-image"></i> Enable Image Understanding
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <!-- Voice Settings -->
+                    <div class="voice-settings" style="background: rgba(139, 92, 246, 0.1); padding: 1.25rem; border-radius: 1rem; margin-bottom: 1.5rem; border: 1px solid rgba(139, 92, 246, 0.2);">
+                        <h5 style="color: #a78bfa; margin-bottom: 1rem;">
+                            <i class="fas fa-microphone"></i> Voice Settings
+                        </h5>
+                        
+                        <div class="mb-3">
+                            <div class="form-check">
+                                {{ ai_form.voice_transcription_enabled }}
+                                <label class="form-check-label">
+                                    <i class="fas fa-headphones"></i> Transcribe Voice Messages
+                                    <small style="color: #64748b; display: block;">Convert customer voice messages to text using Whisper AI</small>
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <div class="form-check">
+                                {{ ai_form.voice_reply_enabled }}
+                                <label class="form-check-label">
+                                    <i class="fas fa-volume-up"></i> Reply with Voice
+                                    <small style="color: #64748b; display: block;">Send AI responses as voice messages (uses TTS API)</small>
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label class="form-label"><i class="fas fa-user-circle"></i> Voice Style</label>
+                            {{ ai_form.voice_model }}
+                            <small style="color: #64748b;">Choose the voice for AI responses</small>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-save"></i> Save AI Configuration
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <!-- Custom Prompts -->
+            <div class="settings-card">
+                <h3><i class="fas fa-comments"></i> Custom Prompts</h3>
+                
+                {% if prompts %}
+                    {% for prompt in prompts %}
+                    <div class="prompt-item {% if prompt.is_active %}active{% endif %}" id="prompt-{{ prompt.id }}">
+                        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 1rem;">
+                            <div>
+                                <h5>
+                                    {% if prompt.is_active %}
+                                        <i class="fas fa-check-circle" style="color: #34d399;"></i>
+                                    {% else %}
+                                        <i class="far fa-circle" style="color: #64748b;"></i>
+                                    {% endif %}
+                                    {{ prompt.name }}
+                                </h5>
+                                <span class="badge bg-secondary">{{ prompt.get_tone_display }}</span>
+                            </div>
+                            <div style="display: flex; gap: 0.5rem;">
+                                {% if not prompt.is_active %}
+                                <button class="btn-sm btn-success" onclick="activatePrompt({{ prompt.id }})" title="Activate">
+                                    <i class="fas fa-check"></i>
+                                </button>
+                                {% endif %}
+                                <button class="btn-sm btn-danger" onclick="deletePrompt({{ prompt.id }}, '{{ prompt.name }}')" title="Delete">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <p style="margin: 0; color: #94a3b8; font-size: 0.9rem;">{{ prompt.system_prompt|truncatewords:30 }}</p>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <p class="text-muted">No custom prompts yet</p>
+                {% endif %}
+                
+                <hr>
+                
+                <h5><i class="fas fa-plus-circle"></i> Add New Prompt</h5>
+                <form method="POST">
+                    {% csrf_token %}
+                    <input type="hidden" name="form_type" value="new_prompt">
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Prompt Name</label>
+                        {{ prompt_form.name }}
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Tone</label>
+                        {{ prompt_form.tone }}
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">System Prompt</label>
+                        {{ prompt_form.system_prompt }}
+                    </div>
+                    
+                    <div class="mb-3">
+                        <div class="form-check">
+                            {{ prompt_form.is_active }}
+                            <label class="form-check-label">Set as Active Prompt</label>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" class="btn-primary">
+                        <i class="fas fa-plus"></i> Add Prompt
+                    </button>
+                </form>
+            </div>
+
+            <!-- PDF Knowledge Base -->
+            <div class="settings-card">
+                <h3><i class="fas fa-file-pdf"></i> Knowledge Base PDFs</h3>
+                
+                {% if pdfs %}
+                    {% for pdf in pdfs %}
+                    <div class="pdf-item" id="pdf-{{ pdf.id }}">
+                        <div>
+                            <strong>
+                                <i class="fas fa-file-pdf" style="color: #ef4444;"></i>
+                                {{ pdf.filename }}
+                            </strong>
+                            <br>
+                            <small class="text-muted">
+                                {{ pdf.file_size|filesizeformat }} • 
+                                {% if pdf.total_chunks %}{{ pdf.total_chunks }} chunks{% endif %}
+                            </small>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 0.75rem;">
+                            <span class="status-badge status-{{ pdf.status }}">
+                                {{ pdf.get_status_display }}
+                            </span>
+                            <button class="btn-sm btn-danger" onclick="deletePDF({{ pdf.id }}, '{{ pdf.filename }}')" title="Delete">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <p class="text-muted" style="text-align: center; padding: 2rem;">
+                        <i class="fas fa-inbox" style="font-size: 3rem; opacity: 0.3; display: block; margin-bottom: 1rem;"></i>
+                        No PDFs uploaded yet
+                    </p>
+                {% endif %}
+                
+                <hr>
+                
+                <h5><i class="fas fa-cloud-upload-alt"></i> Upload New PDFs</h5>
+                <form method="POST" enctype="multipart/form-data" id="pdfUploadForm">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <input type="file" class="form-control" name="pdfs" 
+                               accept=".pdf" multiple id="pdfInput">
+                        <small class="text-muted">Select one or more PDF files (max 50MB each)</small>
+                    </div>
+                    
+                    <button type="button" class="btn-primary" onclick="uploadPDFs()">
+                        <i class="fas fa-upload"></i> Upload PDFs
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Webhook Information -->
+    <div class="settings-card">
+        <h3><i class="fas fa-link"></i> Webhook Configuration</h3>
+        
+        <div class="webhook-info">
+            <h5><i class="fas fa-info-circle"></i> Facebook Webhook Setup</h5>
+            <p style="margin-bottom: 1.5rem;">Configure your Facebook App webhook with these details:</p>
+            
+            <div class="mb-3">
+                <label class="form-label">Webhook URL:</label>
+                <div class="webhook-code">
+                    {{ request.scheme }}://{{ request.get_host }}/messenger/webhook/{{ connection.page_id }}/
+                </div>
+            </div>
+            
+            <div class="mb-3">
+                <label class="form-label">Verify Token:</label>
+                <div class="webhook-code">
+                    {{ connection.verify_token }}
+                </div>
+            </div>
+            
+            <p style="margin: 0;">
+                <strong>Status:</strong> 
+                {% if connection.is_webhook_verified %}
+                    <span class="badge bg-success">
+                        <i class="fas fa-check-circle"></i> Verified
+                    </span>
+                {% else %}
+                    <span class="status-badge status-pending">
+                        <i class="fas fa-clock"></i> Pending Verification
+                    </span>
+                {% endif %}
+            </p>
+        </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="text-center">
+        <a href="{% url 'messenger_bot:dashboard' %}" class="btn-secondary">
+            <i class="fas fa-arrow-left"></i> Back to Dashboard
+        </a>
+        <a href="{% url 'platforms:connect_account' %}" class="btn-outline-secondary">
+            <i class="fas fa-home"></i> Back to Platforms
+        </a>
+    </div>
+</div>
+
+<script>
+function uploadPDFs() {
+    const formData = new FormData();
+    const files = document.getElementById('pdfInput').files;
+    
+    if (files.length === 0) {
+        alert('Please select at least one PDF file');
+        return;
+    }
+    
+    for (let i = 0; i < files.length; i++) {
+        formData.append('pdfs', files[i]);
+    }
+    
+    formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+    
+    const btn = event.target;
+    const originalHTML = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
+    btn.disabled = true;
+    
+    fetch("{% url 'messenger_bot:upload_pdf' %}", {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+            location.reload();
+        } else {
+            alert('Error: ' + JSON.stringify(data.errors));
+            btn.innerHTML = originalHTML;
+            btn.disabled = false;
+        }
+    })
+    .catch(error => {
+        alert('Upload failed: ' + error);
+        btn.innerHTML = originalHTML;
+        btn.disabled = false;
+    });
+}
+
+function activatePrompt(promptId) {
+    if (!confirm('Activate this prompt?')) return;
+    
+    fetch(`/messenger/prompts/${promptId}/activate/`, {
+        method: 'POST',
+        headers: {'X-CSRFToken': '{{ csrf_token }}'}
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) location.reload();
+        else alert('Error activating prompt');
+    });
+}
+
+function deletePrompt(promptId, name) {
+    if (!confirm(`Delete prompt "${name}"?`)) return;
+    
+    fetch(`/messenger/prompts/${promptId}/delete/`, {
+        method: 'POST',
+        headers: {'X-CSRFToken': '{{ csrf_token }}'}
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            document.getElementById('prompt-' + promptId).remove();
+        } else {
+            alert('Error deleting prompt');
+        }
+    });
+}
+
+function deletePDF(pdfId, filename) {
+    if (!confirm(`Delete PDF "${filename}"?`)) return;
+    
+    fetch(`/messenger/delete-pdf/${pdfId}/`, {
+        method: 'POST',
+        headers: {'X-CSRFToken': '{{ csrf_token }}'}
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            document.getElementById('pdf-' + pdfId).remove();
+        } else {
+            alert('Error: ' + (data.error || 'Failed to delete'));
+        }
+    });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,440 @@
+{% extends 'admin_panel/base.html' %}
+{% block title %}{{ target_user.username }}{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>
+        <i class="fas fa-user"></i> {{ target_user.username }}
+        {% if profile.is_approved %}<span class="badge badge-success">Approved</span>
+        {% else %}<span class="badge badge-warning">Pending</span>{% endif %}
+    </h1>
+    <a href="{% url 'admin_panel:user_list' %}" class="btn btn-primary"><i class="fas fa-arrow-left"></i> Back</a>
+</div>
+
+<div class="tabs">
+    <a href="?tab=overview" class="tab {% if tab == 'overview' %}active{% endif %}"><i class="fas fa-info-circle"></i> Overview</a>
+    <a href="?tab=posts" class="tab {% if tab == 'posts' %}active{% endif %}"><i class="fas fa-paper-plane"></i> Posts ({{ stats.posts }})</a>
+    <a href="?tab=accounts" class="tab {% if tab == 'accounts' %}active{% endif %}"><i class="fas fa-link"></i> Accounts ({{ stats.accounts }})</a>
+    <a href="?tab=captions" class="tab {% if tab == 'captions' %}active{% endif %}"><i class="fas fa-pen-fancy"></i> Captions ({{ stats.captions }})</a>
+    <a href="?tab=images" class="tab {% if tab == 'images' %}active{% endif %}"><i class="fas fa-image"></i> Images ({{ stats.images }})</a>
+    <a href="?tab=videos" class="tab {% if tab == 'videos' %}active{% endif %}"><i class="fas fa-video"></i> Videos ({{ stats.videos }})</a>
+    <a href="?tab=messenger" class="tab {% if tab == 'messenger' %}active{% endif %}"><i class="fab fa-facebook-messenger"></i> Messenger ({{ stats.messages }})</a>
+    <a href="?tab=api" class="tab {% if tab == 'api' %}active{% endif %}" style="color:#fbbf24;"><i class="fas fa-key"></i> API Settings</a>
+</div>
+
+{% if tab == 'overview' %}
+<div class="stats">
+    <div class="stat-card"><div class="icon blue"><i class="fas fa-paper-plane"></i></div><div><div class="value">{{ stats.posts }}</div><div class="label">Posts</div></div></div>
+    <div class="stat-card"><div class="icon purple"><i class="fas fa-link"></i></div><div><div class="value">{{ stats.accounts }}</div><div class="label">Accounts</div></div></div>
+    <div class="stat-card"><div class="icon pink"><i class="fas fa-pen-fancy"></i></div><div><div class="value">{{ stats.captions }}</div><div class="label">Captions</div></div></div>
+    <div class="stat-card"><div class="icon cyan"><i class="fas fa-image"></i></div><div><div class="value">{{ stats.images }}</div><div class="label">Images</div></div></div>
+    <div class="stat-card"><div class="icon red"><i class="fas fa-video"></i></div><div><div class="value">{{ stats.videos }}</div><div class="label">Videos</div></div></div>
+    <div class="stat-card"><div class="icon green"><i class="fas fa-comments"></i></div><div><div class="value">{{ stats.messages }}</div><div class="label">Messages</div></div></div>
+    <div class="stat-card"><div class="icon yellow"><i class="fas fa-coins"></i></div><div><div class="value">{{ tokens.total }}</div><div class="label">Tokens</div></div></div>
+    <div class="stat-card"><div class="icon green"><i class="fas fa-dollar-sign"></i></div><div><div class="value">${{ tokens.cost }}</div><div class="label">Cost</div></div></div>
+</div>
+
+<div class="row">
+    <div class="col-4">
+        <div class="card">
+            <h3 class="card-title"><i class="fas fa-id-card"></i> User Info</h3>
+            <p style="margin-top:0.5rem;"><strong>Email:</strong> {{ target_user.email }}</p>
+            <p><strong>Company:</strong> {{ profile.company|default:'-' }}</p>
+            <p><strong>Phone:</strong> {{ profile.phone|default:'-' }}</p>
+            <p><strong>Joined:</strong> {{ target_user.date_joined|date:"M d, Y" }}</p>
+            <hr style="border-color:rgba(255,255,255,0.1); margin:1rem 0;">
+            {% if not profile.is_approved %}
+            <button class="btn btn-success" onclick="approveUser()"><i class="fas fa-check"></i> Approve</button>
+            {% else %}
+            <button class="btn btn-danger" onclick="rejectUser()"><i class="fas fa-ban"></i> Reject</button>
+            {% endif %}
+        </div>
+    </div>
+    <div class="col-4">
+        <div class="card">
+            <h3 class="card-title"><i class="fas fa-coins"></i> Tokens</h3>
+            <p style="margin-top:0.5rem;"><strong>Caption:</strong> <span class="token-badge">🪙 {{ tokens.caption }}</span></p>
+            <p><strong>Messenger:</strong> <span class="token-badge">🪙 {{ tokens.messenger }}</span></p>
+            <p><strong>Total:</strong> <span class="token-badge">🪙 {{ tokens.total }}</span></p>
+            <p><strong>Cost:</strong> <span class="cost-badge">${{ tokens.cost }}</span></p>
+        </div>
+    </div>
+    <div class="col-4">
+        <div class="card">
+            <h3 class="card-title"><i class="fas fa-cog"></i> Plan</h3>
+            <form id="planForm" style="margin-top:0.5rem;">
+                <select name="plan" class="form-control" style="margin-bottom:0.5rem;">
+                    <option value="free" {% if profile.subscription_plan == 'free' %}selected{% endif %}>Free</option>
+                    <option value="starter" {% if profile.subscription_plan == 'starter' %}selected{% endif %}>Starter</option>
+                    <option value="pro" {% if profile.subscription_plan == 'pro' %}selected{% endif %}>Pro</option>
+                    <option value="business" {% if profile.subscription_plan == 'business' %}selected{% endif %}>Business</option>
+                </select>
+                <div style="display:flex; gap:0.5rem;">
+                    <input type="number" name="max_posts" class="form-control" value="{{ profile.max_posts_per_month|default:30 }}" placeholder="Max Posts">
+                    <input type="number" name="max_accounts" class="form-control" value="{{ profile.max_social_accounts|default:3 }}" placeholder="Max Accounts">
+                </div>
+                <button type="submit" class="btn btn-primary btn-sm" style="margin-top:0.5rem;"><i class="fas fa-save"></i> Save</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% elif tab == 'posts' %}
+<div class="card">
+    <div class="card-header"><h3 class="card-title"><i class="fas fa-paper-plane"></i> Posts</h3></div>
+    <div id="dataContainer" class="loading"><i class="fas fa-spinner fa-spin"></i> Loading...</div>
+</div>
+
+{% elif tab == 'accounts' %}
+<div class="card">
+    <div class="card-header"><h3 class="card-title"><i class="fas fa-link"></i> Social Accounts</h3></div>
+    <div id="dataContainer" class="loading"><i class="fas fa-spinner fa-spin"></i> Loading...</div>
+</div>
+
+{% elif tab == 'captions' %}
+<div class="card">
+    <div class="card-header"><h3 class="card-title"><i class="fas fa-pen-fancy"></i> AI Captions</h3><div id="statsHeader"></div></div>
+    <div id="dataContainer" class="loading"><i class="fas fa-spinner fa-spin"></i> Loading...</div>
+</div>
+
+{% elif tab == 'images' %}
+<div class="card">
+    <div class="card-header"><h3 class="card-title"><i class="fas fa-image"></i> AI Images</h3></div>
+    <div id="dataContainer" class="loading"><i class="fas fa-spinner fa-spin"></i> Loading...</div>
+</div>
+
+{% elif tab == 'videos' %}
+<div class="card">
+    <div class="card-header"><h3 class="card-title"><i class="fas fa-video"></i> AI Videos</h3></div>
+    <div id="dataContainer" class="loading"><i class="fas fa-spinner fa-spin"></i> Loading...</div>
+</div>
+
+{% elif tab == 'messenger' %}
+<div class="row">
+    <div class="col-4">
+        <div class="card">
+            <h3 class="card-title"><i class="fas fa-comments"></i> Conversations</h3>
+            <div id="conversationsContainer" class="loading"><i class="fas fa-spinner fa-spin"></i> Loading...</div>
+        </div>
+    </div>
+    <div class="col-8">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title"><i class="fas fa-comment-dots"></i> <span id="chatTitle">Messages</span></h3>
+                <div id="chatStats"></div>
+            </div>
+            <div id="messagesContainer" class="messages-panel" style="min-height:400px;">
+                <div class="empty-state"><i class="fas fa-arrow-left"></i><p>Select a conversation</p></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% elif tab == 'api' %}
+<div class="card" style="border-left:3px solid #fbbf24;">
+    <div class="card-header">
+        <h3 class="card-title" style="color:#fbbf24;"><i class="fas fa-key"></i> Admin API Management</h3>
+        <span class="badge badge-warning">Admin Only</span>
+    </div>
+    
+    <p style="color:#94a3b8; font-size:0.85rem; margin-bottom:1rem;">
+        <i class="fas fa-info-circle"></i> Admin Managed Mode চালু করলে user নিজে API settings change করতে পারবে না।
+    </p>
+    
+    <form id="apiForm">
+        <div style="padding:1rem; background:rgba(251,191,36,0.1); border-radius:0.5rem; margin-bottom:1.5rem;">
+            <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
+                <input type="checkbox" id="adminManaged" style="width:18px; height:18px;">
+                <strong>Admin Managed Mode</strong>
+                <span style="color:#94a3b8; font-size:0.8rem; margin-left:1rem;">— User এর settings page এ API options hide হয়ে যাবে</span>
+            </label>
+        </div>
+        
+        <div class="row">
+            <div class="col-6">
+                <div class="card" style="background:rgba(99,102,241,0.1);">
+                    <h4 style="color:#818cf8;"><i class="fas fa-robot"></i> OpenAI API Key</h4>
+                    <p style="color:#64748b; font-size:0.75rem;">Caption & Messenger Bot</p>
+                    <input type="password" id="openaiKey" class="form-control" placeholder="sk-proj-..." style="margin-top:0.5rem; font-family:monospace;">
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="card" style="background:rgba(16,185,129,0.1);">
+                    <h4 style="color:#34d399;"><i class="fas fa-gem"></i> Gemini API Key</h4>
+                    <p style="color:#64748b; font-size:0.75rem;">Image & Video Generation</p>
+                    <input type="password" id="geminiKey" class="form-control" placeholder="AIza..." style="margin-top:0.5rem; font-family:monospace;">
+                </div>
+            </div>
+        </div>
+        
+        <button type="submit" class="btn btn-primary" style="margin-top:1rem;"><i class="fas fa-save"></i> Save API Settings</button>
+    </form>
+    
+    <hr style="border-color:rgba(255,255,255,0.1); margin:1.5rem 0;">
+    <h4 style="margin-bottom:1rem;"><i class="fas fa-eye"></i> Current Status</h4>
+    <div id="apiStatusContainer" class="loading"><i class="fas fa-spinner fa-spin"></i> Loading...</div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const userId = {{ target_user.id }};
+const currentTab = '{{ tab }}';
+
+document.addEventListener('DOMContentLoaded', function() {
+    if (currentTab === 'posts') loadPosts();
+    else if (currentTab === 'accounts') loadAccounts();
+    else if (currentTab === 'captions') loadCaptions();
+    else if (currentTab === 'images') loadImages();
+    else if (currentTab === 'videos') loadVideos();
+    else if (currentTab === 'messenger') loadMessenger();
+    else if (currentTab === 'api') loadApiSettings();
+});
+
+// Plan form
+document.getElementById('planForm')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const res = await fetch(`/admin-panel/users/${userId}/plan/`, {
+        method: 'POST', headers: {'X-CSRFToken': getCsrfToken()}, body: new FormData(this)
+    });
+    showToast(res.ok ? 'Saved!' : 'Error', !res.ok);
+});
+
+// API form
+document.getElementById('apiForm')?.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const formData = new FormData();
+    formData.append('admin_managed', document.getElementById('adminManaged').checked ? 'true' : 'false');
+    formData.append('openai_key', document.getElementById('openaiKey').value);
+    formData.append('gemini_key', document.getElementById('geminiKey').value);
+    
+    const res = await fetch(`/admin-panel/users/${userId}/api-settings/update/`, {
+        method: 'POST', headers: {'X-CSRFToken': getCsrfToken()}, body: formData
+    });
+    if (res.ok) { showToast('API Settings Saved!'); loadApiSettings(); }
+    else showToast('Error', true);
+});
+
+async function approveUser() {
+    const res = await fetch(`/admin-panel/users/${userId}/approve/`, {
+        method: 'POST', headers: {'X-CSRFToken': getCsrfToken()}
+    });
+    if (res.ok) { showToast('Approved!'); location.reload(); }
+}
+
+async function rejectUser() {
+    if (!confirm('Reject user?')) return;
+    const res = await fetch(`/admin-panel/users/${userId}/reject/`, {
+        method: 'POST', headers: {'X-CSRFToken': getCsrfToken()}
+    });
+    if (res.ok) { showToast('Rejected'); location.reload(); }
+}
+
+async function loadPosts() {
+    const res = await fetch(`/admin-panel/users/${userId}/posts/`);
+    const data = await res.json();
+    if (data.posts?.length) {
+        let html = '<div class="table-wrapper"><table><thead><tr><th>ID</th><th>Caption</th><th>Platforms</th><th>Status</th><th>Date</th></tr></thead><tbody>';
+        data.posts.forEach(p => {
+            html += `<tr><td>#${p.id}</td><td>${truncate(p.caption,50)}</td><td>${(p.platforms||'').replace(/[\[\]'"]/g,'')}</td><td><span class="badge badge-${p.status==='posted'?'success':p.status==='failed'?'danger':'warning'}">${p.status}</span></td><td style="font-size:0.75rem;">${p.created_at||'-'}</td></tr>`;
+        });
+        html += '</tbody></table></div>';
+        document.getElementById('dataContainer').innerHTML = html;
+    } else {
+        document.getElementById('dataContainer').innerHTML = '<div class="empty-state"><i class="fas fa-inbox"></i><p>No posts</p></div>';
+    }
+}
+
+async function loadAccounts() {
+    const res = await fetch(`/admin-panel/users/${userId}/accounts/`);
+    const data = await res.json();
+    if (data.accounts?.length) {
+        let html = '<div class="table-wrapper"><table><thead><tr><th>Platform</th><th>Account</th><th>Status</th><th>Validated</th><th>Connected</th></tr></thead><tbody>';
+        data.accounts.forEach(a => {
+            html += `<tr><td><i class="fab fa-${a.platform}"></i> ${a.platform}</td><td>${a.account_name}</td><td><span class="badge badge-${a.status==='active'?'success':'danger'}">${a.status}</span></td><td>${a.is_validated?'✅':'❌'}</td><td style="font-size:0.75rem;">${a.connected_at||'-'}</td></tr>`;
+        });
+        html += '</tbody></table></div>';
+        document.getElementById('dataContainer').innerHTML = html;
+    } else {
+        document.getElementById('dataContainer').innerHTML = '<div class="empty-state"><i class="fas fa-unlink"></i><p>No accounts</p></div>';
+    }
+}
+
+async function loadCaptions() {
+    const res = await fetch(`/admin-panel/users/${userId}/captions/`);
+    const data = await res.json();
+    if (data.stats) {
+        document.getElementById('statsHeader').innerHTML = `<span class="badge badge-primary">${data.stats.total} total</span> <span class="token-badge">🪙 ${data.stats.tokens}</span> <span class="cost-badge">$${data.stats.cost}</span>`;
+    }
+    if (data.captions?.length) {
+        let html = '<div class="table-wrapper"><table><thead><tr><th>ID</th><th>Input</th><th>Generated</th><th>Platform</th><th>Tokens</th><th>Date</th></tr></thead><tbody>';
+        data.captions.forEach(c => {
+            html += `<tr><td>#${c.id}</td><td>${truncate(c.input_text,30)}</td><td>${truncate(c.generated_caption,40)}</td><td><span class="badge badge-primary">${c.platform}</span></td><td><span class="token-badge">🪙 ${c.tokens_used}</span></td><td style="font-size:0.75rem;">${c.created_at||'-'}</td></tr>`;
+        });
+        html += '</tbody></table></div>';
+        document.getElementById('dataContainer').innerHTML = html;
+    } else {
+        document.getElementById('dataContainer').innerHTML = '<div class="empty-state"><i class="fas fa-pen"></i><p>No captions</p></div>';
+    }
+}
+
+async function loadImages() {
+    const res = await fetch(`/admin-panel/users/${userId}/images/`);
+    const data = await res.json();
+    if (data.images?.length) {
+        let html = '<div class="table-wrapper"><table><thead><tr><th>ID</th><th>Title</th><th>Prompt</th><th>Style</th><th>Status</th><th>Date</th></tr></thead><tbody>';
+        data.images.forEach(i => {
+            html += `<tr><td>#${i.id}</td><td>${i.title||'-'}</td><td>${truncate(i.prompt,40)}</td><td><span class="badge badge-purple">${i.style}</span></td><td><span class="badge badge-${i.status==='completed'?'success':'warning'}">${i.status}</span></td><td style="font-size:0.75rem;">${i.created_at||'-'}</td></tr>`;
+        });
+        html += '</tbody></table></div>';
+        document.getElementById('dataContainer').innerHTML = html;
+    } else {
+        document.getElementById('dataContainer').innerHTML = '<div class="empty-state"><i class="fas fa-image"></i><p>No images</p></div>';
+    }
+}
+
+async function loadVideos() {
+    const res = await fetch(`/admin-panel/users/${userId}/videos/`);
+    const data = await res.json();
+    if (data.videos?.length) {
+        let html = '<div class="table-wrapper"><table><thead><tr><th>ID</th><th>Title</th><th>Prompt</th><th>Duration</th><th>Status</th><th>Date</th></tr></thead><tbody>';
+        data.videos.forEach(v => {
+            html += `<tr><td>#${v.id}</td><td>${v.title||'-'}</td><td>${truncate(v.prompt,40)}</td><td>${v.duration}s</td><td><span class="badge badge-${v.status==='completed'?'success':'warning'}">${v.status}</span></td><td style="font-size:0.75rem;">${v.created_at||'-'}</td></tr>`;
+        });
+        html += '</tbody></table></div>';
+        document.getElementById('dataContainer').innerHTML = html;
+    } else {
+        document.getElementById('dataContainer').innerHTML = '<div class="empty-state"><i class="fas fa-video"></i><p>No videos</p></div>';
+    }
+}
+
+// ===================== MESSENGER - FIXED =====================
+async function loadMessenger() {
+    try {
+        const res = await fetch(`/admin-panel/users/${userId}/messenger/`);
+        const data = await res.json();
+        console.log('Messenger data:', data);
+        
+        const container = document.getElementById('conversationsContainer');
+        if (data.conversations && data.conversations.length > 0) {
+            let html = '';
+            data.conversations.forEach((c, idx) => {
+                html += `<div class="conv-item" onclick="loadMessages(${c.id}, '${(c.sender_name||'Unknown').replace(/'/g,"\\'")}')">
+                    <strong>${c.sender_name || 'Unknown'}</strong>
+                    <div style="font-size:0.7rem; color:#64748b;">
+                        <i class="fas fa-comment"></i> ${c.message_count || 0} msgs
+                        <span style="margin-left:0.5rem;">🪙 ${c.total_tokens || 0}</span>
+                    </div>
+                </div>`;
+            });
+            container.innerHTML = html;
+        } else {
+            container.innerHTML = '<div class="empty-state"><i class="fas fa-comments"></i><p>No conversations</p></div>';
+        }
+    } catch(e) {
+        console.error('Messenger error:', e);
+        document.getElementById('conversationsContainer').innerHTML = '<div class="empty-state" style="color:#f87171;">Error loading</div>';
+    }
+}
+
+async function loadMessages(convId, senderName) {
+    console.log('Loading messages for conv:', convId);
+    document.getElementById('messagesContainer').innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i> Loading...</div>';
+    document.getElementById('chatTitle').textContent = 'Chat with ' + senderName;
+    
+    // Mark active conversation
+    document.querySelectorAll('.conv-item').forEach(el => el.classList.remove('active'));
+    event.currentTarget.classList.add('active');
+    
+    try {
+        const res = await fetch(`/admin-panel/conversations/${convId}/messages/`);
+        const data = await res.json();
+        console.log('Messages data:', data);
+        
+        if (data.stats) {
+            document.getElementById('chatStats').innerHTML = `
+                <span class="badge badge-primary">${data.stats.total} msgs</span>
+                <span class="badge badge-success">${data.stats.user} user</span>
+                <span class="badge badge-cyan">${data.stats.bot} bot</span>
+                <span class="token-badge">🪙 ${data.stats.tokens}</span>
+                <span class="cost-badge">$${data.stats.cost}</span>
+            `;
+        }
+        
+        const container = document.getElementById('messagesContainer');
+        if (data.messages && data.messages.length > 0) {
+            let html = '';
+            data.messages.forEach(m => {
+                const isBot = m.sender === 'bot';
+                const text = (m.text || `[${m.message_type}]`).replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+                html += `<div class="message-item ${isBot ? 'bot' : 'user'}">
+                    <div>${text.length > 500 ? text.substring(0,500) + '...' : text}</div>
+                    <div class="message-meta">
+                        ${isBot ? '🤖 Bot' : '👤 User'} | ${m.timestamp || '-'}
+                        ${m.tokens_used ? ' | 🪙 ' + m.tokens_used : ''}
+                        ${m.model_used ? ' | ' + m.model_used : ''}
+                    </div>
+                </div>`;
+            });
+            container.innerHTML = html;
+            container.scrollTop = container.scrollHeight;
+        } else {
+            container.innerHTML = '<div class="empty-state"><i class="fas fa-inbox"></i><p>No messages</p></div>';
+        }
+    } catch(e) {
+        console.error('Messages error:', e);
+        document.getElementById('messagesContainer').innerHTML = '<div class="empty-state" style="color:#f87171;">Error loading messages</div>';
+    }
+}
+
+// ===================== API SETTINGS =====================
+async function loadApiSettings() {
+    try {
+        const res = await fetch(`/admin-panel/users/${userId}/api-settings/`);
+        const data = await res.json();
+        console.log('API settings:', data);
+        
+        document.getElementById('adminManaged').checked = data.admin_managed;
+        
+        let html = '<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:1rem;">';
+        
+        html += `<div style="padding:0.75rem; background:rgba(99,102,241,0.1); border-radius:0.5rem;">
+            <strong style="color:#818cf8;"><i class="fas fa-pen-fancy"></i> Caption</strong><br>
+            <small>OpenAI: ${data.caption?.has_key ? '✅ ' + (data.caption.key_preview || 'Set') : '❌ Not set'}</small><br>
+            <small>Model: ${data.caption?.model || '-'}</small>
+        </div>`;
+        
+        html += `<div style="padding:0.75rem; background:rgba(16,185,129,0.1); border-radius:0.5rem;">
+            <strong style="color:#34d399;"><i class="fas fa-image"></i> Image</strong><br>
+            <small>Gemini: ${data.image?.has_key ? '✅ ' + (data.image.key_preview || 'Set') : '❌ Not set'}</small>
+        </div>`;
+        
+        html += `<div style="padding:0.75rem; background:rgba(239,68,68,0.1); border-radius:0.5rem;">
+            <strong style="color:#f87171;"><i class="fas fa-video"></i> Video</strong><br>
+            <small>Gemini: ${data.video?.has_key ? '✅ ' + (data.video.key_preview || 'Set') : '❌ Not set'}</small>
+        </div>`;
+        
+        html += `<div style="padding:0.75rem; background:rgba(59,130,246,0.1); border-radius:0.5rem;">
+            <strong style="color:#60a5fa;"><i class="fab fa-facebook-messenger"></i> Messenger</strong><br>
+            <small>Page: ${data.messenger?.page || 'Not connected'}</small><br>
+            <small>OpenAI: ${data.messenger?.has_key ? '✅' : '❌'}</small>
+        </div>`;
+        
+        html += '</div>';
+        
+        if (data.admin_managed) {
+            html += `<div style="margin-top:1rem; padding:0.75rem; background:rgba(251,191,36,0.15); border-radius:0.5rem; border-left:3px solid #fbbf24;">
+                <strong style="color:#fbbf24;"><i class="fas fa-lock"></i> Admin Managed Active</strong><br>
+                <small style="color:#94a3b8;">User cannot modify their API settings</small>
+            </div>`;
+        }
+        
+        document.getElementById('apiStatusContainer').innerHTML = html;
+    } catch(e) {
+        console.error('API settings error:', e);
+        document.getElementById('apiStatusContainer').innerHTML = '<div class="empty-state" style="color:#f87171;">Error</div>';
+    }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,1415 @@
+{% extends 'base.html' %}
+
+{% block title %}AI Video Generator - SocialSync{% endblock %}
+
+{% block extra_css %}
+<style>
+    .generator-container {
+        max-width: 1500px;
+        margin: 0 auto;
+        padding: 2rem 2.5rem;
+    }
+
+    /* API Key Warning */
+    .api-key-warning {
+        background: linear-gradient(145deg, #1a1a1a 0%, #111111 100%);
+        border-radius: 1.5rem;
+        border: 2px solid rgba(139, 92, 246, 0.3);
+        margin-bottom: 2rem;
+        overflow: hidden;
+        position: relative;
+    }
+
+    .api-key-warning::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, #8b5cf6, #a855f7, #8b5cf6);
+    }
+
+    .warning-content {
+        padding: 1.5rem 2rem;
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+    }
+
+    .warning-icon {
+        width: 55px;
+        height: 55px;
+        background: linear-gradient(135deg, #8b5cf6, #a855f7);
+        border-radius: 1rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        color: white;
+        flex-shrink: 0;
+    }
+
+    .warning-text {
+        flex: 1;
+    }
+
+    .warning-text h3 {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: #a855f7;
+        margin-bottom: 0.25rem;
+    }
+
+    .warning-text p {
+        color: #94a3b8;
+        font-size: 0.95rem;
+    }
+
+    .warning-btn {
+        padding: 0.875rem 1.5rem;
+        background: linear-gradient(135deg, #8b5cf6, #a855f7);
+        color: white;
+        border-radius: 0.875rem;
+        font-size: 0.95rem;
+        font-weight: 700;
+        text-decoration: none;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: all 0.3s;
+        flex-shrink: 0;
+    }
+
+    .warning-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(139, 92, 246, 0.4);
+    }
+
+    /* Hero Header */
+    .generator-hero {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        padding: 2.5rem;
+        border-radius: 2rem;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        margin-bottom: 2rem;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .generator-hero::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, transparent, #8b5cf6, #a855f7, #c084fc, #a855f7, #8b5cf6, transparent);
+        background-size: 200% 100%;
+        animation: shimmer 8s linear infinite;
+    }
+
+    @keyframes shimmer {
+        0% { background-position: -200% 0; }
+        100% { background-position: 200% 0; }
+    }
+
+    .hero-content {
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+    }
+
+    .hero-icon {
+        width: 75px;
+        height: 75px;
+        background: linear-gradient(135deg, #8b5cf6, #a855f7, #c084fc);
+        border-radius: 1.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2.25rem;
+        color: white;
+        box-shadow: 0 10px 30px rgba(139, 92, 246, 0.4);
+        animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+        0%, 100% { box-shadow: 0 10px 30px rgba(139, 92, 246, 0.4); }
+        50% { box-shadow: 0 15px 40px rgba(139, 92, 246, 0.6); }
+    }
+
+    .hero-text h1 {
+        font-size: 2.5rem;
+        font-weight: 900;
+        background: linear-gradient(135deg, #8b5cf6, #a855f7, #c084fc);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 0.35rem;
+    }
+
+    .hero-text p {
+        color: #94a3b8;
+        font-size: 1.05rem;
+    }
+
+    /* Main Layout */
+    .main-layout {
+        display: grid;
+        grid-template-columns: 1fr 380px;
+        gap: 2rem;
+    }
+
+    /* Form Card */
+    .form-card {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        border-radius: 1.5rem;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        overflow: hidden;
+    }
+
+    .card-header {
+        padding: 1.5rem 2rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .card-header i {
+        color: #a855f7;
+        font-size: 1.25rem;
+    }
+
+    .card-header h2 {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: #e5e7eb;
+    }
+
+    .card-body {
+        padding: 2rem;
+    }
+
+    /* Form Elements */
+    .form-group {
+        margin-bottom: 1.5rem;
+    }
+
+    .form-label {
+        display: block;
+        margin-bottom: 0.75rem;
+        font-weight: 600;
+        color: #e5e7eb;
+        font-size: 0.9rem;
+    }
+
+    .form-label .required {
+        color: #f87171;
+        margin-left: 0.25rem;
+    }
+
+    .form-control {
+        width: 100%;
+        padding: 1rem 1.25rem;
+        background: rgba(255, 255, 255, 0.05);
+        border: 2px solid rgba(255, 255, 255, 0.1);
+        border-radius: 0.875rem;
+        font-size: 1rem;
+        color: #e5e7eb;
+        transition: all 0.3s;
+    }
+
+    .form-control::placeholder {
+        color: #64748b;
+    }
+
+    .form-control:focus {
+        outline: none;
+        background: rgba(255, 255, 255, 0.08);
+        border-color: rgba(139, 92, 246, 0.5);
+        box-shadow: 0 0 0 4px rgba(139, 92, 246, 0.1);
+    }
+
+    textarea.form-control {
+        min-height: 120px;
+        resize: vertical;
+    }
+
+    select.form-control {
+        cursor: pointer;
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%2394a3b8' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10l-5 5z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 1rem center;
+        padding-right: 2.5rem;
+    }
+
+    .form-hint {
+        margin-top: 0.5rem;
+        font-size: 0.85rem;
+        color: #64748b;
+    }
+
+    /* Form Row */
+    .form-row {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem;
+    }
+
+    .form-row-3 {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1rem;
+    }
+
+    .form-row-4 {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1rem;
+    }
+
+    /* Style Grid */
+    .style-grid {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 0.75rem;
+    }
+
+    .style-option {
+        background: rgba(255, 255, 255, 0.03);
+        border: 2px solid rgba(255, 255, 255, 0.1);
+        border-radius: 0.75rem;
+        padding: 0.75rem;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+
+    .style-option:hover {
+        background: rgba(255, 255, 255, 0.06);
+        border-color: rgba(139, 92, 246, 0.3);
+    }
+
+    .style-option.active {
+        background: rgba(139, 92, 246, 0.1);
+        border-color: #a855f7;
+    }
+
+    .style-option i {
+        font-size: 1.5rem;
+        color: #94a3b8;
+        margin-bottom: 0.5rem;
+        display: block;
+    }
+
+    .style-option.active i {
+        color: #a855f7;
+    }
+
+    .style-option span {
+        font-size: 0.75rem;
+        color: #94a3b8;
+        font-weight: 600;
+    }
+
+    .style-option.active span {
+        color: #a855f7;
+    }
+
+    .style-option input {
+        display: none;
+    }
+
+    /* Logo Section */
+    .logo-section {
+        background: rgba(139, 92, 246, 0.05);
+        border: 1px solid rgba(139, 92, 246, 0.1);
+        border-radius: 1rem;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .logo-section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 1rem;
+    }
+
+    .logo-section-header h3 {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #a855f7;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .logo-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+    }
+
+    .logo-item {
+        background: rgba(255, 255, 255, 0.05);
+        border: 2px solid rgba(255, 255, 255, 0.1);
+        border-radius: 0.75rem;
+        padding: 0.5rem;
+        cursor: pointer;
+        transition: all 0.3s;
+        aspect-ratio: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+    }
+
+    .logo-item:hover {
+        border-color: rgba(139, 92, 246, 0.3);
+    }
+
+    .logo-item.active {
+        border-color: #a855f7;
+        background: rgba(139, 92, 246, 0.1);
+    }
+
+    .logo-item img {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+    }
+
+    .logo-item input {
+        display: none;
+    }
+
+    /* Position Grid */
+    .position-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 0.5rem;
+    }
+
+    .position-option {
+        background: rgba(255, 255, 255, 0.03);
+        border: 2px solid rgba(255, 255, 255, 0.1);
+        border-radius: 0.5rem;
+        padding: 0.5rem;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.3s;
+        font-size: 0.75rem;
+        color: #94a3b8;
+    }
+
+    .position-option:hover {
+        border-color: rgba(139, 92, 246, 0.3);
+    }
+
+    .position-option.active {
+        background: rgba(139, 92, 246, 0.1);
+        border-color: #a855f7;
+        color: #a855f7;
+    }
+
+    .position-option input {
+        display: none;
+    }
+
+    /* Range Slider */
+    .range-group {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .range-slider {
+        flex: 1;
+        -webkit-appearance: none;
+        height: 6px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 3px;
+        outline: none;
+    }
+
+    .range-slider::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 18px;
+        height: 18px;
+        background: linear-gradient(135deg, #8b5cf6, #a855f7);
+        border-radius: 50%;
+        cursor: pointer;
+        box-shadow: 0 2px 8px rgba(139, 92, 246, 0.4);
+    }
+
+    .range-value {
+        min-width: 40px;
+        text-align: center;
+        font-weight: 600;
+        color: #a855f7;
+    }
+
+    /* Advanced Toggle */
+    .advanced-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 1rem 1.25rem;
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: 0.875rem;
+        cursor: pointer;
+        margin-bottom: 1rem;
+        transition: all 0.3s;
+    }
+
+    .advanced-toggle:hover {
+        background: rgba(255, 255, 255, 0.05);
+    }
+
+    .advanced-toggle span {
+        font-weight: 600;
+        color: #e5e7eb;
+    }
+
+    .advanced-toggle i {
+        color: #94a3b8;
+        transition: transform 0.3s;
+    }
+
+    .advanced-toggle.open i {
+        transform: rotate(180deg);
+    }
+
+    .advanced-options {
+        display: none;
+        padding-top: 1rem;
+    }
+
+    .advanced-options.show {
+        display: block;
+    }
+
+    /* Generate Button */
+    .generate-btn {
+        width: 100%;
+        padding: 1.25rem;
+        background: linear-gradient(135deg, #8b5cf6, #a855f7);
+        color: white;
+        border: none;
+        border-radius: 1rem;
+        font-size: 1.1rem;
+        font-weight: 800;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.75rem;
+        transition: all 0.3s;
+        box-shadow: 0 4px 20px rgba(139, 92, 246, 0.3);
+        margin-top: 1.5rem;
+    }
+
+    .generate-btn:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 30px rgba(139, 92, 246, 0.4);
+    }
+
+    .generate-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+    }
+
+    .generate-btn .spinner {
+        width: 22px;
+        height: 22px;
+        border: 3px solid rgba(255,255,255,0.3);
+        border-top-color: white;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+
+    /* Result Section */
+    .result-section {
+        display: none;
+        margin-top: 2rem;
+    }
+
+    .result-section.show {
+        display: block;
+    }
+
+    .result-card {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        border-radius: 1.5rem;
+        border: 1px solid rgba(139, 92, 246, 0.2);
+        overflow: hidden;
+    }
+
+    .result-video-container {
+        position: relative;
+        background: #0a0a0a;
+    }
+
+    .result-video {
+        width: 100%;
+        display: block;
+        max-height: 500px;
+    }
+
+    .result-actions {
+        padding: 1.5rem;
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1rem;
+    }
+
+    .result-btn {
+        padding: 0.875rem;
+        border-radius: 0.75rem;
+        font-size: 0.9rem;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        transition: all 0.3s;
+        border: none;
+    }
+
+    .result-btn.download {
+        background: linear-gradient(135deg, #8b5cf6, #a855f7);
+        color: white;
+    }
+
+    .result-btn.save {
+        background: rgba(16, 185, 129, 0.1);
+        color: #34d399;
+        border: 1px solid rgba(16, 185, 129, 0.2);
+    }
+
+    .result-btn.regenerate {
+        background: rgba(59, 130, 246, 0.1);
+        color: #60a5fa;
+        border: 1px solid rgba(59, 130, 246, 0.2);
+    }
+
+    .result-btn.new {
+        background: rgba(255, 255, 255, 0.05);
+        color: #94a3b8;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .result-btn:hover {
+        transform: translateY(-2px);
+    }
+
+    /* RIGHT SIDEBAR - Renamed to avoid conflict with base.html left sidebar */
+    .video-sidebar {
+        display: block !important;
+        position: relative !important;
+        width: 100% !important;
+        height: auto !important;
+        transform: none !important;
+        background: transparent !important;
+        border: none !important;
+        top: auto !important;
+        left: auto !important;
+        overflow: visible !important;
+        flex-direction: column !important;
+        padding: 0 !important;
+    }
+
+    .video-sidebar-inner {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+    }
+
+    .video-sidebar .sidebar-card {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        border-radius: 1.5rem;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        overflow: hidden;
+    }
+
+    .video-sidebar .sidebar-card .card-header {
+        padding: 1.25rem 1.5rem;
+    }
+
+    .video-sidebar .sidebar-card .card-body {
+        padding: 1.25rem 1.5rem;
+    }
+
+    /* Quick Links */
+    .quick-links {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .quick-link {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 0.875rem 1rem;
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: 0.75rem;
+        text-decoration: none;
+        transition: all 0.3s;
+    }
+
+    .quick-link:hover {
+        background: rgba(255, 255, 255, 0.06);
+        transform: translateX(5px);
+    }
+
+    .quick-link-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 0.625rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1rem;
+        color: white;
+    }
+
+    .quick-link-icon.settings { background: linear-gradient(135deg, #8b5cf6, #a855f7); }
+    .quick-link-icon.logos { background: linear-gradient(135deg, #f59e0b, #fbbf24); }
+    .quick-link-icon.history { background: linear-gradient(135deg, #3b82f6, #60a5fa); }
+    .quick-link-icon.saved { background: linear-gradient(135deg, #10b981, #34d399); }
+
+    .quick-link-text {
+        flex: 1;
+    }
+
+    .quick-link-text span {
+        display: block;
+        font-weight: 600;
+        color: #e5e7eb;
+        font-size: 0.9rem;
+    }
+
+    .quick-link-text small {
+        color: #64748b;
+        font-size: 0.8rem;
+    }
+
+    /* Recent Videos */
+    .recent-videos-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.75rem;
+    }
+
+    .recent-video-item {
+        position: relative;
+        aspect-ratio: 16/9;
+        border-radius: 0.75rem;
+        overflow: hidden;
+        cursor: pointer;
+        transition: all 0.3s;
+        border: 2px solid transparent;
+    }
+
+    .recent-video-item:hover {
+        transform: scale(1.05);
+        border-color: rgba(139, 92, 246, 0.3);
+    }
+
+    .recent-video-item img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .recent-video-item .duration-badge {
+        position: absolute;
+        bottom: 0.5rem;
+        right: 0.5rem;
+        background: rgba(0,0,0,0.8);
+        padding: 0.15rem 0.4rem;
+        border-radius: 0.25rem;
+        font-size: 0.7rem;
+        color: white;
+    }
+
+    /* Usage Stats */
+    .usage-stats {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.75rem;
+    }
+
+    .stat-item {
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: 0.75rem;
+        padding: 1rem;
+        text-align: center;
+    }
+
+    .stat-value {
+        font-size: 1.5rem;
+        font-weight: 800;
+        color: #a855f7;
+    }
+
+    .stat-label {
+        font-size: 0.75rem;
+        color: #64748b;
+        margin-top: 0.25rem;
+    }
+
+    /* Toast */
+    .toast {
+        position: fixed;
+        bottom: 2rem;
+        right: 2rem;
+        padding: 1rem 1.5rem;
+        background: linear-gradient(135deg, #8b5cf6, #a855f7);
+        color: white;
+        border-radius: 1rem;
+        font-weight: 600;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        transform: translateY(100px);
+        opacity: 0;
+        transition: all 0.3s ease;
+        z-index: 1000;
+    }
+
+    .toast.show {
+        transform: translateY(0);
+        opacity: 1;
+    }
+
+    .toast.error {
+        background: linear-gradient(135deg, #ef4444, #f87171);
+    }
+
+    /* Processing Overlay */
+    .processing-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.8);
+        backdrop-filter: blur(10px);
+        z-index: 100;
+        justify-content: center;
+        align-items: center;
+    }
+
+    .processing-overlay.show {
+        display: flex;
+    }
+
+    .processing-content {
+        text-align: center;
+    }
+
+    .processing-spinner {
+        width: 80px;
+        height: 80px;
+        border: 4px solid rgba(139, 92, 246, 0.2);
+        border-top-color: #a855f7;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 1.5rem;
+    }
+
+    .processing-content h3 {
+        color: #e5e7eb;
+        font-size: 1.5rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .processing-content p {
+        color: #94a3b8;
+    }
+
+    /* Responsive */
+    @media (max-width: 1200px) {
+        .main-layout {
+            grid-template-columns: 1fr;
+        }
+
+        .video-sidebar-inner {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+
+    @media (max-width: 768px) {
+        .generator-container {
+            padding: 1.5rem;
+        }
+
+        .hero-content {
+            flex-direction: column;
+            text-align: center;
+        }
+
+        .form-row, .form-row-3, .form-row-4 {
+            grid-template-columns: 1fr;
+        }
+
+        .style-grid {
+            grid-template-columns: repeat(3, 1fr);
+        }
+
+        .video-sidebar-inner {
+            grid-template-columns: 1fr;
+        }
+
+        .result-actions {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        .warning-content {
+            flex-direction: column;
+            text-align: center;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="generator-container">
+    <!-- API Key Warning -->
+    {% if not has_api_key %}
+    <div class="api-key-warning">
+        <div class="warning-content">
+            <div class="warning-icon"><i class="fas fa-key"></i></div>
+            <div class="warning-text">
+                <h3>API Key Required</h3>
+                <p>Please set up your Google Gemini API key to start generating videos</p>
+            </div>
+            <a href="{% url 'ai_video:api_settings' %}" class="warning-btn">
+                <i class="fas fa-cog"></i> Set Up API Key
+            </a>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Hero Header -->
+    <div class="generator-hero">
+        <div class="hero-content">
+            <div class="hero-icon"><i class="fas fa-video"></i></div>
+            <div class="hero-text">
+                <h1>AI Video Generator</h1>
+                <p>Create stunning videos with AI • Add your logo • Multiple styles & durations</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="main-layout">
+        <!-- Main Form -->
+        <div class="main-content">
+            <div class="form-card">
+                <div class="card-header">
+                    <i class="fas fa-magic"></i>
+                    <h2>Generate Video</h2>
+                </div>
+                <div class="card-body">
+                    <form id="generateForm" enctype="multipart/form-data">
+                        {% csrf_token %}
+                        
+                        <!-- Title -->
+                        <div class="form-group">
+                            <label class="form-label">Video Title <span class="required">*</span></label>
+                            <input type="text" name="title" class="form-control" placeholder="e.g., Product Demo Video" required>
+                        </div>
+
+                        <!-- Prompt -->
+                        <div class="form-group">
+                            <label class="form-label">Describe Your Video <span class="required">*</span></label>
+                            <textarea name="prompt" class="form-control" rows="4" placeholder="A drone shot flying over a beautiful mountain landscape at sunset, with golden light illuminating the snow-capped peaks and a serene lake below reflecting the sky..." required></textarea>
+                            <p class="form-hint">Be as detailed as possible. Include movement, scene transitions, lighting, and atmosphere.</p>
+                        </div>
+
+                        <!-- Negative Prompt -->
+                        <div class="form-group">
+                            <label class="form-label">What to Avoid (Optional)</label>
+                            <input type="text" name="negative_prompt" class="form-control" placeholder="e.g., blurry, shaky, low quality, distorted">
+                        </div>
+
+                        <!-- Style Selection -->
+                        <div class="form-group">
+                            <label class="form-label">Video Style</label>
+                            <div class="style-grid">
+                                {% for value, label in style_choices %}
+                                <label class="style-option {% if value == 'cinematic' %}active{% endif %}">
+                                    <input type="radio" name="style" value="{{ value }}" {% if value == 'cinematic' %}checked{% endif %}>
+                                    <i class="fas fa-{% if value == 'realistic' %}camera{% elif value == 'cinematic' %}film{% elif value == 'anime' %}star{% elif value == 'cartoon' %}palette{% elif value == '3d_animation' %}cube{% elif value == 'artistic' %}paint-brush{% elif value == 'vintage' %}clock{% elif value == 'slow_motion' %}hourglass{% elif value == 'timelapse' %}fast-forward{% elif value == 'documentary' %}video{% elif value == 'sci_fi' %}rocket{% elif value == 'fantasy' %}dragon{% elif value == 'horror' %}ghost{% elif value == 'comedy' %}laugh{% elif value == 'music_video' %}music{% else %}video{% endif %}"></i>
+                                    <span>{{ label }}</span>
+                                </label>
+                                {% endfor %}
+                            </div>
+                        </div>
+
+                        <!-- Duration, Resolution, Aspect Ratio, FPS -->
+                        <div class="form-row-4">
+                            <div class="form-group">
+                                <label class="form-label">Duration</label>
+                                <select name="duration" class="form-control">
+                                    {% for value, label in duration_choices %}
+                                    <option value="{{ value }}" {% if value == 5 %}selected{% endif %}>{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Resolution</label>
+                                <select name="resolution" class="form-control">
+                                    {% for value, label in resolution_choices %}
+                                    <option value="{{ value }}" {% if value == '1080p' %}selected{% endif %}>{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Aspect Ratio</label>
+                                <select name="aspect_ratio" class="form-control">
+                                    {% for value, label in aspect_ratio_choices %}
+                                    <option value="{{ value }}" {% if value == '16:9' %}selected{% endif %}>{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Frame Rate</label>
+                                <select name="fps" class="form-control">
+                                    {% for value, label in fps_choices %}
+                                    <option value="{{ value }}" {% if value == 30 %}selected{% endif %}>{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Logo Section -->
+                        <div class="logo-section">
+                            <div class="logo-section-header">
+                                <h3><i class="fas fa-stamp"></i> Add Your Logo/Watermark</h3>
+                                <a href="{% url 'ai_video:manage_logos' %}" style="color: #a855f7; font-size: 0.85rem; text-decoration: none;">Manage Logos</a>
+                            </div>
+                            
+                            {% if logos %}
+                            <div class="logo-grid">
+                                <label class="logo-item active" data-logo-id="">
+                                    <input type="radio" name="logo_id" value="" checked>
+                                    <i class="fas fa-ban" style="color: #64748b; font-size: 1.5rem;"></i>
+                                </label>
+                                {% for logo in logos %}
+                                <label class="logo-item" data-logo-id="{{ logo.pk }}">
+                                    <input type="radio" name="logo_id" value="{{ logo.pk }}">
+                                    <img src="{{ logo.logo_file.url }}" alt="{{ logo.name }}">
+                                </label>
+                                {% endfor %}
+                            </div>
+                            
+                            <div class="form-group" id="logoPositionGroup" style="display: none;">
+                                <label class="form-label">Logo Position</label>
+                                <div class="position-grid">
+                                    {% for value, label in position_choices %}
+                                    {% if value != 'none' %}
+                                    <label class="position-option {% if value == 'bottom_right' %}active{% endif %}" data-position="{{ value }}">
+                                        {{ label }}
+                                    </label>
+                                    {% endif %}
+                                    {% endfor %}
+                                </div>
+                            </div>
+
+                            <div class="form-row" id="logoSettingsGroup" style="display: none;">
+                                <div class="form-group">
+                                    <label class="form-label">Logo Size</label>
+                                    <div class="range-group">
+                                        <input type="range" name="logo_size" class="range-slider" min="5" max="25" value="10">
+                                        <span class="range-value">10%</span>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Logo Opacity</label>
+                                    <div class="range-group">
+                                        <input type="range" name="logo_opacity" class="range-slider" min="10" max="100" value="100">
+                                        <span class="range-value">100%</span>
+                                    </div>
+                                </div>
+                            </div>
+                            {% else %}
+                            <p style="color: #64748b; text-align: center; padding: 1rem;">
+                                No logos uploaded yet. <a href="{% url 'ai_video:manage_logos' %}" style="color: #a855f7;">Upload a logo</a>
+                            </p>
+                            <input type="hidden" name="logo_id" value="">
+                            {% endif %}
+                            <input type="hidden" name="logo_position" value="none" id="logoPositionHidden">
+                        </div>
+
+                        <!-- Advanced Options -->
+                        <div class="advanced-toggle" onclick="toggleAdvanced()">
+                            <span><i class="fas fa-sliders-h"></i> Advanced Options</span>
+                            <i class="fas fa-chevron-down"></i>
+                        </div>
+                        <div class="advanced-options" id="advancedOptions">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label class="form-label">Camera Motion</label>
+                                    <select name="camera_motion" class="form-control">
+                                        <option value="">Default</option>
+                                        <option value="static">Static (No Movement)</option>
+                                        <option value="pan_left">Pan Left</option>
+                                        <option value="pan_right">Pan Right</option>
+                                        <option value="tilt_up">Tilt Up</option>
+                                        <option value="tilt_down">Tilt Down</option>
+                                        <option value="zoom_in">Zoom In</option>
+                                        <option value="zoom_out">Zoom Out</option>
+                                        <option value="orbit">Orbit/Circle</option>
+                                        <option value="dolly">Dolly/Track</option>
+                                        <option value="crane">Crane Shot</option>
+                                        <option value="handheld">Handheld/Shaky</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Motion Intensity</label>
+                                    <select name="motion_intensity" class="form-control">
+                                        <option value="">Default</option>
+                                        <option value="subtle">Subtle</option>
+                                        <option value="moderate">Moderate</option>
+                                        <option value="dynamic">Dynamic</option>
+                                        <option value="intense">Intense</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label class="form-label">Seed (Optional)</label>
+                                    <input type="number" name="seed" class="form-control" placeholder="Random seed for reproducibility">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Enhance Prompt</label>
+                                    <select name="enhance_prompt" class="form-control">
+                                        <option value="true" selected>Yes - AI enhances prompt</option>
+                                        <option value="false">No - Use exact prompt</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="generate-btn" id="generateBtn" {% if not has_api_key %}disabled{% endif %}>
+                            <i class="fas fa-video"></i>
+                            <span>Generate Video</span>
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Result Section -->
+            <div class="result-section" id="resultSection">
+                <div class="result-card">
+                    <div class="result-video-container">
+                        <video controls class="result-video" id="resultVideo">
+                            <source src="" type="video/mp4">
+                        </video>
+                    </div>
+                    <div class="result-actions">
+                        <button class="result-btn download" id="downloadBtn">
+                            <i class="fas fa-download"></i> Download
+                        </button>
+                        <button class="result-btn save" id="saveBtn">
+                            <i class="fas fa-bookmark"></i> Save
+                        </button>
+                        <button class="result-btn regenerate" id="regenerateBtn">
+                            <i class="fas fa-redo"></i> Regenerate
+                        </button>
+                        <button class="result-btn new" id="newBtn">
+                            <i class="fas fa-plus"></i> New
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="video-sidebar">
+            <div class="video-sidebar-inner">
+            <!-- Quick Links -->
+            <div class="sidebar-card">
+                <div class="card-header">
+                    <i class="fas fa-link"></i>
+                    <h2>Quick Links</h2>
+                </div>
+                <div class="card-body">
+                    <div class="quick-links">
+                        <a href="{% url 'ai_video:api_settings' %}" class="quick-link">
+                            <div class="quick-link-icon settings"><i class="fas fa-key"></i></div>
+                            <div class="quick-link-text">
+                                <span>API Settings</span>
+                                <small>{% if has_api_key %}Key connected{% else %}Set up key{% endif %}</small>
+                            </div>
+                        </a>
+                        <a href="{% url 'ai_video:manage_logos' %}" class="quick-link">
+                            <div class="quick-link-icon logos"><i class="fas fa-stamp"></i></div>
+                            <div class="quick-link-text">
+                                <span>My Logos</span>
+                                <small>{{ logos.count }} logo{% if logos.count != 1 %}s{% endif %} uploaded</small>
+                            </div>
+                        </a>
+                        <a href="{% url 'ai_video:history' %}" class="quick-link">
+                            <div class="quick-link-icon history"><i class="fas fa-history"></i></div>
+                            <div class="quick-link-text">
+                                <span>History</span>
+                                <small>View past generations</small>
+                            </div>
+                        </a>
+                        <a href="{% url 'ai_video:saved' %}" class="quick-link">
+                            <div class="quick-link-icon saved"><i class="fas fa-bookmark"></i></div>
+                            <div class="quick-link-text">
+                                <span>Saved Videos</span>
+                                <small>Your collection</small>
+                            </div>
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Videos -->
+            {% if recent_generations %}
+            <div class="sidebar-card">
+                <div class="card-header">
+                    <i class="fas fa-film"></i>
+                    <h2>Recent Videos</h2>
+                </div>
+                <div class="card-body">
+                    <div class="recent-videos-grid">
+                        {% for gen in recent_generations %}
+                        <a href="{% url 'ai_video:result' gen.pk %}" class="recent-video-item">
+                            {% if gen.thumbnail %}
+                            <img src="{{ gen.thumbnail.url }}" alt="{{ gen.title }}">
+                            {% else %}
+                            <div style="width:100%;height:100%;background:#1a1a1a;display:flex;align-items:center;justify-content:center;">
+                                <i class="fas fa-video" style="color:#64748b;font-size:1.5rem;"></i>
+                            </div>
+                            {% endif %}
+                            <span class="duration-badge">{{ gen.duration }}s</span>
+                        </a>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Usage Stats -->
+            <div class="sidebar-card">
+                <div class="card-header">
+                    <i class="fas fa-chart-bar"></i>
+                    <h2>Your Stats</h2>
+                </div>
+                <div class="card-body">
+                    <div class="usage-stats">
+                        <div class="stat-item">
+                            <div class="stat-value">{{ video_settings.total_videos_generated }}</div>
+                            <div class="stat-label">Videos Generated</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">{{ video_settings.total_duration_generated }}s</div>
+                            <div class="stat-label">Total Duration</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            </div>  <!-- End video-sidebar-inner -->
+        </div>  <!-- End video-sidebar -->
+    </div>
+</div>
+
+<!-- Processing Overlay -->
+<div class="processing-overlay" id="processingOverlay">
+    <div class="processing-content">
+        <div class="processing-spinner"></div>
+        <h3>Generating Video...</h3>
+        <p>This may take a few minutes. Please wait.</p>
+    </div>
+</div>
+
+<div class="toast" id="toast">Success!</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let currentGenerationId = null;
+
+    // Style selection
+    document.querySelectorAll('.style-option').forEach(option => {
+        option.addEventListener('click', function() {
+            document.querySelectorAll('.style-option').forEach(o => o.classList.remove('active'));
+            this.classList.add('active');
+        });
+    });
+
+    // Logo selection
+    document.querySelectorAll('.logo-item').forEach(item => {
+        item.addEventListener('click', function() {
+            document.querySelectorAll('.logo-item').forEach(i => i.classList.remove('active'));
+            this.classList.add('active');
+            
+            const logoId = this.dataset.logoId;
+            const positionGroup = document.getElementById('logoPositionGroup');
+            const settingsGroup = document.getElementById('logoSettingsGroup');
+            const positionHidden = document.getElementById('logoPositionHidden');
+            
+            if (logoId) {
+                positionGroup.style.display = 'block';
+                settingsGroup.style.display = 'grid';
+                positionHidden.value = 'bottom_right';
+            } else {
+                positionGroup.style.display = 'none';
+                settingsGroup.style.display = 'none';
+                positionHidden.value = 'none';
+            }
+        });
+    });
+
+    // Position selection
+    document.querySelectorAll('.position-option').forEach(option => {
+        option.addEventListener('click', function() {
+            document.querySelectorAll('.position-option').forEach(o => o.classList.remove('active'));
+            this.classList.add('active');
+            document.getElementById('logoPositionHidden').value = this.dataset.position;
+        });
+    });
+
+    // Range sliders
+    document.querySelectorAll('.range-slider').forEach(slider => {
+        const valueDisplay = slider.parentElement.querySelector('.range-value');
+        slider.addEventListener('input', function() {
+            valueDisplay.textContent = this.value + '%';
+        });
+    });
+
+    // Toggle advanced options
+    function toggleAdvanced() {
+        const toggle = document.querySelector('.advanced-toggle');
+        const options = document.getElementById('advancedOptions');
+        toggle.classList.toggle('open');
+        options.classList.toggle('show');
+    }
+
+    // Form submission
+    document.getElementById('generateForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const btn = document.getElementById('generateBtn');
+        const overlay = document.getElementById('processingOverlay');
+        const originalContent = btn.innerHTML;
+        
+        btn.innerHTML = '<div class="spinner"></div><span>Generating...</span>';
+        btn.disabled = true;
+        overlay.classList.add('show');
+        
+        try {
+            const formData = new FormData(this);
+            
+            const response = await fetch('{% url "ai_video:generate" %}', {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}'
+                }
+            });
+            
+            const data = await response.json();
+            
+            if (data.redirect) {
+                showToast('Please set up your API key first', 'error');
+                setTimeout(() => window.location.href = data.redirect, 1500);
+                return;
+            }
+            
+            if (data.success) {
+                currentGenerationId = data.generation_id;
+                const video = document.getElementById('resultVideo');
+                video.src = data.video_url;
+                video.load();
+                document.getElementById('resultSection').classList.add('show');
+                document.getElementById('resultSection').scrollIntoView({ behavior: 'smooth' });
+                showToast('Video generated successfully!');
+            } else {
+                showToast(data.error || 'Failed to generate video', 'error');
+            }
+        } catch (error) {
+            showToast('Error: ' + error.message, 'error');
+        } finally {
+            btn.innerHTML = originalContent;
+            btn.disabled = false;
+            overlay.classList.remove('show');
+        }
+    });
+
+    // Download button
+    document.getElementById('downloadBtn').addEventListener('click', function() {
+        if (currentGenerationId) {
+            window.location.href = `/ai-video/download/${currentGenerationId}/`;
+        }
+    });
+
+    // Save button
+    document.getElementById('saveBtn').addEventListener('click', async function() {
+        if (!currentGenerationId) return;
+        
+        try {
+            const response = await fetch('{% url "ai_video:save" %}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: `generation_id=${currentGenerationId}`
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                showToast('Video saved!');
+                this.innerHTML = '<i class="fas fa-check"></i> Saved';
+                this.disabled = true;
+            } else {
+                showToast(data.error || 'Failed to save', 'error');
+            }
+        } catch (error) {
+            showToast('Error saving video', 'error');
+        }
+    });
+
+    // Regenerate button
+    document.getElementById('regenerateBtn').addEventListener('click', function() {
+        document.getElementById('generateForm').dispatchEvent(new Event('submit'));
+    });
+
+    // New button
+    document.getElementById('newBtn').addEventListener('click', function() {
+        document.getElementById('generateForm').reset();
+        document.getElementById('resultSection').classList.remove('show');
+        document.querySelectorAll('.style-option').forEach((o, i) => {
+            o.classList.toggle('active', o.querySelector('input').value === 'cinematic');
+        });
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+
+    // Toast
+    function showToast(message, type = 'success') {
+        const toast = document.getElementById('toast');
+        toast.textContent = message;
+        toast.className = 'toast ' + type;
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,408 @@
+{% extends 'base.html' %}
+
+{% block title %}Saved Images - AI Image Generator{% endblock %}
+
+{% block extra_css %}
+<style>
+    .saved-container {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 2rem 2.5rem;
+    }
+
+    .saved-hero {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        padding: 2.5rem;
+        border-radius: 2rem;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        margin-bottom: 2rem;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .saved-hero::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, transparent, #f59e0b, #fbbf24, #f59e0b, transparent);
+    }
+
+    .hero-content {
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+    }
+
+    .hero-icon {
+        width: 70px;
+        height: 70px;
+        background: linear-gradient(135deg, #f59e0b, #fbbf24);
+        border-radius: 1.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2rem;
+        color: white;
+    }
+
+    .hero-text h1 {
+        font-size: 2rem;
+        font-weight: 800;
+        background: linear-gradient(135deg, #f59e0b, #fbbf24);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 0.25rem;
+    }
+
+    .hero-text p {
+        color: #94a3b8;
+    }
+
+    /* Filters */
+    .filters-bar {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        border-radius: 1rem;
+        padding: 1rem 1.5rem;
+        margin-bottom: 2rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .filter-tabs {
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    .filter-tab {
+        padding: 0.5rem 1rem;
+        border-radius: 0.5rem;
+        background: transparent;
+        color: #94a3b8;
+        text-decoration: none;
+        transition: all 0.3s;
+        font-weight: 500;
+    }
+
+    .filter-tab:hover, .filter-tab.active {
+        background: rgba(245, 158, 11, 0.1);
+        color: #fbbf24;
+    }
+
+    /* Images Grid */
+    .images-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+        gap: 1.5rem;
+    }
+
+    .image-card {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        border-radius: 1.25rem;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        overflow: hidden;
+        transition: all 0.3s;
+    }
+
+    .image-card:hover {
+        transform: translateY(-5px);
+        border-color: rgba(245, 158, 11, 0.3);
+        box-shadow: 0 20px 40px rgba(245, 158, 11, 0.1);
+    }
+
+    .image-preview {
+        position: relative;
+        aspect-ratio: 1;
+        overflow: hidden;
+        background: #0a0a0a;
+    }
+
+    .image-preview img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        transition: transform 0.3s;
+    }
+
+    .image-card:hover .image-preview img {
+        transform: scale(1.05);
+    }
+
+    .favorite-btn {
+        position: absolute;
+        top: 0.75rem;
+        right: 0.75rem;
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: rgba(0, 0, 0, 0.6);
+        backdrop-filter: blur(10px);
+        border: none;
+        color: #64748b;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.1rem;
+        transition: all 0.3s;
+    }
+
+    .favorite-btn:hover, .favorite-btn.active {
+        color: #fbbf24;
+        background: rgba(245, 158, 11, 0.2);
+    }
+
+    .image-info {
+        padding: 1rem;
+    }
+
+    .image-title {
+        font-weight: 700;
+        color: #e5e7eb;
+        margin-bottom: 0.5rem;
+        font-size: 0.95rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .image-meta {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .image-date {
+        font-size: 0.8rem;
+        color: #64748b;
+    }
+
+    .image-actions {
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    .image-btn {
+        width: 32px;
+        height: 32px;
+        border-radius: 0.5rem;
+        border: none;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.3s;
+        font-size: 0.85rem;
+    }
+
+    .image-btn.download {
+        background: rgba(16, 185, 129, 0.1);
+        color: #34d399;
+    }
+
+    .image-btn.delete {
+        background: rgba(239, 68, 68, 0.1);
+        color: #f87171;
+    }
+
+    .image-btn:hover {
+        transform: scale(1.1);
+    }
+
+    /* Empty State */
+    .empty-state {
+        text-align: center;
+        padding: 5rem 2rem;
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        border-radius: 2rem;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .empty-icon {
+        width: 100px;
+        height: 100px;
+        background: linear-gradient(135deg, #f59e0b, #fbbf24);
+        border-radius: 2rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 1.5rem;
+        font-size: 2.5rem;
+        color: white;
+    }
+
+    .empty-state h3 {
+        font-size: 1.5rem;
+        color: #e5e7eb;
+        margin-bottom: 0.5rem;
+    }
+
+    .empty-state p {
+        color: #64748b;
+        margin-bottom: 1.5rem;
+    }
+
+    .btn-primary {
+        padding: 0.875rem 1.5rem;
+        background: linear-gradient(135deg, #10b981, #34d399);
+        color: white;
+        border: none;
+        border-radius: 0.875rem;
+        font-weight: 600;
+        cursor: pointer;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    @media (max-width: 768px) {
+        .saved-container {
+            padding: 1.5rem;
+        }
+
+        .hero-content {
+            flex-direction: column;
+            text-align: center;
+        }
+
+        .filters-bar {
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .images-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="saved-container">
+    <div class="saved-hero">
+        <div class="hero-content">
+            <div class="hero-icon"><i class="fas fa-bookmark"></i></div>
+            <div class="hero-text">
+                <h1>Saved Images</h1>
+                <p>Your collection of saved AI-generated images</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="filters-bar">
+        <div class="filter-tabs">
+            <a href="?favorites=false" class="filter-tab {% if not favorites_only %}active{% endif %}">
+                <i class="fas fa-images"></i> All Saved
+            </a>
+            <a href="?favorites=true" class="filter-tab {% if favorites_only %}active{% endif %}">
+                <i class="fas fa-star"></i> Favorites
+            </a>
+        </div>
+        <span style="color: #64748b; font-size: 0.9rem;">
+            {{ saved_images.paginator.count }} image{% if saved_images.paginator.count != 1 %}s{% endif %}
+        </span>
+    </div>
+
+    {% if saved_images %}
+    <div class="images-grid">
+        {% for saved in saved_images %}
+        <div class="image-card" data-id="{{ saved.pk }}">
+            <div class="image-preview">
+                <img src="{{ saved.image_file.url }}" alt="{{ saved.title }}">
+                <button class="favorite-btn {% if saved.is_favorite %}active{% endif %}" onclick="toggleFavorite({{ saved.pk }}, this)">
+                    <i class="fas fa-star"></i>
+                </button>
+            </div>
+            <div class="image-info">
+                <div class="image-title">{{ saved.title }}</div>
+                <div class="image-meta">
+                    <span class="image-date">{{ saved.created_at|date:"M d, Y" }}</span>
+                    <div class="image-actions">
+                        {% if saved.image_generation %}
+                        <a href="{% url 'ai_image:download' saved.image_generation.pk %}" class="image-btn download">
+                            <i class="fas fa-download"></i>
+                        </a>
+                        {% endif %}
+                        <button class="image-btn delete" onclick="deleteSaved({{ saved.pk }})">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Pagination -->
+    {% if saved_images.has_other_pages %}
+    <div style="display: flex; justify-content: center; gap: 0.5rem; margin-top: 2rem;">
+        {% if saved_images.has_previous %}
+        <a href="?page={{ saved_images.previous_page_number }}{% if favorites_only %}&favorites=true{% endif %}" style="padding: 0.5rem 1rem; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 0.5rem; color: #94a3b8; text-decoration: none;">
+            <i class="fas fa-chevron-left"></i>
+        </a>
+        {% endif %}
+        <span style="padding: 0.5rem 1rem; color: #94a3b8;">
+            Page {{ saved_images.number }} of {{ saved_images.paginator.num_pages }}
+        </span>
+        {% if saved_images.has_next %}
+        <a href="?page={{ saved_images.next_page_number }}{% if favorites_only %}&favorites=true{% endif %}" style="padding: 0.5rem 1rem; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 0.5rem; color: #94a3b8; text-decoration: none;">
+            <i class="fas fa-chevron-right"></i>
+        </a>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-icon"><i class="fas fa-bookmark"></i></div>
+        <h3>No Saved Images</h3>
+        <p>Save images from the generator to see them here</p>
+        <a href="{% url 'ai_image:generator' %}" class="btn-primary">
+            <i class="fas fa-magic"></i> Generate Image
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    async function toggleFavorite(id, btn) {
+        try {
+            const response = await fetch(`/ai-image/saved/favorite/${id}/`, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+            });
+            const data = await response.json();
+            if (data.success) {
+                btn.classList.toggle('active', data.is_favorite);
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    async function deleteSaved(id) {
+        if (!confirm('Remove this image from saved?')) return;
+        
+        try {
+            const response = await fetch(`/ai-image/saved/delete/${id}/`, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+            });
+            if (response.ok) {
+                document.querySelector(`.image-card[data-id="${id}"]`).remove();
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    }
+</script>
+{% endblock %}

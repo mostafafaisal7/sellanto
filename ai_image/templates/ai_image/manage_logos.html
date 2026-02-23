@@ -1,0 +1,404 @@
+{% extends 'base.html' %}
+
+{% block title %}Manage Logos - AI Image Generator{% endblock %}
+
+{% block extra_css %}
+<style>
+    .logos-container {
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: 2rem 2.5rem;
+    }
+
+    .logos-hero {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        padding: 2.5rem;
+        border-radius: 2rem;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        margin-bottom: 2rem;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .logos-hero::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, transparent, #8b5cf6, #a855f7, #8b5cf6, transparent);
+    }
+
+    .hero-content {
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+    }
+
+    .hero-icon {
+        width: 70px;
+        height: 70px;
+        background: linear-gradient(135deg, #8b5cf6, #a855f7);
+        border-radius: 1.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2rem;
+        color: white;
+    }
+
+    .hero-text h1 {
+        font-size: 2rem;
+        font-weight: 800;
+        background: linear-gradient(135deg, #8b5cf6, #a855f7);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 0.25rem;
+    }
+
+    .hero-text p { color: #94a3b8; }
+
+    .logos-card {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        border-radius: 1.5rem;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        overflow: hidden;
+        margin-bottom: 2rem;
+    }
+
+    .card-header {
+        padding: 1.5rem 2rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .card-header i { color: #a855f7; font-size: 1.25rem; }
+    .card-header h2 { font-size: 1.1rem; font-weight: 700; color: #fff; }
+    .card-body { padding: 2rem; }
+
+    .upload-zone {
+        border: 2px dashed rgba(139, 92, 246, 0.3);
+        border-radius: 1rem;
+        padding: 2.5rem;
+        text-align: center;
+        transition: all 0.3s;
+        cursor: pointer;
+        background: rgba(139, 92, 246, 0.03);
+    }
+
+    .upload-zone:hover, .upload-zone.dragover {
+        border-color: #a855f7;
+        background: rgba(139, 92, 246, 0.08);
+    }
+
+    .upload-zone.has-file {
+        border-color: #10b981;
+        background: rgba(16, 185, 129, 0.08);
+    }
+
+    .upload-icon {
+        width: 70px;
+        height: 70px;
+        background: linear-gradient(135deg, #8b5cf6, #a855f7);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 1rem;
+        font-size: 1.75rem;
+        color: white;
+        transition: all 0.3s;
+    }
+
+    .upload-zone.has-file .upload-icon {
+        background: linear-gradient(135deg, #10b981, #34d399);
+    }
+
+    .upload-text h3 { color: #e5e7eb; font-size: 1.1rem; margin-bottom: 0.5rem; }
+    .upload-text p { color: #64748b; font-size: 0.9rem; }
+    .upload-input { display: none; }
+
+    .upload-details { margin-top: 1.5rem; display: none; }
+    .upload-details.show { display: block; }
+
+    .form-group { margin-bottom: 1rem; }
+    .form-label { display: block; margin-bottom: 0.5rem; font-weight: 600; color: #e5e7eb; }
+
+    .form-control {
+        width: 100%;
+        padding: 0.875rem 1rem;
+        background: rgba(255, 255, 255, 0.05);
+        border: 2px solid rgba(255, 255, 255, 0.1);
+        border-radius: 0.75rem;
+        color: #e5e7eb;
+        font-size: 1rem;
+    }
+
+    .form-control:focus { outline: none; border-color: #a855f7; }
+
+    .checkbox-group {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        cursor: pointer;
+    }
+
+    .checkbox-group input { width: 18px; height: 18px; accent-color: #a855f7; }
+    .checkbox-group span { color: #e5e7eb; }
+
+    .btn-upload {
+        padding: 0.875rem 1.5rem;
+        background: linear-gradient(135deg, #8b5cf6, #a855f7);
+        color: white;
+        border: none;
+        border-radius: 0.75rem;
+        font-weight: 600;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: all 0.3s;
+    }
+
+    .btn-upload:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 20px rgba(139, 92, 246, 0.3);
+    }
+
+    .logos-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 1.5rem;
+        margin-top: 1rem;
+    }
+
+    .logo-card {
+        background: rgba(255, 255, 255, 0.03);
+        border: 2px solid rgba(255, 255, 255, 0.1);
+        border-radius: 1rem;
+        overflow: hidden;
+        transition: all 0.3s;
+    }
+
+    .logo-card:hover { border-color: rgba(139, 92, 246, 0.3); transform: translateY(-3px); }
+    .logo-card.default { border-color: rgba(139, 92, 246, 0.5); background: rgba(139, 92, 246, 0.05); }
+
+    .logo-preview {
+        aspect-ratio: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1.5rem;
+        background: rgba(0, 0, 0, 0.2);
+    }
+
+    .logo-preview img { max-width: 100%; max-height: 100%; object-fit: contain; }
+
+    .logo-info { padding: 1rem; border-top: 1px solid rgba(255, 255, 255, 0.06); }
+
+    .logo-name {
+        font-weight: 600;
+        color: #e5e7eb;
+        font-size: 0.9rem;
+        margin-bottom: 0.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .logo-name .badge {
+        background: linear-gradient(135deg, #8b5cf6, #a855f7);
+        color: white;
+        padding: 0.15rem 0.5rem;
+        border-radius: 0.25rem;
+        font-size: 0.7rem;
+    }
+
+    .logo-actions { display: flex; gap: 0.5rem; }
+
+    .logo-btn {
+        flex: 1;
+        padding: 0.5rem;
+        border-radius: 0.5rem;
+        font-size: 0.8rem;
+        font-weight: 600;
+        cursor: pointer;
+        border: none;
+        transition: all 0.3s;
+    }
+
+    .logo-btn.set-default { background: rgba(139, 92, 246, 0.1); color: #a855f7; }
+    .logo-btn.set-default:hover { background: rgba(139, 92, 246, 0.2); }
+    .logo-btn.delete { background: rgba(239, 68, 68, 0.1); color: #f87171; flex: 0; padding: 0.5rem 0.75rem; }
+    .logo-btn.delete:hover { background: rgba(239, 68, 68, 0.2); }
+
+    .empty-state { text-align: center; padding: 3rem; color: #64748b; }
+    .empty-state i { font-size: 4rem; color: #4b5563; margin-bottom: 1rem; }
+    .empty-state h3 { color: #e5e7eb; margin-bottom: 0.5rem; }
+
+    .btn-secondary {
+        padding: 0.875rem 1.5rem;
+        background: rgba(255, 255, 255, 0.05);
+        color: #94a3b8;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 0.875rem;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: all 0.3s;
+    }
+
+    .btn-secondary:hover { background: rgba(255, 255, 255, 0.1); color: #e5e7eb; }
+
+    .message {
+        border-radius: 1rem;
+        padding: 1rem 1.5rem;
+        margin-bottom: 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .message.success { background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.2); color: #34d399; }
+    .message.error { background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); color: #f87171; }
+
+    @media (max-width: 768px) {
+        .logos-container { padding: 1.5rem; }
+        .hero-content { flex-direction: column; text-align: center; }
+        .logos-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="logos-container">
+    <div class="logos-hero">
+        <div class="hero-content">
+            <div class="hero-icon"><i class="fas fa-stamp"></i></div>
+            <div class="hero-text">
+                <h1>Manage Logos</h1>
+                <p>Upload and manage logos to add to your generated images</p>
+            </div>
+        </div>
+    </div>
+
+    {% if messages %}{% for message in messages %}
+    <div class="message {% if message.tags %}{{ message.tags }}{% else %}success{% endif %}">
+        <i class="fas {% if message.tags == 'error' %}fa-exclamation-circle{% else %}fa-check-circle{% endif %}"></i>
+        {{ message }}
+    </div>
+    {% endfor %}{% endif %}
+
+    <div class="logos-card">
+        <div class="card-header"><i class="fas fa-upload"></i><h2>Upload New Logo</h2></div>
+        <div class="card-body">
+            <form method="POST" enctype="multipart/form-data" id="uploadForm">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="upload">
+                <!-- File input OUTSIDE upload-zone so it won't be deleted -->
+                <input type="file" name="logo_file" id="logoFile" class="upload-input" accept="image/png,image/jpeg,image/gif,image/webp">
+                
+                <div class="upload-zone" id="uploadZone">
+                    <div class="upload-icon" id="uploadIcon"><i class="fas fa-cloud-upload-alt" id="uploadIconInner"></i></div>
+                    <div class="upload-text">
+                        <h3 id="uploadTitle">Click to upload or drag and drop</h3>
+                        <p id="uploadSubtitle">PNG, JPG, GIF or WebP (max 5MB)</p>
+                    </div>
+                </div>
+
+                <div class="upload-details" id="uploadDetails">
+                    <div class="form-group">
+                        <label class="form-label">Logo Name</label>
+                        <input type="text" name="name" class="form-control" placeholder="e.g., My Brand Logo" value="My Logo">
+                    </div>
+                    <div class="form-group">
+                        <label class="checkbox-group">
+                            <input type="checkbox" name="is_default" value="true">
+                            <span>Set as default logo</span>
+                        </label>
+                    </div>
+                    <button type="submit" class="btn-upload"><i class="fas fa-upload"></i> Upload Logo</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="logos-card">
+        <div class="card-header"><i class="fas fa-images"></i><h2>Your Logos ({{ logos.count }})</h2></div>
+        <div class="card-body">
+            {% if logos %}
+            <div class="logos-grid">
+                {% for logo in logos %}
+                <div class="logo-card {% if logo.is_default %}default{% endif %}">
+                    <div class="logo-preview"><img src="{{ logo.logo_file.url }}" alt="{{ logo.name }}"></div>
+                    <div class="logo-info">
+                        <div class="logo-name">{{ logo.name }}{% if logo.is_default %}<span class="badge">Default</span>{% endif %}</div>
+                        <div class="logo-actions">
+                            {% if not logo.is_default %}
+                            <form method="POST" style="flex: 1;">{% csrf_token %}<input type="hidden" name="action" value="set_default"><input type="hidden" name="logo_id" value="{{ logo.pk }}"><button type="submit" class="logo-btn set-default" style="width: 100%;"><i class="fas fa-star"></i> Set Default</button></form>
+                            {% else %}<button class="logo-btn set-default" disabled style="flex: 1; opacity: 0.5;"><i class="fas fa-check"></i> Default</button>{% endif %}
+                            <form method="POST" onsubmit="return confirm('Delete this logo?')">{% csrf_token %}<input type="hidden" name="action" value="delete"><input type="hidden" name="logo_id" value="{{ logo.pk }}"><button type="submit" class="logo-btn delete"><i class="fas fa-trash"></i></button></form>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty-state"><i class="fas fa-image"></i><h3>No Logos Yet</h3><p>Upload your first logo to add it to generated images</p></div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div style="text-align: center;"><a href="{% url 'ai_image:generator' %}" class="btn-secondary"><i class="fas fa-arrow-left"></i> Back to Generator</a></div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const fileInput = document.getElementById('logoFile');
+    const uploadZone = document.getElementById('uploadZone');
+    const uploadDetails = document.getElementById('uploadDetails');
+    const uploadIcon = document.getElementById('uploadIcon');
+    const uploadIconInner = document.getElementById('uploadIconInner');
+    const uploadTitle = document.getElementById('uploadTitle');
+    const uploadSubtitle = document.getElementById('uploadSubtitle');
+
+    uploadZone.addEventListener('click', function() { fileInput.click(); });
+
+    fileInput.addEventListener('change', function() {
+        if (this.files && this.files.length > 0) {
+            const file = this.files[0];
+            uploadZone.classList.add('has-file');
+            uploadIconInner.className = 'fas fa-check';
+            uploadTitle.textContent = file.name;
+            uploadSubtitle.textContent = 'Click to change file';
+            uploadDetails.classList.add('show');
+        }
+    });
+
+    uploadZone.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        this.classList.add('dragover');
+    });
+
+    uploadZone.addEventListener('dragleave', function(e) {
+        e.preventDefault();
+        this.classList.remove('dragover');
+    });
+
+    uploadZone.addEventListener('drop', function(e) {
+        e.preventDefault();
+        this.classList.remove('dragover');
+        if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+            fileInput.files = e.dataTransfer.files;
+            fileInput.dispatchEvent(new Event('change'));
+        }
+    });
+</script>
+{% endblock %}

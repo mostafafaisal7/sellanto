@@ -1,0 +1,520 @@
+<!-- C:\Users\Trust computer\Desktop\Final_version_socialSync\templates\accounts\register.html -->
+
+{% extends 'base.html' %}
+
+{% block title %}Register - SocialSync{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+    }
+
+    body {
+        background: #0d0d0d;
+        color: #e5e7eb;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        line-height: 1.6;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
+    }
+    
+    .auth-container {
+        max-width: 750px;
+        width: 100%;
+    }
+    
+    .auth-card {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        border-radius: 2rem;
+        padding: 3rem 3.5rem;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        position: relative;
+        overflow: hidden;
+    }
+
+    .auth-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 200%;
+        height: 100%;
+        background: linear-gradient(90deg, 
+            transparent, 
+            rgba(239, 68, 68, 0.03), 
+            transparent
+        );
+        animation: shimmer 8s infinite;
+    }
+
+    @keyframes shimmer {
+        0% { left: -100%; }
+        100% { left: 100%; }
+    }
+
+    .auth-card::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, 
+            transparent,
+            #ff6b6b,
+            #ee5a6f,
+            #f06595,
+            transparent
+        );
+        background-size: 200% 100%;
+        animation: gradient-shift 3s linear infinite;
+    }
+
+    @keyframes gradient-shift {
+        0% { background-position: 0% 0%; }
+        100% { background-position: 200% 0%; }
+    }
+    
+    .auth-header {
+        text-align: center;
+        margin-bottom: 2rem;
+        position: relative;
+        z-index: 1;
+    }
+
+    .auth-logo {
+        width: 70px;
+        height: 70px;
+        background: linear-gradient(135deg, #ff6b6b, #f06595);
+        border-radius: 1.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 1.5rem;
+        box-shadow: 0 10px 30px rgba(239, 68, 68, 0.4);
+        animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.05); }
+    }
+
+    .auth-logo i {
+        font-size: 2rem;
+        color: white;
+    }
+    
+    .auth-header h1 {
+        font-size: 2.25rem;
+        font-weight: 800;
+        background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 50%, #f06595 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 0.75rem;
+        letter-spacing: -0.03em;
+    }
+    
+    .auth-header p {
+        color: #94a3b8;
+        font-size: 1.05rem;
+        font-weight: 500;
+    }
+    
+    .benefits {
+        background: rgba(239, 68, 68, 0.05);
+        padding: 1.5rem;
+        border-radius: 1rem;
+        margin-bottom: 2rem;
+        border: 1px solid rgba(239, 68, 68, 0.1);
+        position: relative;
+        z-index: 1;
+    }
+
+    .benefits-title {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+        font-weight: 700;
+        color: #fff;
+        font-size: 1rem;
+    }
+
+    .benefits-title i {
+        color: #ff6b6b;
+        font-size: 1.1rem;
+    }
+
+    .benefits-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.75rem;
+    }
+    
+    .benefit-item {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        color: #94a3b8;
+        font-size: 0.9rem;
+        font-weight: 500;
+    }
+
+    .benefit-item i {
+        color: #10b981;
+        font-size: 1rem;
+    }
+
+    form {
+        position: relative;
+        z-index: 1;
+    }
+
+    .form-row {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+    
+    .form-group {
+        margin-bottom: 1.5rem;
+    }
+
+    .form-row .form-group {
+        margin-bottom: 0;
+    }
+    
+    .form-label {
+        display: block;
+        margin-bottom: 0.75rem;
+        font-weight: 700;
+        color: #e5e7eb;
+        font-size: 0.9rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .form-label i {
+        color: #f59e0b;
+        font-size: 0.85rem;
+    }
+    
+    .form-label .required {
+        color: #ef4444;
+        font-size: 0.9rem;
+    }
+    
+    .form-control {
+        width: 100%;
+        padding: 1rem 1.25rem;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 0.75rem;
+        font-size: 1rem;
+        color: #e5e7eb;
+        font-family: 'Inter', sans-serif;
+        transition: all 0.3s;
+    }
+
+    .form-control::placeholder {
+        color: #64748b;
+    }
+    
+    .form-control:focus {
+        outline: none;
+        background: rgba(255, 255, 255, 0.08);
+        border-color: rgba(239, 68, 68, 0.5);
+        box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+    }
+    
+    .form-help {
+        font-size: 0.85rem;
+        color: #64748b;
+        margin-top: 0.5rem;
+        font-style: italic;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .form-help i {
+        font-size: 0.75rem;
+    }
+    
+    .btn-register {
+        width: 100%;
+        padding: 1.125rem 1.5rem;
+        background: linear-gradient(135deg, #ef4444, #f59e0b);
+        color: white;
+        border: none;
+        border-radius: 0.875rem;
+        font-size: 1.05rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.75rem;
+        box-shadow: 0 10px 30px rgba(239, 68, 68, 0.3);
+        margin-top: 2rem;
+    }
+    
+    .btn-register:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 15px 40px rgba(239, 68, 68, 0.5);
+    }
+
+    .btn-register:active {
+        transform: translateY(-1px);
+    }
+
+    .btn-register i {
+        font-size: 1.1rem;
+    }
+    
+    .auth-footer {
+        text-align: center;
+        margin-top: 2rem;
+        padding-top: 2rem;
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+        position: relative;
+        z-index: 1;
+    }
+    
+    .auth-footer p {
+        color: #94a3b8;
+        font-size: 0.95rem;
+    }
+
+    .auth-footer a {
+        color: #ff6b6b;
+        text-decoration: none;
+        font-weight: 700;
+        transition: all 0.3s;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .auth-footer a:hover {
+        color: #f06595;
+        transform: translateX(3px);
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+        width: 12px;
+    }
+
+    ::-webkit-scrollbar-track {
+        background: #0d0d0d;
+    }
+
+    ::-webkit-scrollbar-thumb {
+        background: linear-gradient(135deg, #ef4444, #f59e0b);
+        border-radius: 10px;
+        border: 2px solid #0d0d0d;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+        background: linear-gradient(135deg, #dc2626, #d97706);
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+        body {
+            padding: 1rem;
+        }
+
+        .auth-card {
+            padding: 2rem 1.5rem;
+        }
+
+        .auth-header h1 {
+            font-size: 1.75rem;
+        }
+
+        .benefits-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .form-row {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+    <div class="auth-card">
+        <div class="auth-header">
+            <div class="auth-logo">
+                <i class="fas fa-user-plus"></i>
+            </div>
+            <h1>Create Account</h1>
+            <p>Join thousands of social media managers</p>
+        </div>
+        
+        <div class="benefits">
+            <div class="benefits-title">
+                <i class="fas fa-star"></i>
+                <span>What You'll Get</span>
+            </div>
+            <div class="benefits-grid">
+                <div class="benefit-item">
+                    <i class="fas fa-check-circle"></i>
+                    <span>Connect 8+ social platforms</span>
+                </div>
+                <div class="benefit-item">
+                    <i class="fas fa-check-circle"></i>
+                    <span>AI-powered captions</span>
+                </div>
+                <div class="benefit-item">
+                    <i class="fas fa-check-circle"></i>
+                    <span>Unlimited scheduling</span>
+                </div>
+                <div class="benefit-item">
+                    <i class="fas fa-check-circle"></i>
+                    <span>Advanced analytics</span>
+                </div>
+            </div>
+        </div>
+        
+        <form method="POST">
+            {% csrf_token %}
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label" for="username">
+                        <i class="fas fa-user"></i>
+                        Username <span class="required">*</span>
+                    </label>
+                    <input 
+                        type="text" 
+                        id="username" 
+                        name="username" 
+                        class="form-control" 
+                        placeholder="Choose a username"
+                        value="{{ username }}"
+                        required
+                        autofocus
+                        pattern="[a-zA-Z0-9_]+"
+                    >
+                    <div class="form-help">
+                        <i class="fas fa-info-circle"></i>
+                        Letters, numbers, underscores
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label" for="email">
+                        <i class="fas fa-envelope"></i>
+                        Email <span class="required">*</span>
+                    </label>
+                    <input 
+                        type="email" 
+                        id="email" 
+                        name="email" 
+                        class="form-control" 
+                        placeholder="your@email.com"
+                        value="{{ email }}"
+                        required
+                    >
+                </div>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label" for="phone">
+                        <i class="fas fa-phone"></i>
+                        Phone (Optional)
+                    </label>
+                    <input 
+                        type="tel" 
+                        id="phone" 
+                        name="phone" 
+                        class="form-control" 
+                        placeholder="+880 123 456 7890"
+                        value="{{ phone }}"
+                    >
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label" for="company">
+                        <i class="fas fa-building"></i>
+                        Company (Optional)
+                    </label>
+                    <input 
+                        type="text" 
+                        id="company" 
+                        name="company" 
+                        class="form-control" 
+                        placeholder="Your company name"
+                        value="{{ company }}"
+                    >
+                </div>
+            </div>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label" for="password">
+                        <i class="fas fa-lock"></i>
+                        Password <span class="required">*</span>
+                    </label>
+                    <input 
+                        type="password" 
+                        id="password" 
+                        name="password" 
+                        class="form-control" 
+                        placeholder="Minimum 6 characters"
+                        required
+                        minlength="6"
+                    >
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label" for="password_confirm">
+                        <i class="fas fa-lock"></i>
+                        Confirm Password <span class="required">*</span>
+                    </label>
+                    <input 
+                        type="password" 
+                        id="password_confirm" 
+                        name="password_confirm" 
+                        class="form-control" 
+                        placeholder="Re-enter password"
+                        required
+                        minlength="6"
+                    >
+                </div>
+            </div>
+            
+            <button type="submit" class="btn-register">
+                <i class="fas fa-rocket"></i>
+                <span>Create Account</span>
+            </button>
+        </form>
+        
+        <div class="auth-footer">
+            <p>Already have an account? <a href="{% url 'login' %}">Login Here <i class="fas fa-arrow-right"></i></a></p>
+        </div>
+    </div>
+</div>
+{% endblock %}

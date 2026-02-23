@@ -1,0 +1,478 @@
+{% extends 'base.html' %}
+
+{% block title %}Saved Videos - AI Video Generator{% endblock %}
+
+{% block extra_css %}
+<style>
+    .saved-container {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 2rem 2.5rem;
+    }
+
+    .saved-hero {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        padding: 2.5rem;
+        border-radius: 2rem;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        margin-bottom: 2rem;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .saved-hero::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, transparent, #10b981, #34d399, #10b981, transparent);
+    }
+
+    .hero-content {
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+    }
+
+    .hero-icon {
+        width: 70px;
+        height: 70px;
+        background: linear-gradient(135deg, #10b981, #34d399);
+        border-radius: 1.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2rem;
+        color: white;
+    }
+
+    .hero-text h1 {
+        font-size: 2rem;
+        font-weight: 800;
+        background: linear-gradient(135deg, #10b981, #34d399);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 0.25rem;
+    }
+
+    .hero-text p {
+        color: #94a3b8;
+    }
+
+    /* Filters */
+    .filters-bar {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        border-radius: 1rem;
+        padding: 1rem 1.5rem;
+        margin-bottom: 2rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .filter-tabs {
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    .filter-tab {
+        padding: 0.5rem 1rem;
+        border-radius: 0.5rem;
+        background: transparent;
+        color: #94a3b8;
+        text-decoration: none;
+        transition: all 0.3s;
+        font-weight: 500;
+    }
+
+    .filter-tab:hover, .filter-tab.active {
+        background: rgba(16, 185, 129, 0.1);
+        color: #34d399;
+    }
+
+    /* Videos Grid */
+    .videos-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 1.5rem;
+    }
+
+    .video-card {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        border-radius: 1.25rem;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        overflow: hidden;
+        transition: all 0.3s;
+    }
+
+    .video-card:hover {
+        transform: translateY(-5px);
+        border-color: rgba(16, 185, 129, 0.3);
+        box-shadow: 0 20px 40px rgba(16, 185, 129, 0.1);
+    }
+
+    .video-preview {
+        position: relative;
+        aspect-ratio: 16/9;
+        overflow: hidden;
+        background: #0a0a0a;
+    }
+
+    .video-preview img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        transition: transform 0.3s;
+    }
+
+    .video-card:hover .video-preview img {
+        transform: scale(1.05);
+    }
+
+    .favorite-btn {
+        position: absolute;
+        top: 0.75rem;
+        right: 0.75rem;
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: rgba(0, 0, 0, 0.6);
+        backdrop-filter: blur(10px);
+        border: none;
+        color: #64748b;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.1rem;
+        transition: all 0.3s;
+    }
+
+    .favorite-btn:hover, .favorite-btn.active {
+        color: #fbbf24;
+        background: rgba(245, 158, 11, 0.2);
+    }
+
+    .duration-badge {
+        position: absolute;
+        bottom: 0.75rem;
+        right: 0.75rem;
+        background: rgba(0, 0, 0, 0.8);
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.375rem;
+        font-size: 0.8rem;
+        color: white;
+        font-weight: 600;
+    }
+
+    .play-icon {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 55px;
+        height: 55px;
+        background: rgba(16, 185, 129, 0.9);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.25rem;
+        color: white;
+        opacity: 0;
+        transition: all 0.3s;
+    }
+
+    .video-card:hover .play-icon {
+        opacity: 1;
+    }
+
+    .video-info {
+        padding: 1.25rem;
+    }
+
+    .video-title {
+        font-weight: 700;
+        color: #e5e7eb;
+        margin-bottom: 0.75rem;
+        font-size: 1rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .video-meta {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .video-date {
+        font-size: 0.85rem;
+        color: #64748b;
+    }
+
+    .video-actions {
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    .video-btn {
+        width: 34px;
+        height: 34px;
+        border-radius: 0.5rem;
+        border: none;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.3s;
+        font-size: 0.9rem;
+        text-decoration: none;
+    }
+
+    .video-btn.download {
+        background: rgba(16, 185, 129, 0.1);
+        color: #34d399;
+    }
+
+    .video-btn.delete {
+        background: rgba(239, 68, 68, 0.1);
+        color: #f87171;
+    }
+
+    .video-btn:hover {
+        transform: scale(1.1);
+    }
+
+    /* Empty State */
+    .empty-state {
+        text-align: center;
+        padding: 5rem 2rem;
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        border-radius: 2rem;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .empty-icon {
+        width: 100px;
+        height: 100px;
+        background: linear-gradient(135deg, #10b981, #34d399);
+        border-radius: 2rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 1.5rem;
+        font-size: 2.5rem;
+        color: white;
+    }
+
+    .empty-state h3 {
+        font-size: 1.5rem;
+        color: #e5e7eb;
+        margin-bottom: 0.5rem;
+    }
+
+    .empty-state p {
+        color: #64748b;
+        margin-bottom: 1.5rem;
+    }
+
+    .btn-primary {
+        padding: 0.875rem 1.5rem;
+        background: linear-gradient(135deg, #8b5cf6, #a855f7);
+        color: white;
+        border: none;
+        border-radius: 0.875rem;
+        font-weight: 600;
+        cursor: pointer;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    /* Pagination */
+    .pagination {
+        display: flex;
+        justify-content: center;
+        gap: 0.5rem;
+        margin-top: 2rem;
+    }
+
+    .pagination a, .pagination span {
+        padding: 0.625rem 1rem;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 0.625rem;
+        color: #94a3b8;
+        text-decoration: none;
+        transition: all 0.3s;
+    }
+
+    .pagination a:hover {
+        background: rgba(16, 185, 129, 0.1);
+        border-color: rgba(16, 185, 129, 0.3);
+        color: #34d399;
+    }
+
+    @media (max-width: 768px) {
+        .saved-container {
+            padding: 1.5rem;
+        }
+
+        .hero-content {
+            flex-direction: column;
+            text-align: center;
+        }
+
+        .filters-bar {
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .videos-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="saved-container">
+    <div class="saved-hero">
+        <div class="hero-content">
+            <div class="hero-icon"><i class="fas fa-bookmark"></i></div>
+            <div class="hero-text">
+                <h1>Saved Videos</h1>
+                <p>Your collection of saved AI-generated videos</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="filters-bar">
+        <div class="filter-tabs">
+            <a href="?favorites=false" class="filter-tab {% if not favorites_only %}active{% endif %}">
+                <i class="fas fa-film"></i> All Saved
+            </a>
+            <a href="?favorites=true" class="filter-tab {% if favorites_only %}active{% endif %}">
+                <i class="fas fa-star"></i> Favorites
+            </a>
+        </div>
+        <span style="color: #64748b; font-size: 0.9rem;">
+            {{ saved_videos.paginator.count }} video{% if saved_videos.paginator.count != 1 %}s{% endif %}
+        </span>
+    </div>
+
+    {% if saved_videos %}
+    <div class="videos-grid">
+        {% for saved in saved_videos %}
+        <div class="video-card" data-id="{{ saved.pk }}">
+            <div class="video-preview">
+                {% if saved.thumbnail %}
+                <img src="{{ saved.thumbnail.url }}" alt="{{ saved.title }}">
+                {% else %}
+                <div style="width:100%;height:100%;background:linear-gradient(135deg, #1a1a1a, #111);display:flex;align-items:center;justify-content:center;">
+                    <i class="fas fa-video" style="color:#10b981;font-size:2.5rem;"></i>
+                </div>
+                {% endif %}
+                
+                <button class="favorite-btn {% if saved.is_favorite %}active{% endif %}" onclick="toggleFavorite({{ saved.pk }}, this)">
+                    <i class="fas fa-star"></i>
+                </button>
+                
+                <span class="duration-badge">{{ saved.duration }}s</span>
+                
+                <div class="play-icon"><i class="fas fa-play" style="margin-left: 3px;"></i></div>
+            </div>
+            <div class="video-info">
+                <div class="video-title">{{ saved.title }}</div>
+                <div class="video-meta">
+                    <span class="video-date">{{ saved.created_at|date:"M d, Y" }}</span>
+                    <div class="video-actions">
+                        {% if saved.video_generation %}
+                        <a href="{% url 'ai_video:download' saved.video_generation.pk %}" class="video-btn download">
+                            <i class="fas fa-download"></i>
+                        </a>
+                        {% endif %}
+                        <button class="video-btn delete" onclick="deleteSaved({{ saved.pk }})">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Pagination -->
+    {% if saved_videos.has_other_pages %}
+    <div class="pagination">
+        {% if saved_videos.has_previous %}
+        <a href="?page={{ saved_videos.previous_page_number }}{% if favorites_only %}&favorites=true{% endif %}">
+            <i class="fas fa-chevron-left"></i>
+        </a>
+        {% endif %}
+        <span style="padding: 0.5rem 1rem; color: #94a3b8;">
+            Page {{ saved_videos.number }} of {{ saved_videos.paginator.num_pages }}
+        </span>
+        {% if saved_videos.has_next %}
+        <a href="?page={{ saved_videos.next_page_number }}{% if favorites_only %}&favorites=true{% endif %}">
+            <i class="fas fa-chevron-right"></i>
+        </a>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-icon"><i class="fas fa-bookmark"></i></div>
+        <h3>No Saved Videos</h3>
+        <p>Save videos from the generator to see them here</p>
+        <a href="{% url 'ai_video:generator' %}" class="btn-primary">
+            <i class="fas fa-magic"></i> Generate Video
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    async function toggleFavorite(id, btn) {
+        try {
+            const response = await fetch(`/ai-video/saved/favorite/${id}/`, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+            });
+            const data = await response.json();
+            if (data.success) {
+                btn.classList.toggle('active', data.is_favorite);
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    async function deleteSaved(id) {
+        if (!confirm('Remove this video from saved?')) return;
+        
+        try {
+            const response = await fetch(`/ai-video/saved/delete/${id}/`, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+            });
+            if (response.ok) {
+                document.querySelector(`.video-card[data-id="${id}"]`).remove();
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    }
+</script>
+{% endblock %}

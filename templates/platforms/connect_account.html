@@ -1,0 +1,2067 @@
+<!-- C:\Users\Trust computer\Desktop\Final_version_socialSync\templates\platforms\connect_account.html -->
+
+{% extends 'base.html' %}
+
+{% block title %}Connect Accounts - SocialSync{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+    }
+
+    body {
+        background: #0d0d0d;
+        color: #e5e7eb;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        line-height: 1.6;
+    }
+
+    .connect-container {
+        max-width: 1600px;
+        margin: 0 auto;
+        padding: 3rem 2.5rem;
+    }
+
+    .page-header {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        padding: 3rem 2.5rem;
+        border-radius: 2rem;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        margin-bottom: 3rem;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .page-header::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 200%;
+        height: 100%;
+        background: linear-gradient(90deg,
+                transparent,
+                rgba(239, 68, 68, 0.03),
+                transparent);
+        animation: shimmer 8s infinite;
+    }
+
+    @keyframes shimmer {
+        0% {
+            left: -100%;
+        }
+
+        100% {
+            left: 100%;
+        }
+    }
+
+    .page-header::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg,
+                transparent,
+                #ff6b6b,
+                #ee5a6f,
+                #f06595,
+                transparent);
+        background-size: 200% 100%;
+        animation: gradient-shift 3s linear infinite;
+    }
+
+    @keyframes gradient-shift {
+        0% {
+            background-position: 0% 0%;
+        }
+
+        100% {
+            background-position: 200% 0%;
+        }
+    }
+
+    .page-header-content {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+    }
+
+    .header-icon {
+        width: 70px;
+        height: 70px;
+        background: linear-gradient(135deg, #ff6b6b, #f06595);
+        border-radius: 1.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2rem;
+        color: white;
+        box-shadow: 0 10px 30px rgba(239, 68, 68, 0.4);
+    }
+
+    .page-header h1 {
+        font-size: 2.5rem;
+        font-weight: 800;
+        background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 50%, #f06595 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 0.5rem;
+        letter-spacing: -0.03em;
+    }
+
+    .page-header p {
+        color: #94a3b8;
+        font-size: 1.05rem;
+        font-weight: 500;
+    }
+
+    .limit-warning {
+        color: #ef4444;
+        font-weight: 700;
+    }
+
+    .section-header {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        padding: 2rem 2.5rem;
+        border-radius: 1.5rem;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        margin-bottom: 2rem;
+        margin-top: 4rem;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .section-header::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 3px;
+        background: linear-gradient(90deg,
+                transparent,
+                #f59e0b,
+                #ef4444,
+                #f59e0b,
+                transparent);
+        background-size: 200% 100%;
+        animation: gradient-shift 3s linear infinite;
+    }
+
+    .section-header-content {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .section-icon {
+        font-size: 2rem;
+        color: #f59e0b;
+    }
+
+    .section-header h2 {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: #fff;
+        margin-bottom: 0.5rem;
+    }
+
+    .section-header p {
+        color: #94a3b8;
+        margin: 0;
+        font-size: 0.95rem;
+    }
+
+    .platforms-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+        gap: 2rem;
+        margin-bottom: 3rem;
+    }
+
+    .platform-card {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        border-radius: 1.5rem;
+        padding: 2rem;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        cursor: pointer;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        position: relative;
+        overflow: hidden;
+    }
+
+    .platform-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: radial-gradient(circle at 20% 20%, rgba(239, 68, 68, 0.1), transparent 70%);
+        opacity: 0;
+        transition: opacity 0.5s;
+    }
+
+    .platform-card:hover:not(.disabled) {
+        transform: translateY(-8px);
+        box-shadow: 0 20px 50px rgba(239, 68, 68, 0.3);
+        border-color: rgba(239, 68, 68, 0.3);
+    }
+
+    .platform-card:hover:not(.disabled)::before {
+        opacity: 1;
+    }
+
+    .platform-card.active {
+        border-color: rgba(239, 68, 68, 0.5);
+        box-shadow: 0 20px 50px rgba(239, 68, 68, 0.4);
+    }
+
+    .platform-card.disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .coming-soon-badge {
+        position: absolute;
+        top: 1rem;
+        right: 1rem;
+        background: linear-gradient(135deg, #f59e0b, #ef4444);
+        color: white;
+        padding: 0.5rem 1rem;
+        border-radius: 0.75rem;
+        font-size: 0.75rem;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3);
+    }
+
+    .platform-header {
+        display: flex;
+        align-items: center;
+        gap: 1.25rem;
+        margin-bottom: 1.25rem;
+        position: relative;
+        z-index: 1;
+    }
+
+    .platform-icon {
+        width: 65px;
+        height: 65px;
+        border-radius: 1.25rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.75rem;
+        color: white;
+        transition: all 0.3s;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+    }
+
+    .platform-card:hover .platform-icon {
+        transform: scale(1.1) rotate(-5deg);
+    }
+
+    .platform-icon.facebook {
+        background: #1877f2;
+    }
+
+    .platform-icon.twitter {
+        background: #1da1f2;
+    }
+
+    .platform-icon.instagram {
+        background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
+    }
+
+    .platform-icon.linkedin {
+        background: #0a66c2;
+    }
+
+    .platform-icon.messenger {
+        background: linear-gradient(135deg, #00b2ff, #0084ff);
+    }
+
+    .platform-icon.whatsapp {
+        background: #25d366;
+    }
+
+    .platform-icon.telegram {
+        background: #0088cc;
+    }
+
+    .platform-icon.email {
+        background: #ea4335;
+    }
+
+    .platform-info h3 {
+        margin: 0;
+        color: #ffffff;
+        font-size: 1.25rem;
+        font-weight: 700;
+    }
+
+    .platform-status {
+        font-size: 0.875rem;
+        color: #94a3b8;
+        font-weight: 500;
+    }
+
+    .platform-status.connected {
+        color: #34d399;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .platform-description {
+        margin-top: 1rem;
+        color: #94a3b8;
+        font-size: 0.9rem;
+        line-height: 1.6;
+        position: relative;
+        z-index: 1;
+    }
+
+    /* Platform Icon Colors for Chatbot Platforms */
+.platform-icon.messenger {
+    background: linear-gradient(135deg, #0084ff, #0066cc);
+}
+
+.platform-icon.whatsapp {
+    background: #25d366;
+}
+
+.platform-icon.instagram {
+    background: linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888);
+}
+
+.platform-icon.telegram {
+    background: #0088cc;
+}
+
+.platform-icon.slack {
+    background: #4a154b;
+}
+
+.platform-icon.discord {
+    background: #5865f2;
+}
+
+.platform-icon.email {
+    background: linear-gradient(135deg, #ea4335, #d32f2f);
+}
+
+.platform-icon.twitter {
+    background: #1da1f2;
+}
+
+.platform-icon.linkedin {
+    background: #0a66c2;
+}
+
+.platform-icon.livechat {
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+}
+
+.platform-icon.wechat {
+    background: #09b83e;
+}
+
+.platform-icon.line {
+    background: #00b900;
+}
+
+.platform-icon.viber {
+    background: #7360f2;
+}
+
+.platform-icon.sms {
+    background: linear-gradient(135deg, #f59e0b, #ef4444);
+}
+
+.platform-icon.signal {
+    background: #3a76f0;
+}
+
+.platform-icon.intercom {
+    background: linear-gradient(135deg, #0091ff, #0073cc);
+}
+
+/* Working platform card hover */
+.platform-card:not(.coming-soon):hover {
+    cursor: pointer;
+}
+
+.platform-card:not(.coming-soon):hover .active-badge {
+    animation: none;
+    transform: scale(1.1) rotate(5deg);
+}
+/* Coming Soon Platform Styling */
+.platform-card.coming-soon {
+    position: relative;
+    cursor: default;
+    opacity: 0.85;
+}
+
+.platform-card.coming-soon::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: repeating-linear-gradient(
+        45deg,
+        transparent,
+        transparent 10px,
+        rgba(245, 158, 11, 0.03) 10px,
+        rgba(245, 158, 11, 0.03) 20px
+    );
+    pointer-events: none;
+    border-radius: 1.5rem;
+}
+
+.platform-card.coming-soon:hover {
+    transform: translateY(-3px);
+    cursor: not-allowed;
+}
+
+.coming-soon-badge {
+    position: absolute;
+    top: 1.5rem;
+    right: 1.5rem;
+    background: linear-gradient(135deg, #f59e0b, #ef4444);
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 0.75rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    box-shadow: 0 4px 15px rgba(245, 158, 11, 0.3);
+    z-index: 2;
+    animation: pulse-badge 2s ease-in-out infinite;
+}
+
+@keyframes pulse-badge {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+}
+
+.platform-features {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-top: 1rem;
+    position: relative;
+    z-index: 1;
+}
+
+.feature-tag {
+    background: rgba(99, 102, 241, 0.1);
+    border: 1px solid rgba(99, 102, 241, 0.3);
+    color: #a5b4fc;
+    padding: 0.35rem 0.75rem;
+    border-radius: 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.feature-tag i {
+    font-size: 0.7rem;
+    color: #34d399;
+}
+
+/* Platform Icon Colors for Coming Soon */
+.platform-icon.threads {
+    background: linear-gradient(135deg, #000000, #1a1a1a);
+}
+
+.platform-icon.pinterest {
+    background: #e60023;
+}
+
+.platform-icon.tiktok {
+    background: linear-gradient(135deg, #00f2ea, #ff0050);
+}
+
+.platform-icon.youtube {
+    background: #ff0000;
+}
+
+.platform-icon.snapchat {
+    background: #fffc00;
+    color: #000;
+}
+
+.platform-icon.reddit {
+    background: #ff4500;
+}
+
+.platform-icon.telegram {
+    background: #0088cc;
+}
+
+.platform-icon.discord {
+    background: #5865f2;
+}
+
+.platform-icon.medium {
+    background: #000000;
+}
+
+.platform-icon.tumblr {
+    background: #35465c;
+}
+
+.platform-icon.mastodon {
+    background: #6364ff;
+}
+
+.platform-icon.twitch {
+    background: #9146ff;
+}
+
+/* Hover effect for coming soon cards */
+.platform-card.coming-soon:hover .coming-soon-badge {
+    animation: none;
+    transform: scale(1.1);
+}
+
+.platform-card.coming-soon:hover .feature-tag {
+    border-color: rgba(245, 158, 11, 0.5);
+    background: rgba(245, 158, 11, 0.1);
+    color: #fbbf24;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .coming-soon-badge {
+        top: 1rem;
+        right: 1rem;
+        padding: 0.4rem 0.75rem;
+        font-size: 0.7rem;
+    }
+
+    .feature-tag {
+        font-size: 0.7rem;
+        padding: 0.3rem 0.6rem;
+    }
+}
+    .connect-form {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        padding: 2.5rem;
+        border-radius: 1.5rem;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        margin-bottom: 2rem;
+        display: none;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .connect-form::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg,
+                transparent,
+                #6366f1,
+                #8b5cf6,
+                #6366f1,
+                transparent);
+        background-size: 200% 100%;
+        animation: gradient-shift 3s linear infinite;
+    }
+
+    .connect-form.active {
+        display: block;
+        animation: slideIn 0.4s ease-out;
+    }
+
+    @keyframes slideIn {
+        from {
+            opacity: 0;
+            transform: translateY(-20px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .connect-form h2 {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: #fff;
+        margin-bottom: 2rem;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        position: relative;
+        z-index: 1;
+    }
+
+    .form-group {
+        margin-bottom: 1.5rem;
+        position: relative;
+        z-index: 1;
+    }
+
+    .form-label {
+        display: block;
+        margin-bottom: 0.75rem;
+        font-weight: 700;
+        color: #e5e7eb;
+        font-size: 0.9rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .form-label i {
+        color: #f59e0b;
+        font-size: 0.85rem;
+    }
+
+    .form-label .required {
+        color: #ef4444;
+    }
+
+    .form-control {
+        width: 100%;
+        padding: 1rem 1.25rem;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 0.75rem;
+        font-size: 1rem;
+        color: #e5e7eb;
+        font-family: 'Courier New', monospace;
+        transition: all 0.3s;
+    }
+
+    textarea.form-control {
+        resize: vertical;
+    }
+
+    .form-control::placeholder {
+        color: #64748b;
+    }
+
+    .form-control:focus {
+        outline: none;
+        background: rgba(255, 255, 255, 0.08);
+        border-color: rgba(99, 102, 241, 0.5);
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    }
+
+    .form-help {
+        font-size: 0.85rem;
+        color: #64748b;
+        margin-top: 0.5rem;
+        font-style: italic;
+    }
+
+    .btn-connect {
+        width: 100%;
+        padding: 1.125rem 1.5rem;
+        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        color: white;
+        border: none;
+        border-radius: 0.875rem;
+        font-size: 1.05rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.75rem;
+        box-shadow: 0 10px 30px rgba(99, 102, 241, 0.3);
+    }
+
+    .btn-connect:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 15px 40px rgba(99, 102, 241, 0.5);
+    }
+
+    .connected-accounts {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        padding: 2.5rem;
+        border-radius: 1.5rem;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        position: relative;
+        overflow: hidden;
+    }
+
+    .connected-accounts::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg,
+                transparent,
+                #10b981,
+                #06b6d4,
+                #10b981,
+                transparent);
+        background-size: 200% 100%;
+        animation: gradient-shift 3s linear infinite;
+    }
+
+    .connected-accounts h2 {
+        margin-bottom: 2rem;
+        color: #fff;
+        font-weight: 700;
+        font-size: 1.75rem;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        position: relative;
+        z-index: 1;
+    }
+
+    .connected-accounts h2 i {
+        color: #10b981;
+    }
+
+    .account-list {
+        display: grid;
+        gap: 1.5rem;
+        position: relative;
+        z-index: 1;
+    }
+
+    .account-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 1.75rem;
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: 1rem;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        transition: all 0.3s;
+    }
+
+    .account-item:hover {
+        background: rgba(255, 255, 255, 0.05);
+        border-color: rgba(16, 185, 129, 0.2);
+        transform: translateX(5px);
+    }
+
+    .account-info {
+        display: flex;
+        align-items: center;
+        gap: 1.25rem;
+    }
+
+    .account-icon {
+        width: 55px;
+        height: 55px;
+        border-radius: 1rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        color: white;
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+    }
+
+    .account-details h4 {
+        margin: 0;
+        color: #ffffff;
+        font-weight: 700;
+        font-size: 1.1rem;
+    }
+
+    .account-platform {
+        font-size: 0.875rem;
+        color: #94a3b8;
+        margin-top: 0.25rem;
+    }
+
+    .btn-disconnect {
+        padding: 0.75rem 1.5rem;
+        background: linear-gradient(135deg, #ef4444, #dc2626);
+        color: white;
+        border: none;
+        border-radius: 0.75rem;
+        cursor: pointer;
+        font-weight: 700;
+        font-size: 0.9rem;
+        transition: all 0.3s;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3);
+    }
+
+    .btn-disconnect:hover {
+        background: linear-gradient(135deg, #dc2626, #b91c1c);
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(239, 68, 68, 0.5);
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 4rem 2rem;
+        color: #94a3b8;
+        position: relative;
+        z-index: 1;
+    }
+
+    .empty-icon {
+        font-size: 4rem;
+        margin-bottom: 1.5rem;
+        opacity: 0.5;
+    }
+
+    .empty-state p {
+        font-size: 1.05rem;
+    }
+
+    .empty-state strong {
+        color: #fff;
+    }
+
+    .info-box {
+        background: rgba(59, 130, 246, 0.1);
+        border-left: 4px solid #3b82f6;
+        padding: 1.25rem;
+        border-radius: 0.75rem;
+        margin-bottom: 2rem;
+        position: relative;
+        z-index: 1;
+    }
+
+    .info-box strong {
+        color: #60a5fa;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .info-box a {
+        color: #60a5fa;
+        text-decoration: underline;
+    }
+
+    .info-box code {
+        background: rgba(255, 255, 255, 0.1);
+        padding: 0.2rem 0.5rem;
+        border-radius: 0.25rem;
+        font-family: 'Courier New', monospace;
+        color: #fbbf24;
+    }
+
+    .coming-soon-section {
+        background: linear-gradient(145deg, #1a1a1a 0%, #2d2d2d 100%);
+        border-radius: 1.5rem;
+        padding: 4rem 2rem;
+        text-align: center;
+        position: relative;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    }
+
+    .coming-soon-section::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: repeating-linear-gradient(45deg,
+                transparent,
+                transparent 15px,
+                rgba(255, 255, 255, 0.02) 15px,
+                rgba(255, 255, 255, 0.02) 30px);
+        pointer-events: none;
+    }
+
+    .coming-soon-content {
+        position: relative;
+        z-index: 1;
+    }
+
+    .coming-soon-icon {
+        font-size: 4.5rem;
+        margin-bottom: 1.5rem;
+        animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+
+        0%,
+        100% {
+            transform: scale(1);
+        }
+
+        50% {
+            transform: scale(1.1);
+        }
+    }
+
+    .coming-soon-title {
+        font-size: 2rem;
+        font-weight: 800;
+        background: linear-gradient(135deg, #f59e0b, #ef4444);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 1rem;
+    }
+
+    .coming-soon-text {
+        color: #94a3b8;
+        font-size: 1.1rem;
+        line-height: 1.8;
+    }
+
+    .coming-soon-text strong {
+        color: #fff;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+        width: 12px;
+    }
+
+    ::-webkit-scrollbar-track {
+        background: #0d0d0d;
+    }
+
+    ::-webkit-scrollbar-thumb {
+        background: linear-gradient(135deg, #ef4444, #f59e0b);
+        border-radius: 10px;
+        border: 2px solid #0d0d0d;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+        background: linear-gradient(135deg, #dc2626, #d97706);
+    }
+
+    /* Responsive */
+    @media (max-width: 1200px) {
+        .platforms-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+
+    @media (max-width: 768px) {
+        .connect-container {
+            padding: 1.5rem;
+        }
+
+        .page-header,
+        .section-header,
+        .connect-form,
+        .connected-accounts {
+            padding: 2rem 1.5rem;
+        }
+
+        .page-header h1 {
+            font-size: 1.75rem;
+        }
+
+        .platforms-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .page-header-content {
+            flex-direction: column;
+            text-align: center;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="connect-container">
+    <!-- Page Header -->
+    <div class="page-header">
+        <div class="page-header-content">
+            <div class="header-icon">
+                <i class="fas fa-plug"></i>
+            </div>
+            <div>
+                <h1>Connect Social Media Accounts</h1>
+                <p>
+                    Connect your social media accounts to start scheduling posts
+                    {% if not can_add_account %}
+                    <span class="limit-warning">
+                        (Limit reached: {{ connected_accounts.count }}/{{ user.profile.max_social_accounts }})
+                    </span>
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- SECTION 1: Social Media Posting Platforms -->
+    <div class="section-header">
+        <div class="section-header-content">
+            <div class="section-icon">
+                <i class="fas fa-share-alt"></i>
+            </div>
+            <div>
+                <h2>Social Media Posting Platforms</h2>
+                <p>Schedule and publish posts across multiple social media platforms</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="platforms-grid">
+        <!-- Facebook -->
+        <div class="platform-card" onclick="showForm('facebook')" id="card-facebook">
+            <div class="platform-header">
+                <div class="platform-icon facebook">
+                    <i class="fab fa-facebook-f"></i>
+                </div>
+                <div class="platform-info">
+                    <h3>Facebook</h3>
+                    <div class="platform-status">Click to connect</div>
+                </div>
+            </div>
+            <div class="platform-description">
+                Post to your Facebook Pages automatically with scheduled content and media.
+            </div>
+        </div>
+
+        <!-- Twitter -->
+        <div class="platform-card" onclick="showForm('twitter')" id="card-twitter">
+            <div class="platform-header">
+                <div class="platform-icon twitter">
+                    <i class="fab fa-twitter"></i>
+                </div>
+                <div class="platform-info">
+                    <h3>X (Twitter)</h3>
+                    <div class="platform-status">Click to connect</div>
+                </div>
+            </div>
+            <div class="platform-description">
+                Schedule tweets with images and videos to your X/Twitter account.
+            </div>
+        </div>
+
+        <!-- Instagram -->
+        <div class="platform-card" onclick="showForm('instagram')" id="card-instagram">
+            <div class="platform-header">
+                <div class="platform-icon instagram">
+                    <i class="fab fa-instagram"></i>
+                </div>
+                <div class="platform-info">
+                    <h3>Instagram</h3>
+                    <div class="platform-status">Click to connect</div>
+                </div>
+            </div>
+            <div class="platform-description">
+                Post photos and videos to your Instagram Business account automatically.
+            </div>
+        </div>
+
+        <!-- LinkedIn -->
+        <div class="platform-card" onclick="showForm('linkedin')" id="card-linkedin">
+            <div class="platform-header">
+                <div class="platform-icon linkedin">
+                    <i class="fab fa-linkedin-in"></i>
+                </div>
+                <div class="platform-info">
+                    <h3>LinkedIn</h3>
+                    <div class="platform-status">Click to connect</div>
+                </div>
+            </div>
+            <div class="platform-description">
+                Share professional content to your LinkedIn profile or company page.
+            </div>
+        </div>
+    </div>
+
+    <div class="platforms-grid">
+        <!-- Threads -->
+        <div class="platform-card coming-soon">
+            <div class="coming-soon-badge">
+                <i class="fas fa-clock"></i>
+                Coming Soon
+            </div>
+            <div class="platform-header">
+                <div class="platform-icon threads">
+                    <i class="fab fa-threads"></i>
+                </div>
+                <div class="platform-info">
+                    <h3>Threads</h3>
+                    <div class="platform-status">Launch Q1 2025</div>
+                </div>
+            </div>
+            <div class="platform-description">
+                Share text updates and join conversations on Meta's newest platform.
+            </div>
+            <div class="platform-features">
+                <div class="feature-tag"><i class="fas fa-check"></i> Text Posts</div>
+                <div class="feature-tag"><i class="fas fa-check"></i> Media Sharing</div>
+                <div class="feature-tag"><i class="fas fa-check"></i> Scheduling</div>
+            </div>
+        </div>
+
+        <!-- Pinterest -->
+        <div class="platform-card coming-soon">
+            <div class="coming-soon-badge">
+                <i class="fas fa-clock"></i>
+                Coming Soon
+            </div>
+            <div class="platform-header">
+                <div class="platform-icon pinterest">
+                    <i class="fab fa-pinterest-p"></i>
+                </div>
+                <div class="platform-info">
+                    <h3>Pinterest</h3>
+                    <div class="platform-status">Launch Q1 2025</div>
+                </div>
+            </div>
+            <div class="platform-description">
+                Pin your creative content and reach millions of users looking for inspiration.
+            </div>
+            <div class="platform-features">
+                <div class="feature-tag"><i class="fas fa-check"></i> Pin Creation</div>
+                <div class="feature-tag"><i class="fas fa-check"></i> Board Management</div>
+                <div class="feature-tag"><i class="fas fa-check"></i> Analytics</div>
+            </div>
+        </div>
+
+        <!-- TikTok -->
+        <div class="platform-card coming-soon">
+            <div class="coming-soon-badge">
+                <i class="fas fa-clock"></i>
+                Coming Soon
+            </div>
+            <div class="platform-header">
+                <div class="platform-icon tiktok">
+                    <i class="fab fa-tiktok"></i>
+                </div>
+                <div class="platform-info">
+                    <h3>TikTok</h3>
+                    <div class="platform-status">Launch Q2 2025</div>
+                </div>
+            </div>
+            <div class="platform-description">
+                Schedule and publish engaging short-form videos to TikTok for Business.
+            </div>
+            <div class="platform-features">
+                <div class="feature-tag"><i class="fas fa-check"></i> Video Upload</div>
+                <div class="feature-tag"><i class="fas fa-check"></i> Captions</div>
+                <div class="feature-tag"><i class="fas fa-check"></i> Hashtags</div>
+            </div>
+        </div>
+
+        <!-- YouTube -->
+        <div class="platform-card coming-soon">
+            <div class="coming-soon-badge">
+                <i class="fas fa-clock"></i>
+                Coming Soon
+            </div>
+            <div class="platform-header">
+                <div class="platform-icon youtube">
+                    <i class="fab fa-youtube"></i>
+                </div>
+                <div class="platform-info">
+                    <h3>YouTube</h3>
+                    <div class="platform-status">Launch Q2 2025</div>
+                </div>
+            </div>
+            <div class="platform-description">
+                Upload and schedule videos, shorts, and community posts to your YouTube channel.
+            </div>
+            <div class="platform-features">
+                <div class="feature-tag"><i class="fas fa-check"></i> Video Upload</div>
+                <div class="feature-tag"><i class="fas fa-check"></i> Shorts</div>
+                <div class="feature-tag"><i class="fas fa-check"></i> Community Posts</div>
+            </div>
+        </div>
+
+        <!-- Snapchat -->
+        <div class="platform-card coming-soon">
+            <div class="coming-soon-badge">
+                <i class="fas fa-clock"></i>
+                Coming Soon
+            </div>
+            <div class="platform-header">
+                <div class="platform-icon snapchat">
+                    <i class="fab fa-snapchat-ghost"></i>
+                </div>
+                <div class="platform-info">
+                    <h3>Snapchat</h3>
+                    <div class="platform-status">Launch Q2 2025</div>
+                </div>
+            </div>
+            <div class="platform-description">
+                Share Stories and Spotlight content with Snapchat's engaged audience.
+            </div>
+            <div class="platform-features">
+                <div class="feature-tag"><i class="fas fa-check"></i> Stories</div>
+                <div class="feature-tag"><i class="fas fa-check"></i> Spotlight</div>
+                <div class="feature-tag"><i class="fas fa-check"></i> Ads Manager</div>
+            </div>
+        </div>
+
+        <!-- Reddit -->
+        <div class="platform-card coming-soon">
+            <div class="coming-soon-badge">
+                <i class="fas fa-clock"></i>
+                Coming Soon
+            </div>
+            <div class="platform-header">
+                <div class="platform-icon reddit">
+                    <i class="fab fa-reddit-alien"></i>
+                </div>
+                <div class="platform-info">
+                    <h3>Reddit</h3>
+                    <div class="platform-status">Launch Q3 2025</div>
+                </div>
+            </div>
+            <div class="platform-description">
+                Post to subreddits and engage with communities on the front page of the internet.
+            </div>
+            <div class="platform-features">
+                <div class="feature-tag"><i class="fas fa-check"></i> Text Posts</div>
+                <div class="feature-tag"><i class="fas fa-check"></i> Link Sharing</div>
+                <div class="feature-tag"><i class="fas fa-check"></i> Media Posts</div>
+            </div>
+        </div>
+
+        <!-- Medium -->
+        <div class="platform-card coming-soon">
+            <div class="coming-soon-badge">
+                <i class="fas fa-clock"></i>
+                Coming Soon
+            </div>
+            <div class="platform-header">
+                <div class="platform-icon medium">
+                    <i class="fab fa-medium-m"></i>
+                </div>
+                <div class="platform-info">
+                    <h3>Medium</h3>
+                    <div class="platform-status">Launch Q4 2025</div>
+                </div>
+            </div>
+            <div class="platform-description">
+                Publish long-form articles and stories to your Medium publication.
+            </div>
+            <div class="platform-features">
+                <div class="feature-tag"><i class="fas fa-check"></i> Articles</div>
+                <div class="feature-tag"><i class="fas fa-check"></i> Publications</div>
+                <div class="feature-tag"><i class="fas fa-check"></i> Tags</div>
+            </div>
+        </div>
+
+        <!-- Tumblr -->
+        <div class="platform-card coming-soon">
+            <div class="coming-soon-badge">
+                <i class="fas fa-clock"></i>
+                Coming Soon
+            </div>
+            <div class="platform-header">
+                <div class="platform-icon tumblr">
+                    <i class="fab fa-tumblr"></i>
+                </div>
+                <div class="platform-info">
+                    <h3>Tumblr</h3>
+                    <div class="platform-status">Launch Q4 2025</div>
+                </div>
+            </div>
+            <div class="platform-description">
+                Share text, photos, quotes, links, and more to your Tumblr blog.
+            </div>
+            <div class="platform-features">
+                <div class="feature-tag"><i class="fas fa-check"></i> Multi-format</div>
+                <div class="feature-tag"><i class="fas fa-check"></i> Reblogs</div>
+                <div class="feature-tag"><i class="fas fa-check"></i> Tags</div>
+            </div>
+        </div>
+
+        <!-- Mastodon -->
+        <div class="platform-card coming-soon">
+            <div class="coming-soon-badge">
+                <i class="fas fa-clock"></i>
+                Coming Soon
+            </div>
+            <div class="platform-header">
+                <div class="platform-icon mastodon">
+                    <i class="fab fa-mastodon"></i>
+                </div>
+                <div class="platform-info">
+                    <h3>Mastodon</h3>
+                    <div class="platform-status">Launch Q4 2025</div>
+                </div>
+            </div>
+            <div class="platform-description">
+                Post to the decentralized social network and join the fediverse.
+            </div>
+            <div class="platform-features">
+                <div class="feature-tag"><i class="fas fa-check"></i> Toots</div>
+                <div class="feature-tag"><i class="fas fa-check"></i> Media</div>
+                <div class="feature-tag"><i class="fas fa-check"></i> Privacy Options</div>
+            </div>
+        </div>
+
+        <!-- Twitch -->
+        <div class="platform-card coming-soon">
+            <div class="coming-soon-badge">
+                <i class="fas fa-clock"></i>
+                Coming Soon
+            </div>
+            <div class="platform-header">
+                <div class="platform-icon twitch">
+                    <i class="fab fa-twitch"></i>
+                </div>
+                <div class="platform-info">
+                    <h3>Twitch</h3>
+                    <div class="platform-status">Launch 2026</div>
+                </div>
+            </div>
+            <div class="platform-description">
+                Update your stream title, category, and post announcements to your Twitch channel.
+            </div>
+            <div class="platform-features">
+                <div class="feature-tag"><i class="fas fa-check"></i> Stream Info</div>
+                <div class="feature-tag"><i class="fas fa-check"></i> Announcements</div>
+                <div class="feature-tag"><i class="fas fa-check"></i> Clips</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Facebook Form -->
+    <div class="connect-form" id="form-facebook">
+        <h2><i class="fab fa-facebook-f"></i> Connect Facebook Page</h2>
+
+        <div class="info-box">
+            <strong><i class="fas fa-info-circle"></i> How to get credentials:</strong><br>
+            1. Go to <a href="https://developers.facebook.com/tools/explorer/" target="_blank">Graph API
+                Explorer</a><br>
+            2. Select your app → Generate Access Token<br>
+            3. Add permissions: <code>pages_manage_posts</code>, <code>pages_read_engagement</code><br>
+            4. Query: <code>/me/accounts</code> to get Page ID and Page Access Token
+        </div>
+
+        <form method="POST">
+            {% csrf_token %}
+            <input type="hidden" name="platform" value="facebook">
+
+            <div class="form-group">
+                <label class="form-label">
+                    <i class="fas fa-id-card"></i>
+                    Facebook Page ID <span class="required">*</span>
+                </label>
+                <input type="text" name="facebook_page_id" class="form-control" placeholder="123456789012345" required>
+                <div class="form-help">Your Facebook Page ID (numeric)</div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">
+                    <i class="fas fa-key"></i>
+                    Page Access Token <span class="required">*</span>
+                </label>
+                <textarea name="facebook_access_token" class="form-control" rows="4" placeholder="EAAxxxxxxxxxx..."
+                    required></textarea>
+                <div class="form-help">Long-lived Page Access Token from Graph API Explorer</div>
+            </div>
+
+            <button type="submit" class="btn-connect">
+                <i class="fas fa-link"></i>
+                Connect Facebook Page
+            </button>
+        </form>
+    </div>
+
+    <!-- Twitter Form -->
+    <div class="connect-form" id="form-twitter">
+        <h2><i class="fab fa-twitter"></i> Connect Twitter/X Account</h2>
+
+        <div class="info-box">
+            <strong><i class="fas fa-info-circle"></i> How to get credentials:</strong><br>
+            1. Go to <a href="https://developer.twitter.com/en/portal/dashboard" target="_blank">Twitter Developer
+                Portal</a><br>
+            2. Create or select your app<br>
+            3. Go to "Keys and Tokens" tab<br>
+            4. Copy all 4 credentials below
+        </div>
+
+        <form method="POST">
+            {% csrf_token %}
+            <input type="hidden" name="platform" value="twitter">
+
+            <div class="form-group">
+                <label class="form-label">
+                    <i class="fas fa-key"></i>
+                    API Key (Consumer Key) <span class="required">*</span>
+                </label>
+                <input type="text" name="twitter_api_key" class="form-control" placeholder="xxxxxxxxxxxxxxxxxxxxxxxxx"
+                    required>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">
+                    <i class="fas fa-key"></i>
+                    API Secret (Consumer Secret) <span class="required">*</span>
+                </label>
+                <input type="text" name="twitter_api_secret" class="form-control"
+                    placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" required>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">
+                    <i class="fas fa-key"></i>
+                    Access Token <span class="required">*</span>
+                </label>
+                <input type="text" name="twitter_access_token" class="form-control"
+                    placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" required>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">
+                    <i class="fas fa-key"></i>
+                    Access Token Secret <span class="required">*</span>
+                </label>
+                <input type="text" name="twitter_access_token_secret" class="form-control"
+                    placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" required>
+            </div>
+
+            <button type="submit" class="btn-connect">
+                <i class="fas fa-link"></i>
+                Connect Twitter Account
+            </button>
+        </form>
+    </div>
+
+    <!-- Instagram Form -->
+    <div class="connect-form" id="form-instagram">
+        <h2><i class="fab fa-instagram"></i> Connect Instagram Business Account</h2>
+
+        <div class="info-box">
+            <strong><i class="fas fa-info-circle"></i> How to get credentials:</strong><br>
+            1. Instagram account must be a Business account<br>
+            2. Must be connected to a Facebook Page<br>
+            3. Use same Facebook Page Access Token as above<br>
+            4. Get Business Account ID from Graph API: <code>/me?fields=instagram_business_account</code>
+        </div>
+
+        <form method="POST">
+            {% csrf_token %}
+            <input type="hidden" name="platform" value="instagram">
+
+            <div class="form-group">
+                <label class="form-label">
+                    <i class="fas fa-id-card"></i>
+                    Instagram Business Account ID <span class="required">*</span>
+                </label>
+                <input type="text" name="instagram_business_account_id" class="form-control"
+                    placeholder="17841400000000000" required>
+                <div class="form-help">Your Instagram Business Account ID (numeric)</div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">
+                    <i class="fas fa-key"></i>
+                    Access Token <span class="required">*</span>
+                </label>
+                <textarea name="instagram_access_token" class="form-control" rows="4"
+                    placeholder="EAAxxxxxxxxxx... (same as Facebook Page token)" required></textarea>
+                <div class="form-help">Facebook Page Access Token (same as above)</div>
+            </div>
+
+            <button type="submit" class="btn-connect">
+                <i class="fas fa-link"></i>
+                Connect Instagram Account
+            </button>
+        </form>
+    </div>
+
+    <!-- LinkedIn Form -->
+    <div class="connect-form" id="form-linkedin">
+        <h2><i class="fab fa-linkedin-in"></i> Connect LinkedIn Account</h2>
+
+        <div class="info-box">
+            <strong><i class="fas fa-info-circle"></i> How to get credentials:</strong><br>
+            1. Complete OAuth 2.0 flow to get Access Token<br>
+            2. Get Person URN from <code>/v2/userinfo</code> API (the 'sub' field)<br>
+            3. Token expires in 60 days - needs refresh
+        </div>
+
+        <form method="POST">
+            {% csrf_token %}
+            <input type="hidden" name="platform" value="linkedin">
+
+            <div class="form-group">
+                <label class="form-label">
+                    <i class="fas fa-key"></i>
+                    Access Token <span class="required">*</span>
+                </label>
+                <textarea name="linkedin_access_token" class="form-control" rows="4"
+                    placeholder="AQxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" required></textarea>
+                <div class="form-help">LinkedIn OAuth 2.0 Access Token</div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">
+                    <i class="fas fa-id-card"></i>
+                    Person URN <span class="required">*</span>
+                </label>
+                <input type="text" name="linkedin_person_urn" class="form-control" placeholder="xxxxxxxxxxxxxxxx"
+                    required>
+                <div class="form-help">Your LinkedIn Person URN (from /v2/userinfo API 'sub' field)</div>
+            </div>
+
+            <button type="submit" class="btn-connect">
+                <i class="fas fa-link"></i>
+                Connect LinkedIn Account
+            </button>
+        </form>
+    </div>
+
+<!-- SECTION 2: AI Automation Chatbot -->
+<div class="section-header">
+    <div class="section-header-content">
+        <div class="section-icon">
+            <i class="fas fa-robot"></i>
+        </div>
+        <div>
+            <h2>AI Automation Chatbot</h2>
+            <p>Connect messaging platforms to enable AI-powered automated responses</p>
+        </div>
+    </div>
+</div>
+
+<div class="platforms-grid">
+    <!-- Facebook Messenger (WORKING) -->
+    <div class="platform-card" onclick="window.location.href='{% url 'messenger_bot:connect' %}'"
+        id="card-messenger">
+        <div class="active-badge">
+            <i class="fas fa-check-circle"></i>
+            Available Now
+        </div>
+        <div class="platform-header">
+            <div class="platform-icon messenger">
+                <i class="fab fa-facebook-messenger"></i>
+            </div>
+            <div class="platform-info">
+                <h3>Facebook Messenger</h3>
+                <div class="platform-status">Click to connect</div>
+            </div>
+        </div>
+        <div class="platform-description">
+            AI-powered chatbot for Facebook Messenger with RAG and custom knowledge base.
+        </div>
+        <div class="platform-features">
+            <div class="feature-tag"><i class="fas fa-check"></i> RAG Support</div>
+            <div class="feature-tag"><i class="fas fa-check"></i> PDF Knowledge</div>
+            <div class="feature-tag"><i class="fas fa-check"></i> Custom Prompts</div>
+        </div>
+    </div>
+
+    <!-- WhatsApp Business -->
+    <div class="platform-card coming-soon">
+        <div class="coming-soon-badge">
+            <i class="fas fa-clock"></i>
+            Coming Soon
+        </div>
+        <div class="platform-header">
+            <div class="platform-icon whatsapp">
+                <i class="fab fa-whatsapp"></i>
+            </div>
+            <div class="platform-info">
+                <h3>WhatsApp Business</h3>
+                <div class="platform-status">Launch Q1 2025</div>
+            </div>
+        </div>
+        <div class="platform-description">
+            Connect WhatsApp Business API for intelligent customer support automation.
+        </div>
+        <div class="platform-features">
+            <div class="feature-tag"><i class="fas fa-check"></i> Auto-Reply</div>
+            <div class="feature-tag"><i class="fas fa-check"></i> Templates</div>
+            <div class="feature-tag"><i class="fas fa-check"></i> Media Support</div>
+        </div>
+    </div>
+
+    <!-- Instagram DM -->
+    <div class="platform-card coming-soon">
+        <div class="coming-soon-badge">
+            <i class="fas fa-clock"></i>
+            Coming Soon
+        </div>
+        <div class="platform-header">
+            <div class="platform-icon instagram">
+                <i class="fab fa-instagram"></i>
+            </div>
+            <div class="platform-info">
+                <h3>Instagram DM</h3>
+                <div class="platform-status">Launch Q1 2025</div>
+            </div>
+        </div>
+        <div class="platform-description">
+            Automated responses for Instagram Direct Messages with AI intelligence.
+        </div>
+        <div class="platform-features">
+            <div class="feature-tag"><i class="fas fa-check"></i> DM Automation</div>
+            <div class="feature-tag"><i class="fas fa-check"></i> Story Replies</div>
+            <div class="feature-tag"><i class="fas fa-check"></i> Lead Gen</div>
+        </div>
+    </div>
+
+    <!-- Telegram Bot -->
+    <div class="platform-card coming-soon">
+        <div class="coming-soon-badge">
+            <i class="fas fa-clock"></i>
+            Coming Soon
+        </div>
+        <div class="platform-header">
+            <div class="platform-icon telegram">
+                <i class="fab fa-telegram-plane"></i>
+            </div>
+            <div class="platform-info">
+                <h3>Telegram Bot</h3>
+                <div class="platform-status">Launch Q2 2025</div>
+            </div>
+        </div>
+        <div class="platform-description">
+            Deploy AI chatbot on Telegram for instant automated messaging and commands.
+        </div>
+        <div class="platform-features">
+            <div class="feature-tag"><i class="fas fa-check"></i> Bot Commands</div>
+            <div class="feature-tag"><i class="fas fa-check"></i> Group Support</div>
+            <div class="feature-tag"><i class="fas fa-check"></i> Inline Mode</div>
+        </div>
+    </div>
+
+    <!-- Email Automation -->
+    <div class="platform-card coming-soon">
+        <div class="coming-soon-badge">
+            <i class="fas fa-clock"></i>
+            Coming Soon
+        </div>
+        <div class="platform-header">
+            <div class="platform-icon email">
+                <i class="fas fa-envelope"></i>
+            </div>
+            <div class="platform-info">
+                <h3>Email Automation</h3>
+                <div class="platform-status">Launch Q2 2025</div>
+            </div>
+        </div>
+        <div class="platform-description">
+            AI-powered email responses and customer support automation with smart routing.
+        </div>
+        <div class="platform-features">
+            <div class="feature-tag"><i class="fas fa-check"></i> Auto-Reply</div>
+            <div class="feature-tag"><i class="fas fa-check"></i> Smart Routing</div>
+            <div class="feature-tag"><i class="fas fa-check"></i> Templates</div>
+        </div>
+    </div>
+
+    <!-- Slack Bot -->
+    <div class="platform-card coming-soon">
+        <div class="coming-soon-badge">
+            <i class="fas fa-clock"></i>
+            Coming Soon
+        </div>
+        <div class="platform-header">
+            <div class="platform-icon slack">
+                <i class="fab fa-slack"></i>
+            </div>
+            <div class="platform-info">
+                <h3>Slack Bot</h3>
+                <div class="platform-status">Launch Q2 2025</div>
+            </div>
+        </div>
+        <div class="platform-description">
+            AI assistant for Slack workspaces with channel integration and slash commands.
+        </div>
+        <div class="platform-features">
+            <div class="feature-tag"><i class="fas fa-check"></i> Slash Commands</div>
+            <div class="feature-tag"><i class="fas fa-check"></i> Channels</div>
+            <div class="feature-tag"><i class="fas fa-check"></i> Threads</div>
+        </div>
+    </div>
+
+    <!-- Discord Bot -->
+    <div class="platform-card coming-soon">
+        <div class="coming-soon-badge">
+            <i class="fas fa-clock"></i>
+            Coming Soon
+        </div>
+        <div class="platform-header">
+            <div class="platform-icon discord">
+                <i class="fab fa-discord"></i>
+            </div>
+            <div class="platform-info">
+                <h3>Discord Bot</h3>
+                <div class="platform-status">Launch Q2 2025</div>
+            </div>
+        </div>
+        <div class="platform-description">
+            Intelligent Discord bot with server management and automated moderation.
+        </div>
+        <div class="platform-features">
+            <div class="feature-tag"><i class="fas fa-check"></i> Server Mgmt</div>
+            <div class="feature-tag"><i class="fas fa-check"></i> Moderation</div>
+            <div class="feature-tag"><i class="fas fa-check"></i> Reactions</div>
+        </div>
+    </div>
+
+    <!-- Twitter/X DM -->
+    <div class="platform-card coming-soon">
+        <div class="coming-soon-badge">
+            <i class="fas fa-clock"></i>
+            Coming Soon
+        </div>
+        <div class="platform-header">
+            <div class="platform-icon twitter">
+                <i class="fab fa-twitter"></i>
+            </div>
+            <div class="platform-info">
+                <h3>X (Twitter) DM</h3>
+                <div class="platform-status">Launch Q3 2025</div>
+            </div>
+        </div>
+        <div class="platform-description">
+            Automated Direct Message responses on X/Twitter with AI conversation handling.
+        </div>
+        <div class="platform-features">
+            <div class="feature-tag"><i class="fas fa-check"></i> DM Auto-Reply</div>
+            <div class="feature-tag"><i class="fas fa-check"></i> Quick Replies</div>
+            <div class="feature-tag"><i class="fas fa-check"></i> Media</div>
+        </div>
+    </div>
+
+    <!-- LinkedIn Messages -->
+    <div class="platform-card coming-soon">
+        <div class="coming-soon-badge">
+            <i class="fas fa-clock"></i>
+            Coming Soon
+        </div>
+        <div class="platform-header">
+            <div class="platform-icon linkedin">
+                <i class="fab fa-linkedin-in"></i>
+            </div>
+            <div class="platform-info">
+                <h3>LinkedIn Messages</h3>
+                <div class="platform-status">Launch Q3 2025</div>
+            </div>
+        </div>
+        <div class="platform-description">
+            Professional AI assistant for LinkedIn messaging and connection requests.
+        </div>
+        <div class="platform-features">
+            <div class="feature-tag"><i class="fas fa-check"></i> Auto-Respond</div>
+            <div class="feature-tag"><i class="fas fa-check"></i> Connections</div>
+            <div class="feature-tag"><i class="fas fa-check"></i> InMail</div>
+        </div>
+    </div>
+
+    <!-- Website Live Chat -->
+    <div class="platform-card coming-soon">
+        <div class="coming-soon-badge">
+            <i class="fas fa-clock"></i>
+            Coming Soon
+        </div>
+        <div class="platform-header">
+            <div class="platform-icon livechat">
+                <i class="fas fa-comments"></i>
+            </div>
+            <div class="platform-info">
+                <h3>Website Live Chat</h3>
+                <div class="platform-status">Launch Q3 2025</div>
+            </div>
+        </div>
+        <div class="platform-description">
+            Embed AI chatbot widget on your website for 24/7 customer support.
+        </div>
+        <div class="platform-features">
+            <div class="feature-tag"><i class="fas fa-check"></i> Widget</div>
+            <div class="feature-tag"><i class="fas fa-check"></i> 24/7 Support</div>
+            <div class="feature-tag"><i class="fas fa-check"></i> Customizable</div>
+        </div>
+    </div>
+
+    <!-- WeChat -->
+    <div class="platform-card coming-soon">
+        <div class="coming-soon-badge">
+            <i class="fas fa-clock"></i>
+            Coming Soon
+        </div>
+        <div class="platform-header">
+            <div class="platform-icon wechat">
+                <i class="fab fa-weixin"></i>
+            </div>
+            <div class="platform-info">
+                <h3>WeChat</h3>
+                <div class="platform-status">Launch Q4 2025</div>
+            </div>
+        </div>
+        <div class="platform-description">
+            AI chatbot for WeChat Official Accounts with multilingual support.
+        </div>
+        <div class="platform-features">
+            <div class="feature-tag"><i class="fas fa-check"></i> Official Account</div>
+            <div class="feature-tag"><i class="fas fa-check"></i> Multilingual</div>
+            <div class="feature-tag"><i class="fas fa-check"></i> Mini Programs</div>
+        </div>
+    </div>
+
+    <!-- LINE -->
+    <div class="platform-card coming-soon">
+        <div class="coming-soon-badge">
+            <i class="fas fa-clock"></i>
+            Coming Soon
+        </div>
+        <div class="platform-header">
+            <div class="platform-icon line">
+                <i class="fab fa-line"></i>
+            </div>
+            <div class="platform-info">
+                <h3>LINE</h3>
+                <div class="platform-status">Launch Q4 2025</div>
+            </div>
+        </div>
+        <div class="platform-description">
+            Deploy AI chatbot on LINE for automated customer engagement in Asia.
+        </div>
+        <div class="platform-features">
+            <div class="feature-tag"><i class="fas fa-check"></i> Rich Menus</div>
+            <div class="feature-tag"><i class="fas fa-check"></i> Flex Messages</div>
+            <div class="feature-tag"><i class="fas fa-check"></i> Broadcast</div>
+        </div>
+    </div>
+
+    <!-- Viber -->
+    <div class="platform-card coming-soon">
+        <div class="coming-soon-badge">
+            <i class="fas fa-clock"></i>
+            Coming Soon
+        </div>
+        <div class="platform-header">
+            <div class="platform-icon viber">
+                <i class="fab fa-viber"></i>
+            </div>
+            <div class="platform-info">
+                <h3>Viber</h3>
+                <div class="platform-status">Launch Q4 2025</div>
+            </div>
+        </div>
+        <div class="platform-description">
+            AI-powered Viber bot for business messaging and customer service.
+        </div>
+        <div class="platform-features">
+            <div class="feature-tag"><i class="fas fa-check"></i> Business API</div>
+            <div class="feature-tag"><i class="fas fa-check"></i> Rich Media</div>
+            <div class="feature-tag"><i class="fas fa-check"></i> Keyboards</div>
+        </div>
+    </div>
+
+    <!-- SMS/Text Messages -->
+    <div class="platform-card coming-soon">
+        <div class="coming-soon-badge">
+            <i class="fas fa-clock"></i>
+            Coming Soon
+        </div>
+        <div class="platform-header">
+            <div class="platform-icon sms">
+                <i class="fas fa-sms"></i>
+            </div>
+            <div class="platform-info">
+                <h3>SMS / Text</h3>
+                <div class="platform-status">Launch 2026</div>
+            </div>
+        </div>
+        <div class="platform-description">
+            AI-powered SMS automation via Twilio, Vonage, or other SMS gateways.
+        </div>
+        <div class="platform-features">
+            <div class="feature-tag"><i class="fas fa-check"></i> Twilio</div>
+            <div class="feature-tag"><i class="fas fa-check"></i> Auto-Reply</div>
+            <div class="feature-tag"><i class="fas fa-check"></i> Keywords</div>
+        </div>
+    </div>
+
+    <!-- Signal -->
+    <div class="platform-card coming-soon">
+        <div class="coming-soon-badge">
+            <i class="fas fa-clock"></i>
+            Coming Soon
+        </div>
+        <div class="platform-header">
+            <div class="platform-icon signal">
+                <i class="fas fa-lock"></i>
+            </div>
+            <div class="platform-info">
+                <h3>Signal</h3>
+                <div class="platform-status">Launch 2026</div>
+            </div>
+        </div>
+        <div class="platform-description">
+            Secure, privacy-focused AI chatbot for Signal messenger platform.
+        </div>
+        <div class="platform-features">
+            <div class="feature-tag"><i class="fas fa-check"></i> End-to-End</div>
+            <div class="feature-tag"><i class="fas fa-check"></i> Privacy First</div>
+            <div class="feature-tag"><i class="fas fa-check"></i> Groups</div>
+        </div>
+    </div>
+
+    <!-- Intercom -->
+    <div class="platform-card coming-soon">
+        <div class="coming-soon-badge">
+            <i class="fas fa-clock"></i>
+            Coming Soon
+        </div>
+        <div class="platform-header">
+            <div class="platform-icon intercom">
+                <i class="fas fa-headset"></i>
+            </div>
+            <div class="platform-info">
+                <h3>Intercom</h3>
+                <div class="platform-status">Launch 2026</div>
+            </div>
+        </div>
+        <div class="platform-description">
+            Integrate AI with Intercom for enhanced customer support workflows.
+        </div>
+        <div class="platform-features">
+            <div class="feature-tag"><i class="fas fa-check"></i> Workflows</div>
+            <div class="feature-tag"><i class="fas fa-check"></i> Tickets</div>
+            <div class="feature-tag"><i class="fas fa-check"></i> Knowledge Base</div>
+        </div>
+    </div>
+</div>
+
+    <!-- SECTION 3: Comment Automation (Coming Soon) -->
+    <div class="section-header">
+        <div class="section-header-content">
+            <div class="section-icon">
+                <i class="fas fa-comments"></i>
+            </div>
+            <div>
+                <h2>Social Media Comment AI Automation</h2>
+                <p>Automatically respond to comments on your social media posts</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="coming-soon-section">
+        <div class="coming-soon-content">
+            <div class="coming-soon-icon"><i class="fas fa-hard-hat"></i></div>
+            <h3 class="coming-soon-title">Coming Soon!</h3>
+            <p class="coming-soon-text">
+                AI-powered automated comment responses for Facebook, Instagram, Twitter, and LinkedIn.<br>
+                <strong>Stay tuned for updates!</strong>
+            </p>
+        </div>
+    </div>
+
+    <!-- Connected Accounts -->
+    <div class="connected-accounts">
+        <h2><i class="fas fa-check-circle"></i> Connected Posting Accounts ({{ connected_accounts.count }})</h2>
+
+        {% if connected_accounts %}
+        <div class="account-list">
+            {% for account in connected_accounts %}
+            <div class="account-item">
+                <div class="account-info">
+                    <div class="account-icon {{ account.platform }}">
+                        {% if account.platform == 'facebook' %}
+                        <i class="fab fa-facebook-f"></i>
+                        {% elif account.platform == 'twitter' %}
+                        <i class="fab fa-twitter"></i>
+                        {% elif account.platform == 'instagram' %}
+                        <i class="fab fa-instagram"></i>
+                        {% elif account.platform == 'linkedin' %}
+                        <i class="fab fa-linkedin-in"></i>
+                        {% endif %}
+                    </div>
+                    <div class="account-details">
+                        <h4>{{ account.account_name }}</h4>
+                        <div class="account-platform">
+                            {{ account.get_platform_display }} •
+                            Connected {{ account.connected_at|date:"M d, Y" }}
+                        </div>
+                    </div>
+                </div>
+                <form method="POST" action="{% url 'platforms:disconnect_account' account.id %}"
+                    style="display: inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn-disconnect"
+                        onclick="return confirm('Disconnect {{ account.account_name }}?')">
+                        <i class="fas fa-trash"></i>
+                        Disconnect
+                    </button>
+                </form>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <div class="empty-icon"><i class="fas fa-plug"></i></div>
+            <p><strong>No accounts connected yet</strong></p>
+            <p>Click on a platform above to get started!</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+    function showForm(platform) {
+        // Hide all forms
+        document.querySelectorAll('.connect-form').forEach(form => {
+            form.classList.remove('active');
+        });
+
+        // Remove active class from all cards
+        document.querySelectorAll('.platform-card').forEach(card => {
+            card.classList.remove('active');
+        });
+
+        // Show selected form
+        const form = document.getElementById('form-' + platform);
+        if (form) {
+            form.classList.add('active');
+            form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+            // Add active class to selected card
+            document.getElementById('card-' + platform).classList.add('active');
+        }
+    }
+</script>
+{% endblock %}

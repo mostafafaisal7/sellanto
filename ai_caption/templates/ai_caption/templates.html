@@ -1,0 +1,771 @@
+{% extends 'base.html' %}
+
+{% block title %}Caption Templates - Sellanto{% endblock %}
+
+{% block extra_css %}
+<style>
+    .templates-container {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 2rem 2.5rem;
+    }
+
+    /* Header */
+    .templates-header {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        padding: 2.5rem;
+        border-radius: 2rem;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        margin-bottom: 2rem;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .templates-header::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, transparent, #8b5cf6, #a855f7, #8b5cf6, transparent);
+    }
+
+    .header-content {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 1.5rem;
+    }
+
+    .header-left {
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+    }
+
+    .header-icon {
+        width: 70px;
+        height: 70px;
+        background: linear-gradient(135deg, #8b5cf6, #a855f7);
+        border-radius: 1.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2rem;
+        color: white;
+        box-shadow: 0 10px 30px rgba(139, 92, 246, 0.4);
+    }
+
+    .header-text h1 {
+        font-size: 2rem;
+        font-weight: 800;
+        background: linear-gradient(135deg, #8b5cf6, #a855f7);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 0.25rem;
+    }
+
+    .header-text p {
+        color: #94a3b8;
+        font-size: 1rem;
+    }
+
+    .create-btn {
+        padding: 1rem 2rem;
+        background: linear-gradient(135deg, #8b5cf6, #a855f7);
+        color: white;
+        border-radius: 1rem;
+        font-size: 1rem;
+        font-weight: 700;
+        text-decoration: none;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        transition: all 0.3s;
+        border: none;
+        cursor: pointer;
+    }
+
+    .create-btn:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 10px 30px rgba(139, 92, 246, 0.4);
+    }
+
+    /* Section Title */
+    .section-title {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #e5e7eb;
+        margin-bottom: 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .section-title i {
+        color: #8b5cf6;
+    }
+
+    /* Templates Grid */
+    .templates-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+        gap: 1.5rem;
+        margin-bottom: 3rem;
+    }
+
+    .template-card {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        border-radius: 1.5rem;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        overflow: hidden;
+        transition: all 0.3s;
+    }
+
+    .template-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 20px 50px rgba(139, 92, 246, 0.2);
+        border-color: rgba(139, 92, 246, 0.3);
+    }
+
+    .template-header {
+        padding: 1.5rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        display: flex;
+        justify-content: space-between;
+        align-items: start;
+    }
+
+    .template-name {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: #e5e7eb;
+        margin-bottom: 0.25rem;
+    }
+
+    .template-category {
+        font-size: 0.8rem;
+        color: #8b5cf6;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    .template-badge {
+        padding: 0.375rem 0.75rem;
+        border-radius: 0.5rem;
+        font-size: 0.75rem;
+        font-weight: 700;
+    }
+
+    .badge-global {
+        background: rgba(16, 185, 129, 0.1);
+        color: #34d399;
+        border: 1px solid rgba(16, 185, 129, 0.2);
+    }
+
+    .badge-personal {
+        background: rgba(59, 130, 246, 0.1);
+        color: #60a5fa;
+        border: 1px solid rgba(59, 130, 246, 0.2);
+    }
+
+    .template-body {
+        padding: 1.5rem;
+    }
+
+    .template-preview {
+        background: rgba(0, 0, 0, 0.3);
+        border-radius: 0.75rem;
+        padding: 1rem;
+        font-size: 0.9rem;
+        color: #94a3b8;
+        line-height: 1.6;
+        margin-bottom: 1rem;
+        max-height: 100px;
+        overflow: hidden;
+        position: relative;
+    }
+
+    .template-preview::after {
+        content: '';
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 30px;
+        background: linear-gradient(transparent, rgba(0, 0, 0, 0.5));
+    }
+
+    .template-meta {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .meta-tag {
+        padding: 0.375rem 0.75rem;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: 0.5rem;
+        font-size: 0.8rem;
+        color: #94a3b8;
+    }
+
+    .template-actions {
+        display: flex;
+        gap: 0.75rem;
+    }
+
+    .template-btn {
+        flex: 1;
+        padding: 0.75rem;
+        border-radius: 0.75rem;
+        font-size: 0.875rem;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        transition: all 0.3s;
+        border: none;
+    }
+
+    .btn-use {
+        background: linear-gradient(135deg, #8b5cf6, #a855f7);
+        color: white;
+    }
+
+    .btn-use:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 20px rgba(139, 92, 246, 0.4);
+    }
+
+    .btn-delete {
+        background: rgba(239, 68, 68, 0.1);
+        color: #f87171;
+        border: 1px solid rgba(239, 68, 68, 0.2);
+    }
+
+    .btn-delete:hover {
+        background: rgba(239, 68, 68, 0.2);
+    }
+
+    /* Empty State */
+    .empty-state {
+        text-align: center;
+        padding: 4rem 2rem;
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        border-radius: 1.5rem;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .empty-icon {
+        width: 80px;
+        height: 80px;
+        background: rgba(139, 92, 246, 0.1);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 1.5rem;
+        font-size: 2rem;
+        color: #8b5cf6;
+    }
+
+    .empty-state h3 {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #e5e7eb;
+        margin-bottom: 0.5rem;
+    }
+
+    .empty-state p {
+        color: #64748b;
+        margin-bottom: 1.5rem;
+    }
+
+    /* Use Template Modal */
+    .modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.8);
+        backdrop-filter: blur(10px);
+        z-index: 1000;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
+    }
+
+    .modal.active {
+        display: flex;
+    }
+
+    .modal-content {
+        background: linear-gradient(145deg, #1a1a1a 0%, #111111 100%);
+        border-radius: 1.5rem;
+        width: 100%;
+        max-width: 500px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        overflow: hidden;
+    }
+
+    .modal-header {
+        padding: 1.5rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .modal-header h3 {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #e5e7eb;
+    }
+
+    .modal-close {
+        width: 36px;
+        height: 36px;
+        background: rgba(255, 255, 255, 0.05);
+        border: none;
+        border-radius: 0.5rem;
+        color: #94a3b8;
+        cursor: pointer;
+        font-size: 1.25rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .modal-body {
+        padding: 1.5rem;
+    }
+
+    .modal-input {
+        margin-bottom: 1rem;
+    }
+
+    .modal-input label {
+        display: block;
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: #e5e7eb;
+        margin-bottom: 0.5rem;
+    }
+
+    .modal-input input {
+        width: 100%;
+        padding: 0.875rem 1rem;
+        background: rgba(0, 0, 0, 0.3);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 0.75rem;
+        color: #e5e7eb;
+        font-size: 0.95rem;
+    }
+
+    .modal-input input:focus {
+        outline: none;
+        border-color: #8b5cf6;
+    }
+
+    .modal-actions {
+        display: flex;
+        gap: 1rem;
+        margin-top: 1.5rem;
+    }
+
+    .modal-btn {
+        flex: 1;
+        padding: 0.875rem;
+        border-radius: 0.75rem;
+        font-size: 0.95rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s;
+        border: none;
+    }
+
+    .modal-btn-cancel {
+        background: rgba(255, 255, 255, 0.05);
+        color: #94a3b8;
+    }
+
+    .modal-btn-generate {
+        background: linear-gradient(135deg, #8b5cf6, #a855f7);
+        color: white;
+    }
+
+    /* Toast */
+    .toast {
+        position: fixed;
+        bottom: 2rem;
+        right: 2rem;
+        padding: 1rem 1.5rem;
+        background: linear-gradient(135deg, #10b981, #34d399);
+        color: white;
+        border-radius: 1rem;
+        font-weight: 600;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        transform: translateY(100px);
+        opacity: 0;
+        transition: all 0.3s ease;
+        z-index: 1001;
+    }
+
+    .toast.show {
+        transform: translateY(0);
+        opacity: 1;
+    }
+
+    .toast.error {
+        background: linear-gradient(135deg, #ef4444, #f87171);
+    }
+
+    /* Result Modal */
+    .result-modal .modal-content {
+        max-width: 600px;
+    }
+
+    .generated-caption {
+        background: rgba(16, 185, 129, 0.05);
+        border: 1px solid rgba(16, 185, 129, 0.2);
+        border-radius: 1rem;
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+    }
+
+    .generated-caption-text {
+        color: #e5e7eb;
+        font-size: 1rem;
+        line-height: 1.7;
+        white-space: pre-wrap;
+    }
+
+    .generated-hashtags {
+        color: #60a5fa;
+        font-size: 0.9rem;
+        margin-top: 1rem;
+    }
+
+    @media (max-width: 768px) {
+        .templates-container {
+            padding: 1.5rem;
+        }
+
+        .header-content {
+            flex-direction: column;
+            text-align: center;
+        }
+
+        .header-left {
+            flex-direction: column;
+        }
+
+        .templates-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="templates-container">
+    <!-- Header -->
+    <div class="templates-header">
+        <div class="header-content">
+            <div class="header-left">
+                <div class="header-icon">
+                    <i class="fas fa-file-alt"></i>
+                </div>
+                <div class="header-text">
+                    <h1>Caption Templates</h1>
+                    <p>Pre-built templates for quick caption generation</p>
+                </div>
+            </div>
+            <a href="{% url 'ai_caption:create_template' %}" class="create-btn">
+                <i class="fas fa-plus"></i>
+                Create Template
+            </a>
+        </div>
+    </div>
+
+    <!-- Global Templates -->
+    {% if global_templates %}
+    <h2 class="section-title"><i class="fas fa-globe"></i> Global Templates</h2>
+    <div class="templates-grid">
+        {% for template in global_templates %}
+        <div class="template-card">
+            <div class="template-header">
+                <div>
+                    <div class="template-name">{{ template.name }}</div>
+                    <div class="template-category">{{ template.category }}</div>
+                </div>
+                <span class="template-badge badge-global">Global</span>
+            </div>
+            <div class="template-body">
+                <div class="template-preview">{{ template.template_text }}</div>
+                <div class="template-meta">
+                    <span class="meta-tag"><i class="fas fa-palette"></i> {{ template.get_tone_display }}</span>
+                    <span class="meta-tag"><i class="fas fa-share-alt"></i> {{ template.get_platform_display }}</span>
+                </div>
+                <div class="template-actions">
+                    <button class="template-btn btn-use" onclick="openUseModal({{ template.pk }}, '{{ template.name|escapejs }}')">
+                        <i class="fas fa-magic"></i> Use Template
+                    </button>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- User Templates -->
+    <h2 class="section-title"><i class="fas fa-user"></i> My Templates</h2>
+    {% if user_templates %}
+    <div class="templates-grid">
+        {% for template in user_templates %}
+        <div class="template-card">
+            <div class="template-header">
+                <div>
+                    <div class="template-name">{{ template.name }}</div>
+                    <div class="template-category">{{ template.category }}</div>
+                </div>
+                <span class="template-badge badge-personal">Personal</span>
+            </div>
+            <div class="template-body">
+                <div class="template-preview">{{ template.template_text }}</div>
+                <div class="template-meta">
+                    <span class="meta-tag"><i class="fas fa-palette"></i> {{ template.get_tone_display }}</span>
+                    <span class="meta-tag"><i class="fas fa-share-alt"></i> {{ template.get_platform_display }}</span>
+                </div>
+                <div class="template-actions">
+                    <button class="template-btn btn-use" onclick="openUseModal({{ template.pk }}, '{{ template.name|escapejs }}')">
+                        <i class="fas fa-magic"></i> Use
+                    </button>
+                    <button class="template-btn btn-delete" onclick="deleteTemplate({{ template.pk }})">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-icon"><i class="fas fa-file-alt"></i></div>
+        <h3>No Personal Templates</h3>
+        <p>Create your own templates for frequently used caption styles</p>
+        <a href="{% url 'ai_caption:create_template' %}" class="create-btn">
+            <i class="fas fa-plus"></i> Create Template
+        </a>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Use Template Modal -->
+<div class="modal" id="useModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 id="modalTitle">Use Template</h3>
+            <button class="modal-close" onclick="closeModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="useTemplateForm">
+                <input type="hidden" id="templateId" name="template_id">
+                
+                <div class="modal-input">
+                    <label>Topic / Subject *</label>
+                    <input type="text" name="topic" id="topicInput" placeholder="What's your post about?" required>
+                </div>
+                
+                <div class="modal-input">
+                    <label>Brand Name (optional)</label>
+                    <input type="text" name="brand" placeholder="Your brand or business name">
+                </div>
+                
+                <div class="modal-input">
+                    <label>Product Name (optional)</label>
+                    <input type="text" name="product" placeholder="Product or service name">
+                </div>
+                
+                <div class="modal-actions">
+                    <button type="button" class="modal-btn modal-btn-cancel" onclick="closeModal()">Cancel</button>
+                    <button type="submit" class="modal-btn modal-btn-generate">
+                        <i class="fas fa-sparkles"></i> Generate Caption
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Result Modal -->
+<div class="modal result-modal" id="resultModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Generated Caption</h3>
+            <button class="modal-close" onclick="closeResultModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="generated-caption">
+                <div class="generated-caption-text" id="generatedCaption"></div>
+                <div class="generated-hashtags" id="generatedHashtags"></div>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="modal-btn modal-btn-cancel" onclick="copyGeneratedCaption()">
+                    <i class="fas fa-copy"></i> Copy
+                </button>
+                <button type="button" class="modal-btn modal-btn-generate" onclick="useGeneratedCaption()">
+                    <i class="fas fa-paper-plane"></i> Use in Post
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="toast" id="toast"></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let currentCaption = '';
+    let currentHashtags = '';
+
+    function openUseModal(templateId, templateName) {
+        document.getElementById('templateId').value = templateId;
+        document.getElementById('modalTitle').textContent = 'Use: ' + templateName;
+        document.getElementById('useModal').classList.add('active');
+    }
+
+    function closeModal() {
+        document.getElementById('useModal').classList.remove('active');
+        document.getElementById('useTemplateForm').reset();
+    }
+
+    function closeResultModal() {
+        document.getElementById('resultModal').classList.remove('active');
+    }
+
+    document.getElementById('useTemplateForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const templateId = document.getElementById('templateId').value;
+        const formData = new FormData(e.target);
+        
+        try {
+            const response = await fetch(`/ai-caption/templates/use/${templateId}/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: formData
+            });
+            
+            const data = await response.json();
+            
+            if (data.redirect) {
+                showToast('Please set up your API key first', 'error');
+                setTimeout(() => window.location.href = data.redirect, 1500);
+                return;
+            }
+            
+            if (data.success) {
+                currentCaption = data.caption;
+                currentHashtags = data.hashtags || '';
+                
+                document.getElementById('generatedCaption').textContent = currentCaption;
+                document.getElementById('generatedHashtags').textContent = currentHashtags;
+                
+                closeModal();
+                document.getElementById('resultModal').classList.add('active');
+            } else {
+                showToast(data.error || 'Failed to generate caption', 'error');
+            }
+        } catch (error) {
+            showToast('Error generating caption', 'error');
+        }
+    });
+
+    function copyGeneratedCaption() {
+        const text = currentCaption + (currentHashtags ? '\n\n' + currentHashtags : '');
+        navigator.clipboard.writeText(text).then(() => {
+            showToast('Copied to clipboard!');
+        });
+    }
+
+    function useGeneratedCaption() {
+        // Store caption in session and redirect to create post
+        const text = currentCaption + (currentHashtags ? '\n\n' + currentHashtags : '');
+        
+        // Use form submission to pass caption
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/ai-caption/use-caption/';
+        
+        const csrfInput = document.createElement('input');
+        csrfInput.type = 'hidden';
+        csrfInput.name = 'csrfmiddlewaretoken';
+        csrfInput.value = '{{ csrf_token }}';
+        form.appendChild(csrfInput);
+        
+        const captionInput = document.createElement('input');
+        captionInput.type = 'hidden';
+        captionInput.name = 'caption';
+        captionInput.value = text;
+        form.appendChild(captionInput);
+        
+        document.body.appendChild(form);
+        form.submit();
+    }
+
+    async function deleteTemplate(templateId) {
+        if (!confirm('Delete this template?')) return;
+        
+        try {
+            const response = await fetch(`/ai-caption/templates/delete/${templateId}/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}'
+                }
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                showToast('Template deleted');
+                location.reload();
+            } else {
+                showToast(data.error || 'Failed to delete', 'error');
+            }
+        } catch (error) {
+            showToast('Error deleting template', 'error');
+        }
+    }
+
+    function showToast(message, type = 'success') {
+        const toast = document.getElementById('toast');
+        toast.textContent = message;
+        toast.className = 'toast show' + (type === 'error' ? ' error' : '');
+        setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+
+    // Close modals on outside click
+    document.querySelectorAll('.modal').forEach(modal => {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.classList.remove('active');
+            }
+        });
+    });
+</script>
+{% endblock %}

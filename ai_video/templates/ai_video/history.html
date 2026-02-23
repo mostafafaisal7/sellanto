@@ -1,0 +1,495 @@
+{% extends 'base.html' %}
+
+{% block title %}Generation History - AI Video Generator{% endblock %}
+
+{% block extra_css %}
+<style>
+    .history-container {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 2rem 2.5rem;
+    }
+
+    .history-hero {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        padding: 2.5rem;
+        border-radius: 2rem;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        margin-bottom: 2rem;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .history-hero::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, transparent, #3b82f6, #60a5fa, #3b82f6, transparent);
+    }
+
+    .hero-content {
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+    }
+
+    .hero-icon {
+        width: 70px;
+        height: 70px;
+        background: linear-gradient(135deg, #3b82f6, #60a5fa);
+        border-radius: 1.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2rem;
+        color: white;
+    }
+
+    .hero-text h1 {
+        font-size: 2rem;
+        font-weight: 800;
+        background: linear-gradient(135deg, #3b82f6, #60a5fa);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 0.25rem;
+    }
+
+    .hero-text p {
+        color: #94a3b8;
+    }
+
+    /* Filters */
+    .filters-bar {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        border-radius: 1rem;
+        padding: 1rem 1.5rem;
+        margin-bottom: 2rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+
+    .filter-group {
+        display: flex;
+        gap: 1rem;
+        align-items: center;
+    }
+
+    .filter-select {
+        padding: 0.625rem 1rem;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 0.625rem;
+        color: #e5e7eb;
+        font-size: 0.9rem;
+        cursor: pointer;
+        min-width: 150px;
+    }
+
+    .filter-select:focus {
+        outline: none;
+        border-color: rgba(59, 130, 246, 0.5);
+    }
+
+    /* Videos Grid */
+    .videos-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 1.5rem;
+    }
+
+    .video-card {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        border-radius: 1.25rem;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        overflow: hidden;
+        transition: all 0.3s;
+    }
+
+    .video-card:hover {
+        transform: translateY(-5px);
+        border-color: rgba(59, 130, 246, 0.3);
+        box-shadow: 0 20px 40px rgba(59, 130, 246, 0.1);
+    }
+
+    .video-preview {
+        position: relative;
+        aspect-ratio: 16/9;
+        overflow: hidden;
+        background: #0a0a0a;
+    }
+
+    .video-preview img,
+    .video-preview video {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .video-overlay {
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(transparent 50%, rgba(0,0,0,0.8));
+        opacity: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.75rem;
+        transition: all 0.3s;
+    }
+
+    .video-card:hover .video-overlay {
+        opacity: 1;
+    }
+
+    .overlay-btn {
+        width: 45px;
+        height: 45px;
+        border-radius: 50%;
+        background: rgba(59, 130, 246, 0.9);
+        border: none;
+        color: white;
+        font-size: 1rem;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.3s;
+        text-decoration: none;
+    }
+
+    .overlay-btn:hover {
+        transform: scale(1.15);
+        background: #3b82f6;
+    }
+
+    .overlay-btn.delete {
+        background: rgba(239, 68, 68, 0.9);
+    }
+
+    .overlay-btn.delete:hover {
+        background: #ef4444;
+    }
+
+    .duration-badge {
+        position: absolute;
+        bottom: 0.75rem;
+        right: 0.75rem;
+        background: rgba(0, 0, 0, 0.8);
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.375rem;
+        font-size: 0.8rem;
+        color: white;
+        font-weight: 600;
+    }
+
+    .play-icon {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 60px;
+        height: 60px;
+        background: rgba(59, 130, 246, 0.9);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        color: white;
+        opacity: 0.9;
+        transition: all 0.3s;
+    }
+
+    .video-card:hover .play-icon {
+        transform: translate(-50%, -50%) scale(1.1);
+        opacity: 1;
+    }
+
+    .video-info {
+        padding: 1.25rem;
+    }
+
+    .video-title {
+        font-weight: 700;
+        color: #e5e7eb;
+        margin-bottom: 0.75rem;
+        font-size: 1rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .video-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+
+    .meta-badge {
+        padding: 0.25rem 0.625rem;
+        border-radius: 0.5rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+
+    .meta-badge.style {
+        background: rgba(139, 92, 246, 0.1);
+        color: #a855f7;
+    }
+
+    .meta-badge.resolution {
+        background: rgba(59, 130, 246, 0.1);
+        color: #60a5fa;
+    }
+
+    .meta-badge.status {
+        background: rgba(16, 185, 129, 0.1);
+        color: #34d399;
+    }
+
+    .meta-badge.status.failed {
+        background: rgba(239, 68, 68, 0.1);
+        color: #f87171;
+    }
+
+    .meta-badge.status.processing {
+        background: rgba(245, 158, 11, 0.1);
+        color: #fbbf24;
+    }
+
+    /* Pagination */
+    .pagination {
+        display: flex;
+        justify-content: center;
+        gap: 0.5rem;
+        margin-top: 2rem;
+    }
+
+    .pagination a, .pagination span {
+        padding: 0.625rem 1rem;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 0.625rem;
+        color: #94a3b8;
+        text-decoration: none;
+        transition: all 0.3s;
+    }
+
+    .pagination a:hover {
+        background: rgba(59, 130, 246, 0.1);
+        border-color: rgba(59, 130, 246, 0.3);
+        color: #60a5fa;
+    }
+
+    .pagination .current {
+        background: linear-gradient(135deg, #3b82f6, #60a5fa);
+        color: white;
+        border-color: transparent;
+    }
+
+    /* Empty State */
+    .empty-state {
+        text-align: center;
+        padding: 5rem 2rem;
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        border-radius: 2rem;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .empty-icon {
+        width: 100px;
+        height: 100px;
+        background: linear-gradient(135deg, #3b82f6, #60a5fa);
+        border-radius: 2rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 1.5rem;
+        font-size: 2.5rem;
+        color: white;
+    }
+
+    .empty-state h3 {
+        font-size: 1.5rem;
+        color: #e5e7eb;
+        margin-bottom: 0.5rem;
+    }
+
+    .empty-state p {
+        color: #64748b;
+        margin-bottom: 1.5rem;
+    }
+
+    .btn-primary {
+        padding: 0.875rem 1.5rem;
+        background: linear-gradient(135deg, #8b5cf6, #a855f7);
+        color: white;
+        border: none;
+        border-radius: 0.875rem;
+        font-weight: 600;
+        cursor: pointer;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    @media (max-width: 768px) {
+        .history-container {
+            padding: 1.5rem;
+        }
+
+        .hero-content {
+            flex-direction: column;
+            text-align: center;
+        }
+
+        .filters-bar {
+            flex-direction: column;
+        }
+
+        .videos-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="history-container">
+    <div class="history-hero">
+        <div class="hero-content">
+            <div class="hero-icon"><i class="fas fa-history"></i></div>
+            <div class="hero-text">
+                <h1>Generation History</h1>
+                <p>View all your AI-generated videos</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="filters-bar">
+        <div class="filter-group">
+            <form method="GET" style="display: flex; gap: 1rem; align-items: center;">
+                <select name="status" class="filter-select" onchange="this.form.submit()">
+                    <option value="">All Status</option>
+                    <option value="completed" {% if status_filter == 'completed' %}selected{% endif %}>Completed</option>
+                    <option value="processing" {% if status_filter == 'processing' %}selected{% endif %}>Processing</option>
+                    <option value="failed" {% if status_filter == 'failed' %}selected{% endif %}>Failed</option>
+                </select>
+                <select name="style" class="filter-select" onchange="this.form.submit()">
+                    <option value="">All Styles</option>
+                    {% for value, label in style_choices %}
+                    <option value="{{ value }}" {% if style_filter == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </form>
+        </div>
+        <span style="color: #64748b; font-size: 0.9rem;">
+            {{ generations.paginator.count }} video{% if generations.paginator.count != 1 %}s{% endif %}
+        </span>
+    </div>
+
+    {% if generations %}
+    <div class="videos-grid">
+        {% for gen in generations %}
+        <div class="video-card" data-id="{{ gen.pk }}">
+            <div class="video-preview">
+                {% if gen.thumbnail %}
+                <img src="{{ gen.thumbnail.url }}" alt="{{ gen.title }}">
+                {% else %}
+                <div style="width:100%;height:100%;background:linear-gradient(135deg, #1a1a1a, #111);display:flex;align-items:center;justify-content:center;">
+                    <i class="fas fa-video" style="color:#3b82f6;font-size:3rem;"></i>
+                </div>
+                {% endif %}
+                
+                {% if gen.status == 'completed' %}
+                <div class="play-icon"><i class="fas fa-play" style="margin-left: 3px;"></i></div>
+                {% endif %}
+                
+                <span class="duration-badge">{{ gen.duration }}s</span>
+                
+                <div class="video-overlay">
+                    <a href="{% url 'ai_video:result' gen.pk %}" class="overlay-btn"><i class="fas fa-eye"></i></a>
+                    {% if gen.status == 'completed' %}
+                    <a href="{% url 'ai_video:download' gen.pk %}" class="overlay-btn"><i class="fas fa-download"></i></a>
+                    {% endif %}
+                    <button class="overlay-btn delete" onclick="deleteVideo({{ gen.pk }})"><i class="fas fa-trash"></i></button>
+                </div>
+            </div>
+            <div class="video-info">
+                <div class="video-title">{{ gen.title }}</div>
+                <div class="video-meta">
+                    <span class="meta-badge style">{{ gen.get_style_display }}</span>
+                    <span class="meta-badge resolution">{{ gen.resolution }}</span>
+                    <span class="meta-badge status {% if gen.status == 'failed' %}failed{% elif gen.status == 'processing' %}processing{% endif %}">
+                        {{ gen.get_status_display }}
+                    </span>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Pagination -->
+    {% if generations.has_other_pages %}
+    <div class="pagination">
+        {% if generations.has_previous %}
+        <a href="?page={{ generations.previous_page_number }}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if style_filter %}&style={{ style_filter }}{% endif %}">
+            <i class="fas fa-chevron-left"></i>
+        </a>
+        {% endif %}
+        
+        <span class="current">Page {{ generations.number }} of {{ generations.paginator.num_pages }}</span>
+        
+        {% if generations.has_next %}
+        <a href="?page={{ generations.next_page_number }}{% if status_filter %}&status={{ status_filter }}{% endif %}{% if style_filter %}&style={{ style_filter }}{% endif %}">
+            <i class="fas fa-chevron-right"></i>
+        </a>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-icon"><i class="fas fa-video"></i></div>
+        <h3>No Videos Yet</h3>
+        <p>Start generating amazing AI videos</p>
+        <a href="{% url 'ai_video:generator' %}" class="btn-primary">
+            <i class="fas fa-magic"></i> Generate Video
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    async function deleteVideo(id) {
+        if (!confirm('Delete this video? This action cannot be undone.')) return;
+        
+        try {
+            const response = await fetch(`/ai-video/delete/${id}/`, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+            });
+            
+            if (response.ok) {
+                document.querySelector(`.video-card[data-id="${id}"]`).remove();
+            } else {
+                alert('Failed to delete video');
+            }
+        } catch (e) {
+            alert('Error deleting video');
+        }
+    }
+</script>
+{% endblock %}

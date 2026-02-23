@@ -1,0 +1,23 @@
+
+
+
+def process_v121_scheduled_posts():
+    """
+    V1.2.1 Per-Platform Scheduler
+    Processes ScheduledPostPlatform records that are due for publishing.
+    Each platform entry can have its own caption, hashtags, and schedule.
+    """
+    import logging
+    from collections import defaultdict
+
+    logger = logging.getLogger(__name__)
+    now = timezone.now()
+
+    due_entries = ScheduledPostPlatform.objects.filter(
+        scheduled_at__lte=now,
+        status='scheduled',
+    ).select_related('post', 'caption', 'post__user')
+
+    count = due_entries.count()
+    if count == 0:
+        return

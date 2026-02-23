@@ -1,0 +1,120 @@
+# Admin Panel Integration Guide
+
+## Overview
+This admin panel provides comprehensive management capabilities for the SocialSync platform.
+
+## Features
+
+### 1. Dashboard
+- Overview stats: total users, pending approvals, active users
+- Token usage statistics (OpenAI, Gemini)
+- Plan distribution chart
+- Recent admin activity
+- Quick approve pending users
+
+### 2. User Management
+- List all users with filtering (status, plan, search)
+- Bulk approve users
+- Per-user detailed view with analytics
+
+### 3. Per-User Analytics
+- Total token usage (OpenAI, Gemini)
+- Monthly usage breakdown
+- Feature usage (captions, videos, images, messenger)
+- API call history
+
+### 4. Plan Management
+- Update user plan (free, starter, pro, business, enterprise)
+- Set custom duration (months)
+- Custom limits per user
+- Plan templates for quick assignment
+
+### 5. API Key Management
+- **Admin Mode**: Admin provides API keys, user cannot see/change them
+- **User Mode**: User manages their own API keys
+- Masked display for security
+
+### 6. Activity Logging
+- All admin actions are logged
+- IP address tracking
+- Filterable logs
+
+---
+
+## Installation
+
+### 1. Copy the `admin_panel` folder to your project root:
+```
+socialsync/
+├── accounts/
+├── admin_panel/  ← Add this folder
+├── ai_caption/
+├── ...
+```
+
+### 2. Add to `settings.py` INSTALLED_APPS:
+```python
+INSTALLED_APPS = [
+    ...
+    'admin_panel',
+]
+```
+
+### 3. Add to main `urls.py`:
+```python
+urlpatterns = [
+    ...
+    path('admin-panel/', include('admin_panel.urls')),
+]
+```
+
+### 4. Run migrations:
+```bash
+python manage.py migrate admin_panel
+```
+
+### 5. Create superuser (if not exists):
+```bash
+python manage.py createsuperuser
+```
+
+---
+
+## URL Structure
+
+| URL | Description |
+|-----|-------------|
+| `/admin-panel/` | Dashboard |
+| `/admin-panel/users/` | User list |
+| `/admin-panel/users/<id>/` | User detail |
+| `/admin-panel/analytics/` | API analytics |
+| `/admin-panel/plans/` | Plan templates |
+| `/admin-panel/settings/` | Admin settings |
+| `/admin-panel/activity-logs/` | Activity logs |
+
+---
+
+## Access Control
+- Only `is_staff` or `is_superuser` users can access admin panel
+- Regular users are redirected to login
+
+---
+
+## API Mode Explanation
+
+### Admin Mode (`api_mode = 'admin'`)
+- Admin provides OpenAI/Gemini keys for the user
+- User's API settings are hidden in their panel
+- User uses admin-provided keys
+
+### User Mode (`api_mode = 'user'`)
+- User must provide their own API keys
+- User can manage their API settings
+- Default mode for new users
+
+---
+
+## Notes
+- Token usage is tracked per API call via `APIUsageLog`
+- Monthly counters reset automatically (implement cron job)
+- Activity logs track all admin actions for audit

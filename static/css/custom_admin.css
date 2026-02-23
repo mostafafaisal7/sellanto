@@ -1,0 +1,114 @@
+/* Beautiful Admin Panel Styling */
+
+/* Platform badges */
+.platform-badge {
+    display: inline-block;
+    padding: 5px 12px;
+    border-radius: 4px;
+    font-weight: bold;
+    color: white;
+    font-size: 12px;
+    text-transform: uppercase;
+}
+
+/* Form improvements */
+.field-box {
+    background: #f8f9fa;
+    padding: 15px;
+    border-radius: 5px;
+    margin-bottom: 15px;
+}
+
+/* Field descriptions */
+.help {
+    background: #e7f3ff;
+    padding: 10px;
+    border-left: 3px solid #0066cc;
+    margin-top: 5px;
+    font-size: 13px;
+}
+
+/* Fieldset headers */
+.module h2 {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 12px 15px;
+    border-radius: 5px 5px 0 0;
+    font-size: 14px;
+}
+
+/* Status badges */
+.status-active {
+    color: #28a745;
+    font-weight: bold;
+}
+
+.status-expired {
+    color: #ffc107;
+    font-weight: bold;
+}
+
+.status-invalid {
+    color: #dc3545;
+    font-weight: bold;
+}
+
+/* Input fields */
+input[type="text"],
+input[type="password"],
+textarea {
+    border: 2px solid #e0e0e0;
+    border-radius: 4px;
+    padding: 8px 12px;
+    font-size: 14px;
+    transition: border-color 0.3s;
+}
+
+input[type="text"]:focus,
+input[type="password"]:focus,
+textarea:focus {
+    border-color: #667eea;
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+/* Buttons */
+.button, input[type="submit"], button {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: none;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.button:hover, input[type="submit"]:hover, button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+/* Platform specific colors */
+.platform-facebook { background: #1877f2; }
+.platform-twitter { background: #1da1f2; }
+.platform-instagram { background: #e4405f; }
+.platform-linkedin { background: #0a66c2; }
+.platform-tiktok { background: #000000; }
+.platform-youtube { background: #ff0000; }
+.platform-pinterest { background: #e60023; }
+.platform-telegram { background: #0088cc; }
+
+/* Validation status */
+.validation-success {
+    color: #28a745;
+    font-weight: bold;
+}
+
+.validation-error {
+    color: #dc3545;
+    font-weight: bold;
+    background: #ffe6e6;
+    padding: 5px 10px;
+    border-radius: 3px;
+}

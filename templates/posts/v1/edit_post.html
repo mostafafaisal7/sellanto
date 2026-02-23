@@ -1,0 +1,494 @@
+{% extends 'base.html' %}
+
+{% block title %}Edit Post - SocialSync{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+    }
+
+    body {
+        background: #0d0d0d;
+        color: #e5e7eb;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        line-height: 1.6;
+    }
+
+    .edit-container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 3rem 2.5rem;
+    }
+
+    .edit-header {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        padding: 3rem 2.5rem;
+        border-radius: 2rem;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        margin-bottom: 3rem;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .edit-header::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 200%;
+        height: 100%;
+        background: linear-gradient(90deg, 
+            transparent, 
+            rgba(239, 68, 68, 0.03), 
+            transparent
+        );
+        animation: shimmer 8s infinite;
+    }
+
+    @keyframes shimmer {
+        0% { left: -100%; }
+        100% { left: 100%; }
+    }
+
+    .edit-header::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, 
+            transparent,
+            #ff6b6b,
+            #ee5a6f,
+            #f06595,
+            transparent
+        );
+        background-size: 200% 100%;
+        animation: gradient-shift 3s linear infinite;
+    }
+
+    @keyframes gradient-shift {
+        0% { background-position: 0% 0%; }
+        100% { background-position: 200% 0%; }
+    }
+
+    .header-content {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+    }
+
+    .header-icon {
+        width: 70px;
+        height: 70px;
+        background: linear-gradient(135deg, #ff6b6b, #f06595);
+        border-radius: 1.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2rem;
+        color: white;
+        box-shadow: 0 10px 30px rgba(239, 68, 68, 0.4);
+    }
+
+    .edit-header h1 {
+        font-size: 2.5rem;
+        font-weight: 800;
+        background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 50%, #f06595 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 0.5rem;
+        letter-spacing: -0.03em;
+    }
+
+    .edit-header p {
+        color: #94a3b8;
+        font-size: 1.05rem;
+        font-weight: 500;
+    }
+
+    .edit-form {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        padding: 3rem 2.5rem;
+        border-radius: 2rem;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        position: relative;
+        overflow: hidden;
+    }
+
+    .edit-form::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, 
+            transparent,
+            #6366f1,
+            #8b5cf6,
+            #6366f1,
+            transparent
+        );
+        background-size: 200% 100%;
+        animation: gradient-shift 3s linear infinite;
+    }
+
+    .form-section {
+        margin-bottom: 2.5rem;
+        position: relative;
+        z-index: 1;
+    }
+
+    .form-section:last-of-type {
+        margin-bottom: 3rem;
+    }
+
+    .form-label {
+        display: block;
+        margin-bottom: 0.75rem;
+        font-weight: 700;
+        color: #e5e7eb;
+        font-size: 0.9rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .form-label i {
+        color: #f59e0b;
+        font-size: 0.85rem;
+    }
+
+    .form-control {
+        width: 100%;
+        padding: 1rem 1.25rem;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 0.75rem;
+        font-size: 1rem;
+        color: #e5e7eb;
+        font-family: 'Inter', sans-serif;
+        transition: all 0.3s;
+    }
+
+    .form-control::placeholder {
+        color: #64748b;
+    }
+
+    .form-control:focus {
+        outline: none;
+        background: rgba(255, 255, 255, 0.08);
+        border-color: rgba(239, 68, 68, 0.5);
+        box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+    }
+
+    textarea.form-control {
+        resize: vertical;
+        min-height: 180px;
+    }
+
+    .platforms-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 1.5rem;
+    }
+
+    .platform-option {
+        position: relative;
+    }
+
+    .platform-checkbox {
+        display: none;
+    }
+
+    .platform-label {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 1.25rem;
+        background: rgba(255, 255, 255, 0.03);
+        border: 2px solid rgba(255, 255, 255, 0.08);
+        border-radius: 1rem;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+
+    .platform-label:hover {
+        background: rgba(255, 255, 255, 0.05);
+        border-color: rgba(239, 68, 68, 0.3);
+        transform: translateY(-3px);
+    }
+
+    .platform-checkbox:checked + .platform-label {
+        background: rgba(239, 68, 68, 0.1);
+        border-color: rgba(239, 68, 68, 0.5);
+        box-shadow: 0 8px 25px rgba(239, 68, 68, 0.3);
+    }
+
+    .platform-icon {
+        width: 50px;
+        height: 50px;
+        border-radius: 1rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        color: white;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        flex-shrink: 0;
+    }
+
+    .platform-icon.facebook { background: #1877f2; }
+    .platform-icon.twitter { background: #1da1f2; }
+    .platform-icon.instagram { background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%); }
+    .platform-icon.linkedin { background: #0a66c2; }
+
+    .platform-name {
+        font-weight: 700;
+        color: #ffffff;
+        font-size: 1.05rem;
+    }
+
+    .action-buttons {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1.5rem;
+        position: relative;
+        z-index: 1;
+    }
+
+    .btn-save {
+        padding: 1.25rem 2rem;
+        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        color: white;
+        border: none;
+        border-radius: 0.875rem;
+        font-size: 1.125rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.75rem;
+        box-shadow: 0 10px 30px rgba(99, 102, 241, 0.3);
+    }
+
+    .btn-save:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 15px 40px rgba(99, 102, 241, 0.5);
+    }
+
+    .btn-cancel {
+        padding: 1.25rem 2rem;
+        background: rgba(255, 255, 255, 0.05);
+        color: #94a3b8;
+        border: 2px solid rgba(255, 255, 255, 0.1);
+        border-radius: 0.875rem;
+        font-size: 1.125rem;
+        font-weight: 700;
+        text-align: center;
+        text-decoration: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.75rem;
+        transition: all 0.3s;
+    }
+
+    .btn-cancel:hover {
+        background: rgba(255, 255, 255, 0.08);
+        border-color: rgba(239, 68, 68, 0.3);
+        color: #fff;
+        transform: translateY(-3px);
+    }
+
+    .datetime-info {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.875rem;
+        color: #94a3b8;
+        margin-top: 0.75rem;
+        padding: 0.75rem 1rem;
+        background: rgba(59, 130, 246, 0.1);
+        border-radius: 0.5rem;
+        border: 1px solid rgba(59, 130, 246, 0.2);
+    }
+
+    .datetime-info i {
+        color: #60a5fa;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+        width: 12px;
+    }
+
+    ::-webkit-scrollbar-track {
+        background: #0d0d0d;
+    }
+
+    ::-webkit-scrollbar-thumb {
+        background: linear-gradient(135deg, #ef4444, #f59e0b);
+        border-radius: 10px;
+        border: 2px solid #0d0d0d;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+        background: linear-gradient(135deg, #dc2626, #d97706);
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+        .edit-container {
+            padding: 1.5rem;
+        }
+
+        .edit-header,
+        .edit-form {
+            padding: 2rem 1.5rem;
+        }
+
+        .edit-header h1 {
+            font-size: 1.75rem;
+        }
+
+        .header-content {
+            flex-direction: column;
+            text-align: center;
+        }
+
+        .platforms-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .action-buttons {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="edit-container">
+    <!-- Header -->
+    <div class="edit-header">
+        <div class="header-content">
+            <div class="header-icon">
+                <i class="fas fa-edit"></i>
+            </div>
+            <div>
+                <h1>Edit Post</h1>
+                <p>Update your scheduled post</p>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Edit Form -->
+    <form method="POST" class="edit-form">
+        {% csrf_token %}
+        
+        <!-- Caption -->
+        <div class="form-section">
+            <label class="form-label">
+                <i class="fas fa-comment-alt"></i>
+                Caption
+            </label>
+            <textarea 
+                name="caption" 
+                class="form-control" 
+                required
+                placeholder="Write your post caption here..."
+            >{{ post.caption }}</textarea>
+        </div>
+        
+        <!-- Platforms -->
+        <div class="form-section">
+            <label class="form-label">
+                <i class="fas fa-share-alt"></i>
+                Select Platforms
+            </label>
+            <div class="platforms-grid">
+                {% for account in connected_accounts %}
+                <div class="platform-option">
+                    <input 
+                        type="checkbox" 
+                        class="platform-checkbox" 
+                        name="platforms" 
+                        value="{{ account.platform }}" 
+                        id="platform-{{ account.platform }}"
+                        {% if account.platform in selected_platforms %}checked{% endif %}
+                    >
+                    <label class="platform-label" for="platform-{{ account.platform }}">
+                        <div class="platform-icon {{ account.platform }}">
+                            {% if account.platform == 'facebook' %}
+                                <i class="fab fa-facebook-f"></i>
+                            {% elif account.platform == 'twitter' %}
+                                <i class="fab fa-twitter"></i>
+                            {% elif account.platform == 'instagram' %}
+                                <i class="fab fa-instagram"></i>
+                            {% elif account.platform == 'linkedin' %}
+                                <i class="fab fa-linkedin-in"></i>
+                            {% endif %}
+                        </div>
+                        <div class="platform-name">
+                            {% if account.platform == 'facebook' %}Facebook
+                            {% elif account.platform == 'twitter' %}Twitter
+                            {% elif account.platform == 'instagram' %}Instagram
+                            {% elif account.platform == 'linkedin' %}LinkedIn
+                            {% endif %}
+                        </div>
+                    </label>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        
+        <!-- Schedule Time -->
+        <div class="form-section">
+            <label class="form-label">
+                <i class="fas fa-calendar-alt"></i>
+                Scheduled Time
+            </label>
+            <input 
+                type="datetime-local" 
+                name="scheduled_time" 
+                class="form-control"
+                required 
+                value="{{ post.scheduled_time|date:'Y-m-d\TH:i' }}"
+            >
+            <div class="datetime-info">
+                <i class="fas fa-info-circle"></i>
+                <span>Posts are scheduled in your local timezone</span>
+            </div>
+        </div>
+        
+        <!-- Actions -->
+        <div class="action-buttons">
+            <button type="submit" class="btn-save">
+                <i class="fas fa-save"></i>
+                <span>Save Changes</span>
+            </button>
+            <a href="{% url 'my_posts' %}" class="btn-cancel">
+                <i class="fas fa-times"></i>
+                <span>Cancel</span>
+            </a>
+        </div>
+    </form>
+</div>
+{% endblock %}

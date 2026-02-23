@@ -1,0 +1,1628 @@
+[
+  {
+    "model": "auth.user",
+    "fields": {
+      "password": "pbkdf2_sha256$600000$8IgrjmPiS63SqwX7ZfDwmw$Lx6f3HjogF5+ZLhhRhbAn24D1hG9DcKR+jwcDDQsdvU=",
+      "last_login": null,
+      "is_superuser": true,
+      "username": "admin",
+      "first_name": "",
+      "last_name": "",
+      "email": "admin@admin.com",
+      "is_staff": true,
+      "is_active": true,
+      "date_joined": "2025-12-20T09:50:24.957Z",
+      "groups": [],
+      "user_permissions": []
+    }
+  },
+  {
+    "model": "auth.user",
+    "fields": {
+      "password": "pbkdf2_sha256$600000$KhxJvgkLy5STpC3Q6ZLJfQ$hn2T7L+k5UhMcsH6/zIo3VL+n4FuSjg7cM+iC0Qjt98=",
+      "last_login": "2025-12-22T05:16:24.979Z",
+      "is_superuser": true,
+      "username": "admin1",
+      "first_name": "",
+      "last_name": "",
+      "email": "admin1@admin.com",
+      "is_staff": true,
+      "is_active": true,
+      "date_joined": "2025-12-20T09:52:48.227Z",
+      "groups": [],
+      "user_permissions": []
+    }
+  },
+  {
+    "model": "auth.user",
+    "fields": {
+      "password": "pbkdf2_sha256$600000$kLfEX4twyM2kiAxYVGaAIj$HvCLW/k5Xl+DUtfkDcA+SZehvaw1HSyaeB0rCCKdTOA=",
+      "last_login": "2025-12-21T12:54:20.632Z",
+      "is_superuser": false,
+      "username": "Aaa",
+      "first_name": "",
+      "last_name": "",
+      "email": "a@a.com",
+      "is_staff": false,
+      "is_active": true,
+      "date_joined": "2025-12-20T10:50:43.435Z",
+      "groups": [],
+      "user_permissions": []
+    }
+  },
+  {
+    "model": "sessions.session",
+    "pk": "36p2z470ozc1zo81lh6fie8vuh3oitn7",
+    "fields": {
+      "session_data": "e30:1vWuVZ:U3FXyko8ztQJvozVV752lGw-KBspG70naHN1aCYwK4c",
+      "expire_date": "2026-01-03T10:48:21.748Z"
+    }
+  },
+  {
+    "model": "sessions.session",
+    "pk": "5la8v9gz04x9vswim8fku9uwmp561uq8",
+    "fields": {
+      "session_data": "e30:1vXY6l:78qRZFfibMs3qe_CiosMqMLTWPahJy3QqByQTOzRO1s",
+      "expire_date": "2026-01-05T05:05:23.957Z"
+    }
+  },
+  {
+    "model": "sessions.session",
+    "pk": "6wgixyyw8z4anqn58zy6rqznww1mn7uy",
+    "fields": {
+      "session_data": "e30:1vXY5x:HtG67HeqdnxhxMluyHVq_H71bEiV8MY6TWkoAH0cZzQ",
+      "expire_date": "2026-01-05T05:04:33.184Z"
+    }
+  },
+  {
+    "model": "sessions.session",
+    "pk": "7rfqtq09trxeeiwq30925yy7cmb6nmo2",
+    "fields": {
+      "session_data": "e30:1vXBA6:eWsgKNupnlt40iW1kNz5R0CCbIt2Q-zMHv2QMLud10U",
+      "expire_date": "2026-01-04T04:35:18.988Z"
+    }
+  },
+  {
+    "model": "sessions.session",
+    "pk": "85rksx9c4qful9as561lhr5xs6kvtb7h",
+    "fields": {
+      "session_data": "e30:1vXXvx:E3FtzXZt9HWfDZrEg-iXPDlPdvYmAMYV0jSmAig4ueg",
+      "expire_date": "2026-01-05T04:54:13.468Z"
+    }
+  },
+  {
+    "model": "sessions.session",
+    "pk": "elpr1kl1v0k9i9mr6djm0cg6tvwev2im",
+    "fields": {
+      "session_data": "e30:1vXY6D:JdLQwrr9AHD1Fuwp2-zKmHJFNfyfoDQ2vXXNFh1fAUQ",
+      "expire_date": "2026-01-05T05:04:49.201Z"
+    }
+  },
+  {
+    "model": "sessions.session",
+    "pk": "gsnmd54qocgs10ef86y3rt7mo1tzlz8k",
+    "fields": {
+      "session_data": "e30:1vXXxa:eN7mzCzUcVbUPpsblU3eX4m4az4aUfr3v8BVrMxAZa8",
+      "expire_date": "2026-01-05T04:55:54.590Z"
+    }
+  },
+  {
+    "model": "sessions.session",
+    "pk": "hibsz49fee7mb7dwpx8o718y95i2w1yp",
+    "fields": {
+      "session_data": ".eJxVjMsOwiAQRf-FtSEzpTDg0n2_gfAYpWogKe3K-O_apAvd3nPOfQkftrX4rfPi5yzOQonT7xZDenDdQb6Hemsytbouc5S7Ig_a5dQyPy-H-3dQQi_fOhgCG7XODMoR24QjkFMRCNMATiGApkhWm9E4Hp2GgPGKnHLKelAo3h-xHTas:1vXCZ6:mUK9bySuHVM5U9uDL9pW4LAwq25-dNMkC6jAZb4i61Y",
+      "expire_date": "2026-01-04T06:05:12.717Z"
+    }
+  },
+  {
+    "model": "sessions.session",
+    "pk": "ij7n7lswrhc0m2ib6aym7b0v5a6jtj0i",
+    "fields": {
+      "session_data": ".eJxVjMsOwiAQRf-FtSEzpTDg0n2_gfAYpWogKe3K-O_apAvd3nPOfQkftrX4rfPi5yzOQonT7xZDenDdQb6Hemsytbouc5S7Ig_a5dQyPy-H-3dQQi_fOhgCG7XODMoR24QjkFMRCNMATiGApkhWm9E4Hp2GgPGKnHLKelAo3h-xHTas:1vWuaV:Ms5Bj9RKqGrtuImK1oVUgRjDWkRDfZTEsJNZvvZb_gI",
+      "expire_date": "2026-01-03T10:53:27.882Z"
+    }
+  },
+  {
+    "model": "sessions.session",
+    "pk": "ivavmk3yr4ojl1j2v7d9s1xwq2bpb0q9",
+    "fields": {
+      "session_data": "e30:1vXXyD:7B_qunKMXt86ThfiKNwGLtvuyrAMjgGLDP4IJ2ndi_w",
+      "expire_date": "2026-01-05T04:56:33.268Z"
+    }
+  },
+  {
+    "model": "sessions.session",
+    "pk": "jip7vez5mdu5nlto6k4wo6bf1toeulsp",
+    "fields": {
+      "session_data": ".eJxVjEEOwiAQRe_C2pCCUBiX7nsGwjCDVA0kpV0Z765NutDtf-_9lwhxW0vYOi9hJnERWpx-N4zpwXUHdI_11mRqdV1mlLsiD9rl1Iif18P9Oyixl29tzghIlpxn8tkYHMBFgJGcMdl7yIgWchyYmFPyqJ1WgKNGUqDQW_H-AP30OIs:1vXYHQ:4scSxCA0opiqnUJX4z6Qsw72JjxIsDb3Z93l_gMjM_s",
+      "expire_date": "2026-01-05T05:16:24.982Z"
+    }
+  },
+  {
+    "model": "sessions.session",
+    "pk": "rzc4zd6sb74p88a7otwp4zwnm8fslu1o",
+    "fields": {
+      "session_data": ".eJxVjMsOwiAQRf-FtSEzpTDg0n2_gfAYpWogKe3K-O_apAvd3nPOfQkftrX4rfPi5yzOQonT7xZDenDdQb6Hemsytbouc5S7Ig_a5dQyPy-H-3dQQi_fOhgCG7XODMoR24QjkFMRCNMATiGApkhWm9E4Hp2GgPGKnHLKelAo3h-xHTas:1vWvfG:H3gb1NqB2tHdaMbiA23Ffuajg_wXhIfqinSKwjvsUAg",
+      "expire_date": "2026-01-03T12:02:26.390Z"
+    }
+  },
+  {
+    "model": "sessions.session",
+    "pk": "uqwxp2ynzpv7rcdo2useiqxfn3qpns7i",
+    "fields": {
+      "session_data": ".eJxVjMsOwiAQRf-FtSEzpTDg0n2_gfAYpWogKe3K-O_apAvd3nPOfQkftrX4rfPi5yzOQonT7xZDenDdQb6Hemsytbouc5S7Ig_a5dQyPy-H-3dQQi_fOhgCG7XODMoR24QjkFMRCNMATiGApkhWm9E4Hp2GgPGKnHLKelAo3h-xHTas:1vXIx2:XTNcvVD_v7s_RjvgmxrKLZLecqcMDHeaV9fx5dU1a7k",
+      "expire_date": "2026-01-04T12:54:20.651Z"
+    }
+  },
+  {
+    "model": "platforms.socialaccount",
+    "pk": 1,
+    "fields": {
+      "user": [
+        "admin1"
+      ],
+      "platform": "facebook",
+      "account_name": "Aa",
+      "facebook_page_id": null,
+      "facebook_access_token": "",
+      "twitter_api_key": null,
+      "twitter_api_secret": null,
+      "twitter_access_token": "",
+      "twitter_access_token_secret": "",
+      "instagram_access_token": "",
+      "instagram_business_account_id": null,
+      "linkedin_access_token": "",
+      "linkedin_person_urn": null,
+      "tiktok_access_token": "",
+      "tiktok_refresh_token": "",
+      "youtube_access_token": "",
+      "youtube_refresh_token": "",
+      "youtube_channel_id": null,
+      "pinterest_access_token": "",
+      "pinterest_board_id": null,
+      "telegram_bot_token": "",
+      "telegram_channel_id": null,
+      "token_expires_at": null,
+      "status": "active",
+      "is_active": true,
+      "is_validated": false,
+      "validation_error": "",
+      "last_validated_at": null,
+      "connected_at": "2025-12-20T10:42:42.376Z",
+      "updated_at": "2025-12-20T10:42:42.376Z"
+    }
+  },
+  {
+    "model": "platforms.socialaccount",
+    "pk": 2,
+    "fields": {
+      "user": [
+        "Aaa"
+      ],
+      "platform": "linkedin",
+      "account_name": "Swapnil Office",
+      "facebook_page_id": null,
+      "facebook_access_token": null,
+      "twitter_api_key": null,
+      "twitter_api_secret": null,
+      "twitter_access_token": null,
+      "twitter_access_token_secret": null,
+      "instagram_access_token": null,
+      "instagram_business_account_id": null,
+      "linkedin_access_token": "AQVH30_-H-CPYqBVYBkfKG67T31rUKIrIFY7Cs6WCOLOl-oohcTHzMILXEwKYUVKFhSGUDiruui3e7g_W_e-GRDr8NPsLhDKuVWYVIc9U9SkMfLUOSqmmh1ToHGB7oS6GFCqagfFCJJe6L4jvwem3TkEpU6w5plCTvKfOehEoBI4J8NwfiLQVSzkDUZM0klhHvQBuoofVN_c2xPbyqpyHlMzn7dMPvBmiD95EiDNPLmwjhs20yl9MyWwpSNPkNlc8NOCXjPFyalH_guFcoSScVZhJzZbAcIA7xLYBWKBlsGxX5aHvjLASgvNl_roUNQ9KTl_Z7hcuPnMHB0dqR2iBK9E99CFCA",
+      "linkedin_person_urn": "GJ1Qhzpz50",
+      "tiktok_access_token": null,
+      "tiktok_refresh_token": null,
+      "youtube_access_token": null,
+      "youtube_refresh_token": null,
+      "youtube_channel_id": null,
+      "pinterest_access_token": null,
+      "pinterest_board_id": null,
+      "telegram_bot_token": null,
+      "telegram_channel_id": null,
+      "token_expires_at": null,
+      "status": "active",
+      "is_active": true,
+      "is_validated": true,
+      "validation_error": null,
+      "last_validated_at": null,
+      "connected_at": "2025-12-20T11:30:22.503Z",
+      "updated_at": "2025-12-20T11:30:22.503Z"
+    }
+  },
+  {
+    "model": "platforms.socialaccount",
+    "pk": 10,
+    "fields": {
+      "user": [
+        "Aaa"
+      ],
+      "platform": "twitter",
+      "account_name": "@triplyvisa",
+      "facebook_page_id": null,
+      "facebook_access_token": null,
+      "twitter_api_key": "2QgFysttD4wFqdPFxapbDMrUK",
+      "twitter_api_secret": "wTkEp7znXWGszksBegALIqUhGdyDO5UKuqRm7jxeVIsiRAlgDn",
+      "twitter_access_token": "1965325665160626179-foB8unmIR7h0oy3NvZzfLSMy3mhkLu",
+      "twitter_access_token_secret": "Y0U8RKlV3Ljm4Ok0jfd1LiySZXpGD1TtyvFG1a7HsRdYG",
+      "instagram_access_token": null,
+      "instagram_business_account_id": null,
+      "linkedin_access_token": null,
+      "linkedin_person_urn": null,
+      "tiktok_access_token": null,
+      "tiktok_refresh_token": null,
+      "youtube_access_token": null,
+      "youtube_refresh_token": null,
+      "youtube_channel_id": null,
+      "pinterest_access_token": null,
+      "pinterest_board_id": null,
+      "telegram_bot_token": null,
+      "telegram_channel_id": null,
+      "token_expires_at": null,
+      "status": "active",
+      "is_active": true,
+      "is_validated": true,
+      "validation_error": null,
+      "last_validated_at": null,
+      "connected_at": "2025-12-22T05:52:26.426Z",
+      "updated_at": "2025-12-22T05:52:26.426Z"
+    }
+  },
+  {
+    "model": "platforms.socialaccount",
+    "pk": 16,
+    "fields": {
+      "user": [
+        "Aaa"
+      ],
+      "platform": "facebook",
+      "account_name": "Triply Visa",
+      "facebook_page_id": "754646057738376",
+      "facebook_access_token": "EAAQGStkMZC7QBQYHZC9YkXO1cO3nrAtGZCucQEjjXpUyg6UJibOq1DKCZBJUe5JauSxHcXYQoIIsgEdfG1skrfRTUBmfCMVHcwpsF7fC7ZBXLpJCnWkS7gLXSDRVfeq2M8NoN4ZCapKXboUjZCZAVDHs4D6Rmmd5dteXJwNfPvn9quBXXfMhYDSNWQLRvU31JiYNbrlx",
+      "twitter_api_key": null,
+      "twitter_api_secret": null,
+      "twitter_access_token": null,
+      "twitter_access_token_secret": null,
+      "instagram_access_token": null,
+      "instagram_business_account_id": null,
+      "linkedin_access_token": null,
+      "linkedin_person_urn": null,
+      "tiktok_access_token": null,
+      "tiktok_refresh_token": null,
+      "youtube_access_token": null,
+      "youtube_refresh_token": null,
+      "youtube_channel_id": null,
+      "pinterest_access_token": null,
+      "pinterest_board_id": null,
+      "telegram_bot_token": null,
+      "telegram_channel_id": null,
+      "token_expires_at": null,
+      "status": "active",
+      "is_active": true,
+      "is_validated": true,
+      "validation_error": null,
+      "last_validated_at": null,
+      "connected_at": "2025-12-22T08:38:23.013Z",
+      "updated_at": "2025-12-22T08:38:23.013Z"
+    }
+  },
+  {
+    "model": "platforms.socialaccount",
+    "pk": 17,
+    "fields": {
+      "user": [
+        "Aaa"
+      ],
+      "platform": "instagram",
+      "account_name": "@triplyvisa",
+      "facebook_page_id": null,
+      "facebook_access_token": null,
+      "twitter_api_key": null,
+      "twitter_api_secret": null,
+      "twitter_access_token": null,
+      "twitter_access_token_secret": null,
+      "instagram_access_token": "EAAQGStkMZC7QBQYHZC9YkXO1cO3nrAtGZCucQEjjXpUyg6UJibOq1DKCZBJUe5JauSxHcXYQoIIsgEdfG1skrfRTUBmfCMVHcwpsF7fC7ZBXLpJCnWkS7gLXSDRVfeq2M8NoN4ZCapKXboUjZCZAVDHs4D6Rmmd5dteXJwNfPvn9quBXXfMhYDSNWQLRvU31JiYNbrlx",
+      "instagram_business_account_id": "17841476826688601",
+      "linkedin_access_token": null,
+      "linkedin_person_urn": null,
+      "tiktok_access_token": null,
+      "tiktok_refresh_token": null,
+      "youtube_access_token": null,
+      "youtube_refresh_token": null,
+      "youtube_channel_id": null,
+      "pinterest_access_token": null,
+      "pinterest_board_id": null,
+      "telegram_bot_token": null,
+      "telegram_channel_id": null,
+      "token_expires_at": null,
+      "status": "active",
+      "is_active": true,
+      "is_validated": true,
+      "validation_error": null,
+      "last_validated_at": null,
+      "connected_at": "2025-12-22T08:39:06.138Z",
+      "updated_at": "2025-12-22T08:39:06.139Z"
+    }
+  },
+  {
+    "model": "posts.post",
+    "pk": 34,
+    "fields": {
+      "user": [
+        "Aaa"
+      ],
+      "caption": "hhhhhhhhhhhhhhhh",
+      "ai_generated": false,
+      "media_files": "[\"posts/3/1766320504.165559.mp4\"]",
+      "scheduled_time": "2025-12-21T12:36:00Z",
+      "timezone": "UTC",
+      "platforms": "[\"instagram\", \"facebook\", \"linkedin\"]",
+      "status": "posted",
+      "facebook_post_id": "897917125922156",
+      "twitter_post_id": null,
+      "instagram_post_id": null,
+      "linkedin_post_id": "urn:li:share:7408485694802698240",
+      "tiktok_post_id": null,
+      "youtube_post_id": null,
+      "pinterest_post_id": null,
+      "telegram_post_id": null,
+      "facebook_error": null,
+      "twitter_error": null,
+      "instagram_error": "Instagram only supports images (.jpg, .png). Video not supported via API.",
+      "linkedin_error": null,
+      "tiktok_error": null,
+      "youtube_error": null,
+      "pinterest_error": null,
+      "telegram_error": null,
+      "created_at": "2025-12-21T12:35:04.258Z",
+      "updated_at": "2025-12-21T12:37:13.789Z",
+      "posted_at": "2025-12-21T12:37:13.789Z"
+    }
+  },
+  {
+    "model": "posts.post",
+    "pk": 35,
+    "fields": {
+      "user": [
+        "Aaa"
+      ],
+      "caption": "aaaaaaaaaaaaaaaa",
+      "ai_generated": false,
+      "media_files": "[\"posts/3/1766320548.0312.jpg\"]",
+      "scheduled_time": "2025-12-21T12:36:00Z",
+      "timezone": "UTC",
+      "platforms": "[\"instagram\", \"facebook\", \"linkedin\"]",
+      "status": "posted",
+      "facebook_post_id": "122115100623011938",
+      "twitter_post_id": null,
+      "instagram_post_id": null,
+      "linkedin_post_id": "urn:li:share:7408485736150405120",
+      "tiktok_post_id": null,
+      "youtube_post_id": null,
+      "pinterest_post_id": null,
+      "telegram_post_id": null,
+      "facebook_error": null,
+      "twitter_error": null,
+      "instagram_error": "Only photo or video can be accepted as media type.",
+      "linkedin_error": null,
+      "tiktok_error": null,
+      "youtube_error": null,
+      "pinterest_error": null,
+      "telegram_error": null,
+      "created_at": "2025-12-21T12:35:48.047Z",
+      "updated_at": "2025-12-21T12:37:23.725Z",
+      "posted_at": "2025-12-21T12:37:23.725Z"
+    }
+  },
+  {
+    "model": "posts.post",
+    "pk": 36,
+    "fields": {
+      "user": [
+        "Aaa"
+      ],
+      "caption": "aaaaaaaaaaaaaaaa",
+      "ai_generated": false,
+      "media_files": "[\"posts/3/1766320548.063987.jpg\"]",
+      "scheduled_time": "2025-12-21T12:36:00Z",
+      "timezone": "UTC",
+      "platforms": "[\"instagram\", \"facebook\", \"linkedin\"]",
+      "status": "posted",
+      "facebook_post_id": "122115100683011938",
+      "twitter_post_id": null,
+      "instagram_post_id": null,
+      "linkedin_post_id": "urn:li:share:7408485787006226432",
+      "tiktok_post_id": null,
+      "youtube_post_id": null,
+      "pinterest_post_id": null,
+      "telegram_post_id": null,
+      "facebook_error": null,
+      "twitter_error": null,
+      "instagram_error": "Only photo or video can be accepted as media type.",
+      "linkedin_error": null,
+      "tiktok_error": null,
+      "youtube_error": null,
+      "pinterest_error": null,
+      "telegram_error": null,
+      "created_at": "2025-12-21T12:35:48.066Z",
+      "updated_at": "2025-12-21T12:37:41.038Z",
+      "posted_at": "2025-12-21T12:37:41.038Z"
+    }
+  },
+  {
+    "model": "posts.post",
+    "pk": 37,
+    "fields": {
+      "user": [
+        "Aaa"
+      ],
+      "caption": "ihihihih",
+      "ai_generated": false,
+      "media_files": "[\"posts/3/1766321010.135304.png\"]",
+      "scheduled_time": "2025-12-21T12:44:00Z",
+      "timezone": "UTC",
+      "platforms": "[\"instagram\", \"facebook\", \"linkedin\"]",
+      "status": "posted",
+      "facebook_post_id": "122115101715011938",
+      "twitter_post_id": null,
+      "instagram_post_id": null,
+      "linkedin_post_id": "urn:li:share:7408487676313788416",
+      "tiktok_post_id": null,
+      "youtube_post_id": null,
+      "pinterest_post_id": null,
+      "telegram_post_id": null,
+      "facebook_error": null,
+      "twitter_error": null,
+      "instagram_error": "Only photo or video can be accepted as media type.",
+      "linkedin_error": null,
+      "tiktok_error": null,
+      "youtube_error": null,
+      "pinterest_error": null,
+      "telegram_error": null,
+      "created_at": "2025-12-21T12:43:30.138Z",
+      "updated_at": "2025-12-21T12:45:25.106Z",
+      "posted_at": "2025-12-21T12:45:25.106Z"
+    }
+  },
+  {
+    "model": "posts.post",
+    "pk": 38,
+    "fields": {
+      "user": [
+        "Aaa"
+      ],
+      "caption": "aaa",
+      "ai_generated": false,
+      "media_files": "[\"posts/3/1766321427.561902.jpg\"]",
+      "scheduled_time": "2025-12-21T12:51:00Z",
+      "timezone": "UTC",
+      "platforms": "[\"instagram\", \"facebook\", \"linkedin\"]",
+      "status": "posted",
+      "facebook_post_id": "122115102687011938",
+      "twitter_post_id": null,
+      "instagram_post_id": null,
+      "linkedin_post_id": "urn:li:share:7408489245189009408",
+      "tiktok_post_id": null,
+      "youtube_post_id": null,
+      "pinterest_post_id": null,
+      "telegram_post_id": null,
+      "facebook_error": null,
+      "twitter_error": null,
+      "instagram_error": "Facebook upload failed: Unsupported post request. Object with ID 'None' does not exist, cannot be loaded due to missing permissions, or does not support this operation. Please read the Graph API documentation at https://developers.facebook.com/docs/graph-api",
+      "linkedin_error": null,
+      "tiktok_error": null,
+      "youtube_error": null,
+      "pinterest_error": null,
+      "telegram_error": null,
+      "created_at": "2025-12-21T12:50:27.565Z",
+      "updated_at": "2025-12-21T12:51:20.385Z",
+      "posted_at": "2025-12-21T12:51:20.385Z"
+    }
+  },
+  {
+    "model": "posts.post",
+    "pk": 39,
+    "fields": {
+      "user": [
+        "Aaa"
+      ],
+      "caption": "hi6",
+      "ai_generated": false,
+      "media_files": "[\"posts/3/1766380643.160849.jpg\"]",
+      "scheduled_time": "2025-12-22T05:19:00Z",
+      "timezone": "UTC",
+      "platforms": "[\"instagram\", \"facebook\", \"linkedin\"]",
+      "status": "posted",
+      "facebook_post_id": "122115169185011938",
+      "twitter_post_id": null,
+      "instagram_post_id": "18036346367755740",
+      "linkedin_post_id": "urn:li:share:7408738169724112896",
+      "tiktok_post_id": null,
+      "youtube_post_id": null,
+      "pinterest_post_id": null,
+      "telegram_post_id": null,
+      "facebook_error": null,
+      "twitter_error": null,
+      "instagram_error": null,
+      "linkedin_error": null,
+      "tiktok_error": null,
+      "youtube_error": null,
+      "pinterest_error": null,
+      "telegram_error": null,
+      "created_at": "2025-12-22T05:17:23.166Z",
+      "updated_at": "2025-12-22T05:20:28.281Z",
+      "posted_at": "2025-12-22T05:20:28.281Z"
+    }
+  },
+  {
+    "model": "posts.post",
+    "pk": 40,
+    "fields": {
+      "user": [
+        "Aaa"
+      ],
+      "caption": "video6",
+      "ai_generated": false,
+      "media_files": "[]",
+      "scheduled_time": "2025-12-22T05:22:00Z",
+      "timezone": "UTC",
+      "platforms": "[\"instagram\", \"facebook\", \"linkedin\"]",
+      "status": "posted",
+      "facebook_post_id": "754646057738376_122115169437011938",
+      "twitter_post_id": null,
+      "instagram_post_id": null,
+      "linkedin_post_id": "urn:li:share:7408738798903144449",
+      "tiktok_post_id": null,
+      "youtube_post_id": null,
+      "pinterest_post_id": null,
+      "telegram_post_id": null,
+      "facebook_error": null,
+      "twitter_error": null,
+      "instagram_error": "Instagram requires image",
+      "linkedin_error": null,
+      "tiktok_error": null,
+      "youtube_error": null,
+      "pinterest_error": null,
+      "telegram_error": null,
+      "created_at": "2025-12-22T05:21:03.037Z",
+      "updated_at": "2025-12-22T05:22:58.237Z",
+      "posted_at": "2025-12-22T05:22:58.237Z"
+    }
+  },
+  {
+    "model": "posts.post",
+    "pk": 41,
+    "fields": {
+      "user": [
+        "Aaa"
+      ],
+      "caption": "Video7",
+      "ai_generated": false,
+      "media_files": "[\"posts/3/1766381625.090021.mp4\"]",
+      "scheduled_time": "2025-12-22T05:34:00Z",
+      "timezone": "UTC",
+      "platforms": "[\"instagram\", \"facebook\", \"linkedin\"]",
+      "status": "posted",
+      "facebook_post_id": "1493708818398723",
+      "twitter_post_id": null,
+      "instagram_post_id": null,
+      "linkedin_post_id": "urn:li:share:7408741832047808512",
+      "tiktok_post_id": null,
+      "youtube_post_id": null,
+      "pinterest_post_id": null,
+      "telegram_post_id": null,
+      "facebook_error": null,
+      "twitter_error": null,
+      "instagram_error": "Instagram only supports images (.jpg, .png)",
+      "linkedin_error": null,
+      "tiktok_error": null,
+      "youtube_error": null,
+      "pinterest_error": null,
+      "telegram_error": null,
+      "created_at": "2025-12-22T05:33:45.172Z",
+      "updated_at": "2025-12-22T05:35:01.360Z",
+      "posted_at": "2025-12-22T05:35:01.360Z"
+    }
+  },
+  {
+    "model": "posts.post",
+    "pk": 42,
+    "fields": {
+      "user": [
+        "Aaa"
+      ],
+      "caption": "img5",
+      "ai_generated": false,
+      "media_files": "[\"posts/3/1766381716.116935.png\"]",
+      "scheduled_time": "2025-12-22T05:36:00Z",
+      "timezone": "UTC",
+      "platforms": "[\"instagram\", \"facebook\", \"linkedin\"]",
+      "status": "posted",
+      "facebook_post_id": "122115170865011938",
+      "twitter_post_id": null,
+      "instagram_post_id": "18066816590385312",
+      "linkedin_post_id": "urn:li:share:7408742413042683904",
+      "tiktok_post_id": null,
+      "youtube_post_id": null,
+      "pinterest_post_id": null,
+      "telegram_post_id": null,
+      "facebook_error": null,
+      "twitter_error": null,
+      "instagram_error": null,
+      "linkedin_error": null,
+      "tiktok_error": null,
+      "youtube_error": null,
+      "pinterest_error": null,
+      "telegram_error": null,
+      "created_at": "2025-12-22T05:35:16.116Z",
+      "updated_at": "2025-12-22T05:37:19.969Z",
+      "posted_at": "2025-12-22T05:37:19.969Z"
+    }
+  },
+  {
+    "model": "posts.post",
+    "pk": 43,
+    "fields": {
+      "user": [
+        "Aaa"
+      ],
+      "caption": "img7",
+      "ai_generated": false,
+      "media_files": "[\"posts/3/1766382180.579432.jpg\"]",
+      "scheduled_time": "2025-12-22T05:44:00Z",
+      "timezone": "UTC",
+      "platforms": "[\"instagram\", \"facebook\", \"linkedin\"]",
+      "status": "posted",
+      "facebook_post_id": "122115171423011938",
+      "twitter_post_id": null,
+      "instagram_post_id": "18055419800674111",
+      "linkedin_post_id": "urn:li:share:7408744424966651904",
+      "tiktok_post_id": null,
+      "youtube_post_id": null,
+      "pinterest_post_id": null,
+      "telegram_post_id": null,
+      "facebook_error": null,
+      "twitter_error": null,
+      "instagram_error": null,
+      "linkedin_error": null,
+      "tiktok_error": null,
+      "youtube_error": null,
+      "pinterest_error": null,
+      "telegram_error": null,
+      "created_at": "2025-12-22T05:43:00.579Z",
+      "updated_at": "2025-12-22T05:45:19.660Z",
+      "posted_at": "2025-12-22T05:45:19.660Z"
+    }
+  },
+  {
+    "model": "posts.post",
+    "pk": 44,
+    "fields": {
+      "user": [
+        "Aaa"
+      ],
+      "caption": "video",
+      "ai_generated": false,
+      "media_files": "[\"posts/3/1766382203.331052.mp4\"]",
+      "scheduled_time": "2025-12-22T05:44:00Z",
+      "timezone": "UTC",
+      "platforms": "[\"instagram\", \"facebook\", \"linkedin\"]",
+      "status": "posted",
+      "facebook_post_id": "1217680080246932",
+      "twitter_post_id": null,
+      "instagram_post_id": null,
+      "linkedin_post_id": "urn:li:share:7408744820002787328",
+      "tiktok_post_id": null,
+      "youtube_post_id": null,
+      "pinterest_post_id": null,
+      "telegram_post_id": null,
+      "facebook_error": null,
+      "twitter_error": null,
+      "instagram_error": "Instagram media processing failed",
+      "linkedin_error": null,
+      "tiktok_error": null,
+      "youtube_error": null,
+      "pinterest_error": null,
+      "telegram_error": null,
+      "created_at": "2025-12-22T05:43:23.340Z",
+      "updated_at": "2025-12-22T05:46:53.726Z",
+      "posted_at": "2025-12-22T05:46:53.726Z"
+    }
+  },
+  {
+    "model": "posts.post",
+    "pk": 45,
+    "fields": {
+      "user": [
+        "Aaa"
+      ],
+      "caption": "v8",
+      "ai_generated": false,
+      "media_files": "[\"posts/3/1766382980.34684.mp4\"]",
+      "scheduled_time": "2025-12-22T05:58:00Z",
+      "timezone": "UTC",
+      "platforms": "[\"twitter\", \"instagram\", \"facebook\", \"linkedin\"]",
+      "status": "posted",
+      "facebook_post_id": "25717161091306014",
+      "twitter_post_id": null,
+      "instagram_post_id": null,
+      "linkedin_post_id": "urn:li:share:7408748257717227520",
+      "tiktok_post_id": null,
+      "youtube_post_id": null,
+      "pinterest_post_id": null,
+      "telegram_post_id": null,
+      "facebook_error": null,
+      "twitter_error": "type object 'TwitterService' has no attribute 'post_to_twitter'",
+      "instagram_error": "Instagram media processing failed",
+      "linkedin_error": null,
+      "tiktok_error": null,
+      "youtube_error": null,
+      "pinterest_error": null,
+      "telegram_error": null,
+      "created_at": "2025-12-22T05:56:20.356Z",
+      "updated_at": "2025-12-22T06:00:33.380Z",
+      "posted_at": "2025-12-22T06:00:33.379Z"
+    }
+  },
+  {
+    "model": "posts.post",
+    "pk": 46,
+    "fields": {
+      "user": [
+        "Aaa"
+      ],
+      "caption": "i8",
+      "ai_generated": false,
+      "media_files": "[\"posts/3/1766383006.912333.jpg\"]",
+      "scheduled_time": "2025-12-22T05:58:00Z",
+      "timezone": "UTC",
+      "platforms": "[\"twitter\", \"instagram\", \"facebook\", \"linkedin\"]",
+      "status": "posted",
+      "facebook_post_id": "122115172803011938",
+      "twitter_post_id": null,
+      "instagram_post_id": "18371731354085644",
+      "linkedin_post_id": "urn:li:share:7408748398432071680",
+      "tiktok_post_id": null,
+      "youtube_post_id": null,
+      "pinterest_post_id": null,
+      "telegram_post_id": null,
+      "facebook_error": null,
+      "twitter_error": "type object 'TwitterService' has no attribute 'post_to_twitter'",
+      "instagram_error": null,
+      "linkedin_error": null,
+      "tiktok_error": null,
+      "youtube_error": null,
+      "pinterest_error": null,
+      "telegram_error": null,
+      "created_at": "2025-12-22T05:56:46.915Z",
+      "updated_at": "2025-12-22T06:01:06.999Z",
+      "posted_at": "2025-12-22T06:01:06.999Z"
+    }
+  },
+  {
+    "model": "posts.post",
+    "pk": 47,
+    "fields": {
+      "user": [
+        "Aaa"
+      ],
+      "caption": "123",
+      "ai_generated": false,
+      "media_files": "[\"posts/3/1766383536.721508.png\"]",
+      "scheduled_time": "2025-12-22T06:06:00Z",
+      "timezone": "UTC",
+      "platforms": "[\"twitter\", \"instagram\", \"facebook\", \"linkedin\"]",
+      "status": "posted",
+      "facebook_post_id": "122115173223011938",
+      "twitter_post_id": "2002984018242142211",
+      "instagram_post_id": "18329144677246544",
+      "linkedin_post_id": "urn:li:share:7408749851863056384",
+      "tiktok_post_id": null,
+      "youtube_post_id": null,
+      "pinterest_post_id": null,
+      "telegram_post_id": null,
+      "facebook_error": null,
+      "twitter_error": null,
+      "instagram_error": null,
+      "linkedin_error": null,
+      "tiktok_error": null,
+      "youtube_error": null,
+      "pinterest_error": null,
+      "telegram_error": null,
+      "created_at": "2025-12-22T06:05:36.724Z",
+      "updated_at": "2025-12-22T06:06:53.526Z",
+      "posted_at": "2025-12-22T06:06:53.525Z"
+    }
+  },
+  {
+    "model": "posts.post",
+    "pk": 48,
+    "fields": {
+      "user": [
+        "Aaa"
+      ],
+      "caption": "v123",
+      "ai_generated": false,
+      "media_files": "[\"posts/3/1766383563.590969.mp4\"]",
+      "scheduled_time": "2025-12-22T06:06:00Z",
+      "timezone": "UTC",
+      "platforms": "[\"twitter\", \"instagram\", \"facebook\", \"linkedin\"]",
+      "status": "posted",
+      "facebook_post_id": "1582109699480812",
+      "twitter_post_id": "2002984228292870270",
+      "instagram_post_id": null,
+      "linkedin_post_id": "urn:li:share:7408750364658663425",
+      "tiktok_post_id": null,
+      "youtube_post_id": null,
+      "pinterest_post_id": null,
+      "telegram_post_id": null,
+      "facebook_error": null,
+      "twitter_error": null,
+      "instagram_error": "Instagram media processing failed",
+      "linkedin_error": null,
+      "tiktok_error": null,
+      "youtube_error": null,
+      "pinterest_error": null,
+      "telegram_error": null,
+      "created_at": "2025-12-22T06:06:03.598Z",
+      "updated_at": "2025-12-22T06:08:55.688Z",
+      "posted_at": "2025-12-22T06:08:55.688Z"
+    }
+  },
+  {
+    "model": "posts.post",
+    "pk": 49,
+    "fields": {
+      "user": [
+        "Aaa"
+      ],
+      "caption": "3.3",
+      "ai_generated": false,
+      "media_files": "[\"posts/3/1766383867.363127.mp4\"]",
+      "scheduled_time": "2025-12-22T06:12:00Z",
+      "timezone": "UTC",
+      "platforms": "[\"instagram\"]",
+      "status": "failed",
+      "facebook_post_id": null,
+      "twitter_post_id": null,
+      "instagram_post_id": null,
+      "linkedin_post_id": null,
+      "tiktok_post_id": null,
+      "youtube_post_id": null,
+      "pinterest_post_id": null,
+      "telegram_post_id": null,
+      "facebook_error": null,
+      "twitter_error": null,
+      "instagram_error": "Invalid parameter",
+      "linkedin_error": null,
+      "tiktok_error": null,
+      "youtube_error": null,
+      "pinterest_error": null,
+      "telegram_error": null,
+      "created_at": "2025-12-22T06:11:07.373Z",
+      "updated_at": "2025-12-22T06:14:24.824Z",
+      "posted_at": null
+    }
+  },
+  {
+    "model": "posts.post",
+    "pk": 50,
+    "fields": {
+      "user": [
+        "Aaa"
+      ],
+      "caption": "hi121",
+      "ai_generated": false,
+      "media_files": "[]",
+      "scheduled_time": "2025-12-22T07:23:00Z",
+      "timezone": "UTC",
+      "platforms": "['twitter', 'instagram', 'facebook', 'linkedin']",
+      "status": "draft",
+      "facebook_post_id": null,
+      "twitter_post_id": null,
+      "instagram_post_id": null,
+      "linkedin_post_id": null,
+      "tiktok_post_id": null,
+      "youtube_post_id": null,
+      "pinterest_post_id": null,
+      "telegram_post_id": null,
+      "facebook_error": null,
+      "twitter_error": null,
+      "instagram_error": null,
+      "linkedin_error": null,
+      "tiktok_error": null,
+      "youtube_error": null,
+      "pinterest_error": null,
+      "telegram_error": null,
+      "created_at": "2025-12-22T07:22:05.007Z",
+      "updated_at": "2025-12-22T07:22:05.007Z",
+      "posted_at": null
+    }
+  },
+  {
+    "model": "posts.post",
+    "pk": 51,
+    "fields": {
+      "user": [
+        "Aaa"
+      ],
+      "caption": "hi",
+      "ai_generated": false,
+      "media_files": "[]",
+      "scheduled_time": "2025-12-22T07:23:00Z",
+      "timezone": "UTC",
+      "platforms": "['twitter', 'instagram', 'facebook', 'linkedin']",
+      "status": "draft",
+      "facebook_post_id": null,
+      "twitter_post_id": null,
+      "instagram_post_id": null,
+      "linkedin_post_id": null,
+      "tiktok_post_id": null,
+      "youtube_post_id": null,
+      "pinterest_post_id": null,
+      "telegram_post_id": null,
+      "facebook_error": null,
+      "twitter_error": null,
+      "instagram_error": null,
+      "linkedin_error": null,
+      "tiktok_error": null,
+      "youtube_error": null,
+      "pinterest_error": null,
+      "telegram_error": null,
+      "created_at": "2025-12-22T07:22:43.402Z",
+      "updated_at": "2025-12-22T07:22:43.402Z",
+      "posted_at": null
+    }
+  },
+  {
+    "model": "posts.post",
+    "pk": 52,
+    "fields": {
+      "user": [
+        "Aaa"
+      ],
+      "caption": "hi",
+      "ai_generated": false,
+      "media_files": "[]",
+      "scheduled_time": "2025-12-22T07:24:00Z",
+      "timezone": "UTC",
+      "platforms": "['instagram']",
+      "status": "draft",
+      "facebook_post_id": null,
+      "twitter_post_id": null,
+      "instagram_post_id": null,
+      "linkedin_post_id": null,
+      "tiktok_post_id": null,
+      "youtube_post_id": null,
+      "pinterest_post_id": null,
+      "telegram_post_id": null,
+      "facebook_error": null,
+      "twitter_error": null,
+      "instagram_error": null,
+      "linkedin_error": null,
+      "tiktok_error": null,
+      "youtube_error": null,
+      "pinterest_error": null,
+      "telegram_error": null,
+      "created_at": "2025-12-22T07:23:26.172Z",
+      "updated_at": "2025-12-22T07:23:26.172Z",
+      "posted_at": null
+    }
+  },
+  {
+    "model": "posts.post",
+    "pk": 53,
+    "fields": {
+      "user": [
+        "Aaa"
+      ],
+      "caption": "hi12123100",
+      "ai_generated": false,
+      "media_files": "[]",
+      "scheduled_time": "2025-12-22T07:25:00Z",
+      "timezone": "UTC",
+      "platforms": "['twitter', 'instagram', 'facebook', 'linkedin']",
+      "status": "draft",
+      "facebook_post_id": null,
+      "twitter_post_id": null,
+      "instagram_post_id": null,
+      "linkedin_post_id": null,
+      "tiktok_post_id": null,
+      "youtube_post_id": null,
+      "pinterest_post_id": null,
+      "telegram_post_id": null,
+      "facebook_error": null,
+      "twitter_error": null,
+      "instagram_error": null,
+      "linkedin_error": null,
+      "tiktok_error": null,
+      "youtube_error": null,
+      "pinterest_error": null,
+      "telegram_error": null,
+      "created_at": "2025-12-22T07:24:10.235Z",
+      "updated_at": "2025-12-22T07:24:10.235Z",
+      "posted_at": null
+    }
+  },
+  {
+    "model": "posts.post",
+    "pk": 54,
+    "fields": {
+      "user": [
+        "Aaa"
+      ],
+      "caption": "hi1212121",
+      "ai_generated": false,
+      "media_files": "[]",
+      "scheduled_time": "2025-12-22T07:26:00Z",
+      "timezone": "UTC",
+      "platforms": "['twitter', 'instagram', 'facebook', 'linkedin']",
+      "status": "draft",
+      "facebook_post_id": null,
+      "twitter_post_id": null,
+      "instagram_post_id": null,
+      "linkedin_post_id": null,
+      "tiktok_post_id": null,
+      "youtube_post_id": null,
+      "pinterest_post_id": null,
+      "telegram_post_id": null,
+      "facebook_error": null,
+      "twitter_error": null,
+      "instagram_error": null,
+      "linkedin_error": null,
+      "tiktok_error": null,
+      "youtube_error": null,
+      "pinterest_error": null,
+      "telegram_error": null,
+      "created_at": "2025-12-22T07:24:35.183Z",
+      "updated_at": "2025-12-22T07:24:35.183Z",
+      "posted_at": null
+    }
+  },
+  {
+    "model": "posts.post",
+    "pk": 55,
+    "fields": {
+      "user": [
+        "Aaa"
+      ],
+      "caption": "a",
+      "ai_generated": false,
+      "media_files": "[]",
+      "scheduled_time": "2025-12-22T08:08:00Z",
+      "timezone": "UTC",
+      "platforms": "['twitter', 'instagram', 'facebook', 'linkedin']",
+      "status": "draft",
+      "facebook_post_id": null,
+      "twitter_post_id": null,
+      "instagram_post_id": null,
+      "linkedin_post_id": null,
+      "tiktok_post_id": null,
+      "youtube_post_id": null,
+      "pinterest_post_id": null,
+      "telegram_post_id": null,
+      "facebook_error": null,
+      "twitter_error": null,
+      "instagram_error": null,
+      "linkedin_error": null,
+      "tiktok_error": null,
+      "youtube_error": null,
+      "pinterest_error": null,
+      "telegram_error": null,
+      "created_at": "2025-12-22T08:07:24.364Z",
+      "updated_at": "2025-12-22T08:07:24.364Z",
+      "posted_at": null
+    }
+  },
+  {
+    "model": "posts.post",
+    "pk": 56,
+    "fields": {
+      "user": [
+        "Aaa"
+      ],
+      "caption": "aa",
+      "ai_generated": false,
+      "media_files": "[\"posts/3/1766390896.264591.jpg\"]",
+      "scheduled_time": "2025-12-22T08:09:00Z",
+      "timezone": "UTC",
+      "platforms": "[\"twitter\", \"instagram\", \"facebook\", \"linkedin\"]",
+      "status": "posted",
+      "facebook_post_id": null,
+      "twitter_post_id": "2003014919873327142",
+      "instagram_post_id": null,
+      "linkedin_post_id": "urn:li:share:7408780650628968448",
+      "tiktok_post_id": null,
+      "youtube_post_id": null,
+      "pinterest_post_id": null,
+      "telegram_post_id": null,
+      "facebook_error": "Error validating access token: The session has been invalidated because the user changed their password or Facebook has changed the session for security reasons.",
+      "twitter_error": null,
+      "instagram_error": "Facebook upload failed: Error validating access token: The session has been invalidated because the user changed their password or Facebook has changed the session for security reasons.",
+      "linkedin_error": null,
+      "tiktok_error": null,
+      "youtube_error": null,
+      "pinterest_error": null,
+      "telegram_error": null,
+      "created_at": "2025-12-22T08:08:16.285Z",
+      "updated_at": "2025-12-22T08:09:16.489Z",
+      "posted_at": "2025-12-22T08:09:16.489Z"
+    }
+  },
+  {
+    "model": "posts.post",
+    "pk": 57,
+    "fields": {
+      "user": [
+        "Aaa"
+      ],
+      "caption": "a",
+      "ai_generated": false,
+      "media_files": "[\"posts/3/1766391012.960245.jpg\"]",
+      "scheduled_time": "2025-12-22T08:10:00Z",
+      "timezone": "UTC",
+      "platforms": "[\"twitter\", \"instagram\", \"facebook\", \"linkedin\"]",
+      "status": "posted",
+      "facebook_post_id": null,
+      "twitter_post_id": "2003015425169465444",
+      "instagram_post_id": null,
+      "linkedin_post_id": "urn:li:share:7408781155778433024",
+      "tiktok_post_id": null,
+      "youtube_post_id": null,
+      "pinterest_post_id": null,
+      "telegram_post_id": null,
+      "facebook_error": "Error validating access token: The session has been invalidated because the user changed their password or Facebook has changed the session for security reasons.",
+      "twitter_error": null,
+      "instagram_error": "Facebook upload failed: Error validating access token: The session has been invalidated because the user changed their password or Facebook has changed the session for security reasons.",
+      "linkedin_error": null,
+      "tiktok_error": null,
+      "youtube_error": null,
+      "pinterest_error": null,
+      "telegram_error": null,
+      "created_at": "2025-12-22T08:10:12.964Z",
+      "updated_at": "2025-12-22T08:11:16.893Z",
+      "posted_at": "2025-12-22T08:11:16.893Z"
+    }
+  },
+  {
+    "model": "posts.post",
+    "pk": 58,
+    "fields": {
+      "user": [
+        "Aaa"
+      ],
+      "caption": "Aaaa",
+      "ai_generated": false,
+      "media_files": "[\"posts/3/1766391414.636531.jpg\"]",
+      "scheduled_time": "2025-12-22T08:17:00Z",
+      "timezone": "UTC",
+      "platforms": "[\"instagram\", \"facebook\", \"twitter\", \"linkedin\"]",
+      "status": "posted",
+      "facebook_post_id": null,
+      "twitter_post_id": "2003016968149016922",
+      "instagram_post_id": null,
+      "linkedin_post_id": "urn:li:share:7408782682014380032",
+      "tiktok_post_id": null,
+      "youtube_post_id": null,
+      "pinterest_post_id": null,
+      "telegram_post_id": null,
+      "facebook_error": "(#200) The permission(s) publish_actions are not available. It has been deprecated. If you want to provide a way for your app users to share content to Facebook, we encourage you to use our Sharing products instead.",
+      "twitter_error": null,
+      "instagram_error": "Facebook upload failed: (#200) Unpublished posts must be posted to a page as the page itself.",
+      "linkedin_error": null,
+      "tiktok_error": null,
+      "youtube_error": null,
+      "pinterest_error": null,
+      "telegram_error": null,
+      "created_at": "2025-12-22T08:16:54.640Z",
+      "updated_at": "2025-12-22T08:17:20.776Z",
+      "posted_at": "2025-12-22T08:17:20.776Z"
+    }
+  },
+  {
+    "model": "posts.post",
+    "pk": 59,
+    "fields": {
+      "user": [
+        "Aaa"
+      ],
+      "caption": "Aaaa",
+      "ai_generated": false,
+      "media_files": "[\"posts/3/1766391675.638648.png\"]",
+      "scheduled_time": "2025-12-22T08:21:00Z",
+      "timezone": "UTC",
+      "platforms": "[\"instagram\", \"facebook\"]",
+      "status": "failed",
+      "facebook_post_id": null,
+      "twitter_post_id": null,
+      "instagram_post_id": null,
+      "linkedin_post_id": null,
+      "tiktok_post_id": null,
+      "youtube_post_id": null,
+      "pinterest_post_id": null,
+      "telegram_post_id": null,
+      "facebook_error": "(#200) The permission(s) publish_actions are not available. It has been deprecated. If you want to provide a way for your app users to share content to Facebook, we encourage you to use our Sharing products instead.",
+      "twitter_error": null,
+      "instagram_error": "Facebook upload failed: (#200) Unpublished posts must be posted to a page as the page itself.",
+      "linkedin_error": null,
+      "tiktok_error": null,
+      "youtube_error": null,
+      "pinterest_error": null,
+      "telegram_error": null,
+      "created_at": "2025-12-22T08:21:15.643Z",
+      "updated_at": "2025-12-22T08:22:11.631Z",
+      "posted_at": null
+    }
+  },
+  {
+    "model": "posts.post",
+    "pk": 60,
+    "fields": {
+      "user": [
+        "Aaa"
+      ],
+      "caption": ".",
+      "ai_generated": false,
+      "media_files": "[\"posts/3/1766392074.809476.jpg\"]",
+      "scheduled_time": "2025-12-22T08:28:00Z",
+      "timezone": "UTC",
+      "platforms": "[\"instagram\", \"facebook\"]",
+      "status": "failed",
+      "facebook_post_id": null,
+      "twitter_post_id": null,
+      "instagram_post_id": null,
+      "linkedin_post_id": null,
+      "tiktok_post_id": null,
+      "youtube_post_id": null,
+      "pinterest_post_id": null,
+      "telegram_post_id": null,
+      "facebook_error": "(#200) The permission(s) publish_actions are not available. It has been deprecated. If you want to provide a way for your app users to share content to Facebook, we encourage you to use our Sharing products instead.",
+      "twitter_error": null,
+      "instagram_error": "Facebook upload failed: (#200) Unpublished posts must be posted to a page as the page itself.",
+      "linkedin_error": null,
+      "tiktok_error": null,
+      "youtube_error": null,
+      "pinterest_error": null,
+      "telegram_error": null,
+      "created_at": "2025-12-22T08:27:54.812Z",
+      "updated_at": "2025-12-22T08:28:08.039Z",
+      "posted_at": null
+    }
+  },
+  {
+    "model": "posts.post",
+    "pk": 61,
+    "fields": {
+      "user": [
+        "Aaa"
+      ],
+      "caption": "as",
+      "ai_generated": false,
+      "media_files": "[]",
+      "scheduled_time": "2025-12-22T08:31:00Z",
+      "timezone": "UTC",
+      "platforms": "[\"facebook\"]",
+      "status": "failed",
+      "facebook_post_id": null,
+      "twitter_post_id": null,
+      "instagram_post_id": null,
+      "linkedin_post_id": null,
+      "tiktok_post_id": null,
+      "youtube_post_id": null,
+      "pinterest_post_id": null,
+      "telegram_post_id": null,
+      "facebook_error": "(#200) If posting to a group, requires app being installed in the group, and \\\n          either publish_to_groups permission with user token, or both pages_read_engagement \\\n          and pages_manage_posts permission with page token; If posting to a page, \\\n          requires both pages_read_engagement and pages_manage_posts as an admin with \\\n          sufficient administrative permission",
+      "twitter_error": null,
+      "instagram_error": null,
+      "linkedin_error": null,
+      "tiktok_error": null,
+      "youtube_error": null,
+      "pinterest_error": null,
+      "telegram_error": null,
+      "created_at": "2025-12-22T08:31:45.420Z",
+      "updated_at": "2025-12-22T08:32:04.584Z",
+      "posted_at": null
+    }
+  },
+  {
+    "model": "posts.post",
+    "pk": 62,
+    "fields": {
+      "user": [
+        "Aaa"
+      ],
+      "caption": "a",
+      "ai_generated": false,
+      "media_files": "[]",
+      "scheduled_time": "2025-12-22T08:38:00Z",
+      "timezone": "UTC",
+      "platforms": "[\"facebook\"]",
+      "status": "posted",
+      "facebook_post_id": "754646057738376_122115185157011938",
+      "twitter_post_id": null,
+      "instagram_post_id": null,
+      "linkedin_post_id": null,
+      "tiktok_post_id": null,
+      "youtube_post_id": null,
+      "pinterest_post_id": null,
+      "telegram_post_id": null,
+      "facebook_error": null,
+      "twitter_error": null,
+      "instagram_error": null,
+      "linkedin_error": null,
+      "tiktok_error": null,
+      "youtube_error": null,
+      "pinterest_error": null,
+      "telegram_error": null,
+      "created_at": "2025-12-22T08:38:35.730Z",
+      "updated_at": "2025-12-22T08:39:07.184Z",
+      "posted_at": "2025-12-22T08:39:07.184Z"
+    }
+  },
+  {
+    "model": "posts.post",
+    "pk": 63,
+    "fields": {
+      "user": [
+        "Aaa"
+      ],
+      "caption": "a",
+      "ai_generated": false,
+      "media_files": "[\"posts/3/1766392787.390989.jpg\"]",
+      "scheduled_time": "2025-12-22T08:39:00Z",
+      "timezone": "UTC",
+      "platforms": "[\"instagram\", \"facebook\", \"twitter\", \"linkedin\"]",
+      "status": "posted",
+      "facebook_post_id": "122115185355011938",
+      "twitter_post_id": "2003022848600998194",
+      "instagram_post_id": "18081056404916868",
+      "linkedin_post_id": "urn:li:share:7408788557961560065",
+      "tiktok_post_id": null,
+      "youtube_post_id": null,
+      "pinterest_post_id": null,
+      "telegram_post_id": null,
+      "facebook_error": null,
+      "twitter_error": null,
+      "instagram_error": null,
+      "linkedin_error": null,
+      "tiktok_error": null,
+      "youtube_error": null,
+      "pinterest_error": null,
+      "telegram_error": null,
+      "created_at": "2025-12-22T08:39:47.394Z",
+      "updated_at": "2025-12-22T08:40:41.716Z",
+      "posted_at": "2025-12-22T08:40:41.716Z"
+    }
+  },
+  {
+    "model": "posts.post",
+    "pk": 64,
+    "fields": {
+      "user": [
+        "Aaa"
+      ],
+      "caption": "aaa",
+      "ai_generated": false,
+      "media_files": "[]",
+      "scheduled_time": "2025-12-22T09:04:00Z",
+      "timezone": "UTC",
+      "platforms": "[]",
+      "status": "failed",
+      "facebook_post_id": null,
+      "twitter_post_id": null,
+      "instagram_post_id": null,
+      "linkedin_post_id": null,
+      "tiktok_post_id": null,
+      "youtube_post_id": null,
+      "pinterest_post_id": null,
+      "telegram_post_id": null,
+      "facebook_error": null,
+      "twitter_error": null,
+      "instagram_error": null,
+      "linkedin_error": null,
+      "tiktok_error": null,
+      "youtube_error": null,
+      "pinterest_error": null,
+      "telegram_error": null,
+      "created_at": "2025-12-22T09:03:12.316Z",
+      "updated_at": "2025-12-22T09:04:46.660Z",
+      "posted_at": null
+    }
+  },
+  {
+    "model": "posts.post",
+    "pk": 65,
+    "fields": {
+      "user": [
+        "Aaa"
+      ],
+      "caption": "a",
+      "ai_generated": false,
+      "media_files": "[]",
+      "scheduled_time": "2025-12-22T09:07:00Z",
+      "timezone": "UTC",
+      "platforms": "[]",
+      "status": "failed",
+      "facebook_post_id": null,
+      "twitter_post_id": null,
+      "instagram_post_id": null,
+      "linkedin_post_id": null,
+      "tiktok_post_id": null,
+      "youtube_post_id": null,
+      "pinterest_post_id": null,
+      "telegram_post_id": null,
+      "facebook_error": null,
+      "twitter_error": null,
+      "instagram_error": null,
+      "linkedin_error": null,
+      "tiktok_error": null,
+      "youtube_error": null,
+      "pinterest_error": null,
+      "telegram_error": null,
+      "created_at": "2025-12-22T09:07:38.492Z",
+      "updated_at": "2025-12-22T09:07:46.841Z",
+      "posted_at": null
+    }
+  },
+  {
+    "model": "posts.post",
+    "pk": 66,
+    "fields": {
+      "user": [
+        "Aaa"
+      ],
+      "caption": "mm",
+      "ai_generated": false,
+      "media_files": "[\"posts\\\\3\\\\1766394633_0.png\", \"posts\\\\3\\\\1766394633_1.png\", \"posts\\\\3\\\\1766394633_2.png\", \"posts\\\\3\\\\1766394633_3.jpg\"]",
+      "scheduled_time": "2025-12-22T09:10:00Z",
+      "timezone": "UTC",
+      "platforms": "[\"instagram\", \"facebook\", \"twitter\", \"linkedin\"]",
+      "status": "posted",
+      "facebook_post_id": "122115188979011938",
+      "twitter_post_id": "2003030769007239517",
+      "instagram_post_id": "18373788025084050",
+      "linkedin_post_id": "urn:li:share:7408796485938495488",
+      "tiktok_post_id": null,
+      "youtube_post_id": null,
+      "pinterest_post_id": null,
+      "telegram_post_id": null,
+      "facebook_error": null,
+      "twitter_error": null,
+      "instagram_error": null,
+      "linkedin_error": null,
+      "tiktok_error": null,
+      "youtube_error": null,
+      "pinterest_error": null,
+      "telegram_error": null,
+      "created_at": "2025-12-22T09:10:33.158Z",
+      "updated_at": "2025-12-22T09:12:11.815Z",
+      "posted_at": "2025-12-22T09:12:11.815Z"
+    }
+  },
+  {
+    "model": "admin.logentry",
+    "pk": 1,
+    "fields": {
+      "action_time": "2025-12-20T10:42:42.378Z",
+      "user": [
+        "admin1"
+      ],
+      "content_type": [
+        "platforms",
+        "socialaccount"
+      ],
+      "object_id": "1",
+      "object_repr": "admin1 - Facebook (Aa)",
+      "action_flag": 1,
+      "change_message": "[{\"added\": {}}]"
+    }
+  },
+  {
+    "model": "admin.logentry",
+    "pk": 2,
+    "fields": {
+      "action_time": "2025-12-20T10:51:40.796Z",
+      "user": [
+        "admin1"
+      ],
+      "content_type": [
+        "accounts",
+        "userprofile"
+      ],
+      "object_id": "1",
+      "object_repr": "Aaa - Pending",
+      "action_flag": 2,
+      "change_message": "[{\"changed\": {\"fields\": [\"Max social accounts\"]}}]"
+    }
+  },
+  {
+    "model": "admin.logentry",
+    "pk": 3,
+    "fields": {
+      "action_time": "2025-12-20T10:53:01.753Z",
+      "user": [
+        "admin1"
+      ],
+      "content_type": [
+        "accounts",
+        "userprofile"
+      ],
+      "object_id": "1",
+      "object_repr": "Aaa - Pending",
+      "action_flag": 2,
+      "change_message": "[{\"changed\": {\"fields\": [\"Subscription plan\"]}}]"
+    }
+  },
+  {
+    "model": "admin.logentry",
+    "pk": 4,
+    "fields": {
+      "action_time": "2025-12-20T10:53:15.428Z",
+      "user": [
+        "admin1"
+      ],
+      "content_type": [
+        "accounts",
+        "userprofile"
+      ],
+      "object_id": "1",
+      "object_repr": "Aaa - Approved",
+      "action_flag": 2,
+      "change_message": "[{\"changed\": {\"fields\": [\"Is approved\", \"Subscription plan\"]}}]"
+    }
+  },
+  {
+    "model": "admin.logentry",
+    "pk": 5,
+    "fields": {
+      "action_time": "2025-12-22T05:16:55.925Z",
+      "user": [
+        "admin1"
+      ],
+      "content_type": [
+        "accounts",
+        "userprofile"
+      ],
+      "object_id": "1",
+      "object_repr": "Aaa - Approved",
+      "action_flag": 2,
+      "change_message": "[{\"changed\": {\"fields\": [\"Subscription plan\", \"Max posts per month\"]}}]"
+    }
+  },
+  {
+    "model": "admin.logentry",
+    "pk": 6,
+    "fields": {
+      "action_time": "2025-12-22T05:19:17.042Z",
+      "user": [
+        "admin1"
+      ],
+      "content_type": [
+        "accounts",
+        "userprofile"
+      ],
+      "object_id": "2",
+      "object_repr": "admin1 - Pending",
+      "action_flag": 2,
+      "change_message": "[{\"changed\": {\"fields\": [\"Subscription plan\", \"Max social accounts\", \"Max posts per month\"]}}]"
+    }
+  },
+  {
+    "model": "admin.logentry",
+    "pk": 7,
+    "fields": {
+      "action_time": "2025-12-22T05:19:25.921Z",
+      "user": [
+        "admin1"
+      ],
+      "content_type": [
+        "accounts",
+        "userprofile"
+      ],
+      "object_id": "2",
+      "object_repr": "admin1 - Approved",
+      "action_flag": 2,
+      "change_message": "[{\"changed\": {\"fields\": [\"Is approved\"]}}]"
+    }
+  }
+]

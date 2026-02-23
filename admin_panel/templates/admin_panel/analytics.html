@@ -1,0 +1,118 @@
+{% extends 'admin_panel/base.html' %}
+{% block title %}Analytics{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1><i class="fas fa-chart-bar"></i> Analytics</h1>
+    <div>
+        <a href="?days=7" class="btn btn-sm {% if days == 7 %}btn-primary{% else %}btn-warning{% endif %}">7 Days</a>
+        <a href="?days=30" class="btn btn-sm {% if days == 30 %}btn-primary{% else %}btn-warning{% endif %}">30 Days</a>
+        <a href="?days=90" class="btn btn-sm {% if days == 90 %}btn-primary{% else %}btn-warning{% endif %}">90 Days</a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-6">
+        <div class="card">
+            <h3 class="card-title"><i class="fas fa-paper-plane"></i> Daily Posts</h3>
+            <canvas id="postsChart" height="200"></canvas>
+        </div>
+    </div>
+    <div class="col-6">
+        <div class="card">
+            <h3 class="card-title"><i class="fas fa-pen-fancy"></i> Daily Captions</h3>
+            <canvas id="captionsChart" height="200"></canvas>
+        </div>
+    </div>
+</div>
+
+<div class="row" style="margin-top:1rem;">
+    <div class="col-4">
+        <div class="card">
+            <h3 class="card-title"><i class="fas fa-share-alt"></i> Platform Usage</h3>
+            <canvas id="platformChart" height="200"></canvas>
+        </div>
+    </div>
+    <div class="col-8">
+        <div class="card">
+            <h3 class="card-title"><i class="fas fa-trophy"></i> Top 20 Token Users</h3>
+            <div class="table-wrapper" style="max-height:400px; overflow-y:auto;">
+                <table>
+                    <thead><tr><th>#</th><th>User</th><th>Posts</th><th>Captions</th><th>Tokens</th></tr></thead>
+                    <tbody>
+                    {% for u in top_users %}
+                    <tr>
+                        <td>{{ forloop.counter }}</td>
+                        <td><a href="{% url 'admin_panel:user_detail' u.id %}" style="color:#818cf8;">{{ u.username }}</a></td>
+                        <td>{{ u.posts }}</td>
+                        <td>{{ u.captions }}</td>
+                        <td><span class="token-badge">🪙 {{ u.caption_tokens }}</span></td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="5" class="empty-state">No data</td></tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+const chartOptions = {
+    responsive: true,
+    plugins: { legend: { display: false } },
+    scales: {
+        x: { grid: { color: 'rgba(99,102,241,0.1)' }, ticks: { color: '#64748b' } },
+        y: { grid: { color: 'rgba(99,102,241,0.1)' }, ticks: { color: '#64748b' } }
+    }
+};
+
+// Posts Chart
+new Chart(document.getElementById('postsChart'), {
+    type: 'bar',
+    data: {
+        labels: {{ daily_posts|safe }}.map(d => d.date),
+        datasets: [{
+            label: 'Posts',
+            data: {{ daily_posts|safe }}.map(d => d.count),
+            backgroundColor: 'rgba(99,102,241,0.6)',
+            borderRadius: 4
+        }]
+    },
+    options: chartOptions
+});
+
+// Captions Chart
+new Chart(document.getElementById('captionsChart'), {
+    type: 'bar',
+    data: {
+        labels: {{ daily_captions|safe }}.map(d => d.date),
+        datasets: [{
+            label: 'Captions',
+            data: {{ daily_captions|safe }}.map(d => d.count),
+            backgroundColor: 'rgba(236,72,153,0.6)',
+            borderRadius: 4
+        }]
+    },
+    options: chartOptions
+});
+
+// Platform Chart
+const platformStats = {{ platform_stats|safe }};
+new Chart(document.getElementById('platformChart'), {
+    type: 'doughnut',
+    data: {
+        labels: ['Facebook', 'Instagram', 'Twitter', 'LinkedIn'],
+        datasets: [{
+            data: [platformStats.facebook || 0, platformStats.instagram || 0, platformStats.twitter || 0, platformStats.linkedin || 0],
+            backgroundColor: ['#3b82f6', '#ec4899', '#1da1f2', '#0077b5']
+        }]
+    },
+    options: { responsive: true, plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8' } } } }
+});
+</script>
+{% endblock %}

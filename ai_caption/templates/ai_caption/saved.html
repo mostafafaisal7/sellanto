@@ -1,0 +1,508 @@
+<!-- C:\Users\Trust computer\Desktop\Final_version_socialSync\ai_caption\templates\ai_caption\saved.html -->
+
+{% extends 'base.html' %}
+
+{% block title %}Saved Captions - Sellanto{% endblock %}
+
+{% block extra_css %}
+<style>
+    .saved-container {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 2rem 2.5rem;
+    }
+
+    .saved-hero {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        padding: 2.5rem;
+        border-radius: 2rem;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        margin-bottom: 2rem;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .saved-hero::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, transparent, #10b981, #34d399, #10b981, transparent);
+        background-size: 200% 100%;
+        animation: gradient-shift 3s linear infinite;
+    }
+
+    @keyframes gradient-shift {
+        0% { background-position: 0% 0%; }
+        100% { background-position: 200% 0%; }
+    }
+
+    .hero-content {
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+        position: relative;
+        z-index: 1;
+    }
+
+    .hero-icon {
+        width: 70px;
+        height: 70px;
+        background: linear-gradient(135deg, #10b981, #34d399);
+        border-radius: 1.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2rem;
+        color: white;
+        box-shadow: 0 10px 30px rgba(16, 185, 129, 0.4);
+    }
+
+    .hero-text h1 {
+        font-size: 2.25rem;
+        font-weight: 800;
+        background: linear-gradient(135deg, #10b981, #34d399);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 0.25rem;
+    }
+
+    .hero-text p {
+        color: #94a3b8;
+    }
+
+    .hero-actions {
+        margin-left: auto;
+    }
+
+    .btn-new {
+        padding: 1rem 2rem;
+        background: linear-gradient(135deg, #10b981, #34d399);
+        color: white;
+        border: none;
+        border-radius: 1rem;
+        font-size: 1rem;
+        font-weight: 700;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        text-decoration: none;
+        box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+        transition: all 0.3s;
+    }
+
+    .btn-new:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(16, 185, 129, 0.4);
+    }
+
+    /* Filter Tabs */
+    .filter-tabs {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        padding: 1rem;
+        border-radius: 1rem;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        margin-bottom: 2rem;
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    .filter-tab {
+        padding: 0.75rem 1.5rem;
+        border-radius: 0.75rem;
+        font-size: 0.9rem;
+        font-weight: 600;
+        cursor: pointer;
+        border: 2px solid rgba(255, 255, 255, 0.1);
+        background: transparent;
+        color: #94a3b8;
+        text-decoration: none;
+        transition: all 0.3s;
+    }
+
+    .filter-tab:hover {
+        border-color: rgba(16, 185, 129, 0.3);
+        color: #34d399;
+    }
+
+    .filter-tab.active {
+        background: linear-gradient(135deg, #10b981, #34d399);
+        border-color: transparent;
+        color: white;
+    }
+
+    /* Saved Grid */
+    .saved-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+        gap: 1.5rem;
+    }
+
+    .saved-card {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        border-radius: 1.5rem;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        overflow: hidden;
+        transition: all 0.3s;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    }
+
+    .saved-card:hover {
+        transform: translateY(-5px);
+        border-color: rgba(16, 185, 129, 0.2);
+        box-shadow: 0 20px 60px rgba(16, 185, 129, 0.15);
+    }
+
+    .card-header {
+        padding: 1.25rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        display: flex;
+        /* justify-content: space-between; */
+        align-items: center;
+    }
+
+    .card-date {
+        font-size: 0.85rem;
+        color: #64748b;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .favorite-btn {
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 0.5rem;
+        border-radius: 0.5rem;
+        transition: all 0.3s;
+        color: #64748b;
+        font-size: 1.25rem;
+    }
+
+    .favorite-btn:hover {
+        background: rgba(251, 191, 36, 0.1);
+        transform: scale(1.1);
+    }
+
+    .favorite-btn.active {
+        color: #fbbf24;
+    }
+
+    .card-body {
+        padding: 1.5rem;
+    }
+
+    .caption-text {
+        font-size: 1rem;
+        line-height: 1.7;
+        color: #e5e7eb;
+        display: -webkit-box;
+        -webkit-line-clamp: 4;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        margin-bottom: 1rem;
+    }
+
+    .hashtags-text {
+        font-size: 0.9rem;
+        color: #a78bfa;
+        font-weight: 500;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        margin-bottom: 1rem;
+    }
+
+    .usage-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        background: rgba(16, 185, 129, 0.1);
+        color: #34d399;
+        padding: 0.35rem 0.75rem;
+        border-radius: 1rem;
+        font-size: 0.8rem;
+        font-weight: 600;
+    }
+
+    .card-footer {
+        padding: 1rem 1.5rem;
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+        display: flex;
+        gap: 0.75rem;
+    }
+
+    .card-btn {
+        flex: 1;
+        padding: 0.75rem;
+        border-radius: 0.75rem;
+        font-size: 0.9rem;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        transition: all 0.3s;
+        border: none;
+    }
+
+    .btn-copy {
+        background: rgba(59, 130, 246, 0.1);
+        color: #60a5fa;
+        border: 1px solid rgba(59, 130, 246, 0.2);
+    }
+
+    .btn-copy:hover {
+        background: rgba(59, 130, 246, 0.2);
+    }
+
+    .btn-use {
+        background: rgba(16, 185, 129, 0.1);
+        color: #34d399;
+        border: 1px solid rgba(16, 185, 129, 0.2);
+    }
+
+    .btn-use:hover {
+        background: rgba(16, 185, 129, 0.2);
+    }
+
+    .btn-delete {
+        background: rgba(239, 68, 68, 0.1);
+        color: #f87171;
+        border: 1px solid rgba(239, 68, 68, 0.2);
+        flex: 0;
+        padding: 0.75rem;
+    }
+
+    .btn-delete:hover {
+        background: rgba(239, 68, 68, 0.2);
+    }
+
+    /* Empty State */
+    .empty-state {
+        text-align: center;
+        padding: 4rem 2rem;
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        border-radius: 2rem;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .empty-icon {
+        width: 100px;
+        height: 100px;
+        background: linear-gradient(135deg, #10b981, #34d399);
+        border-radius: 2rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 1.5rem;
+        font-size: 2.5rem;
+        color: white;
+    }
+
+    .empty-state h3 {
+        font-size: 1.5rem;
+        color: #e5e7eb;
+        margin-bottom: 0.5rem;
+    }
+
+    .empty-state p {
+        color: #64748b;
+        margin-bottom: 1.5rem;
+    }
+
+    /* Toast */
+    .toast {
+        position: fixed;
+        bottom: 2rem;
+        right: 2rem;
+        padding: 1rem 1.5rem;
+        background: linear-gradient(135deg, #10b981, #34d399);
+        color: white;
+        border-radius: 1rem;
+        font-weight: 600;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        transform: translateY(100px);
+        opacity: 0;
+        transition: all 0.3s ease;
+        z-index: 1000;
+    }
+
+    .toast.show {
+        transform: translateY(0);
+        opacity: 1;
+    }
+
+    @media (max-width: 768px) {
+        .saved-container {
+            padding: 1.5rem;
+        }
+
+        .hero-content {
+            flex-direction: column;
+            text-align: center;
+        }
+
+        .hero-actions {
+            margin-left: 0;
+        }
+
+        .saved-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="saved-container">
+    <div class="saved-hero">
+        <div class="hero-content">
+            <div class="hero-icon"><i class="fas fa-bookmark"></i></div>
+            <div class="hero-text">
+                <h1>Saved Captions</h1>
+                <p>Your collection of favorite captions</p>
+            </div>
+            <div class="hero-actions">
+                <a href="{% url 'ai_caption:generator' %}" class="btn-new">
+                    <i class="fas fa-plus"></i> Generate New
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="filter-tabs">
+        <a href="{% url 'ai_caption:saved' %}" class="filter-tab {% if not favorites_only %}active{% endif %}">
+            All Captions
+        </a>
+        <a href="{% url 'ai_caption:saved' %}?favorites=true" class="filter-tab {% if favorites_only %}active{% endif %}">
+            ⭐ Favorites
+        </a>
+    </div>
+
+    {% if saved_captions %}
+    <div class="saved-grid">
+        {% for saved in saved_captions %}
+        <div class="saved-card" data-id="{{ saved.pk }}">
+            <div class="card-header">
+                <span class="card-date">
+                    <i class="fas fa-calendar"></i>
+                    {{ saved.created_at|date:"M d, Y" }}
+                </span>
+                <button class="favorite-btn {% if saved.is_favorite %}active{% endif %}" onclick="toggleFavorite({{ saved.pk }})">
+                    <i class="fas fa-star"></i>
+                </button>
+            </div>
+            
+            <div class="card-body">
+                <div class="caption-text" id="caption-{{ saved.pk }}">{{ saved.caption_text }}</div>
+                
+                {% if saved.hashtags %}
+                <div class="hashtags-text">{{ saved.hashtags }}</div>
+                {% endif %}
+                
+                {% if saved.used_count > 0 %}
+                <span class="usage-badge">
+                    <i class="fas fa-check"></i>
+                    Used {{ saved.used_count }} time{{ saved.used_count|pluralize }}
+                </span>
+                {% endif %}
+            </div>
+            
+            <div class="card-footer">
+                <button class="card-btn btn-copy" onclick="copyCaption({{ saved.pk }})">
+                    <i class="fas fa-copy"></i> Copy
+                </button>
+                <button class="card-btn btn-use" onclick="useCaption({{ saved.pk }})">
+                    <i class="fas fa-share"></i> Use
+                </button>
+                <button class="card-btn btn-delete" onclick="deleteCaption({{ saved.pk }})">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-icon"><i class="fas fa-bookmark"></i></div>
+        <h3>No saved captions</h3>
+        <p>{% if favorites_only %}No favorites yet{% else %}Save your best captions{% endif %}</p>
+        <a href="{% url 'ai_caption:generator' %}" class="btn-new">
+            <i class="fas fa-magic"></i> Generate Caption
+        </a>
+    </div>
+    {% endif %}
+</div>
+
+<div class="toast" id="toast">Success!</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function copyCaption(id) {
+        const text = document.getElementById('caption-' + id).textContent;
+        navigator.clipboard.writeText(text).then(() => showToast('Copied!'));
+    }
+
+    async function toggleFavorite(id) {
+        try {
+            const response = await fetch(`/ai-caption/saved/favorite/${id}/`, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+            });
+            const data = await response.json();
+            if (data.success) {
+                const btn = document.querySelector(`.saved-card[data-id="${id}"] .favorite-btn`);
+                btn.classList.toggle('active', data.is_favorite);
+                showToast(data.is_favorite ? 'Added to favorites!' : 'Removed');
+                {% if favorites_only %}
+                if (!data.is_favorite) document.querySelector(`.saved-card[data-id="${id}"]`).remove();
+                {% endif %}
+            }
+        } catch (e) {}
+    }
+
+    async function useCaption(id) {
+        try {
+            const response = await fetch(`/ai-caption/saved/copy-to-post/${id}/`, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+            });
+            const data = await response.json();
+            if (data.success) {
+                showToast('Ready!');
+                setTimeout(() => window.location.href = data.redirect_url, 1000);
+            }
+        } catch (e) {}
+    }
+
+    async function deleteCaption(id) {
+        if (!confirm('Delete this caption?')) return;
+        try {
+            const response = await fetch(`/ai-caption/saved/delete/${id}/`, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+            });
+            if (response.ok) {
+                document.querySelector(`.saved-card[data-id="${id}"]`).remove();
+                showToast('Deleted');
+            }
+        } catch (e) {}
+    }
+
+    function showToast(msg) {
+        const toast = document.getElementById('toast');
+        toast.textContent = msg;
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+</script>
+{% endblock %}

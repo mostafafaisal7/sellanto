@@ -1,0 +1,1825 @@
+{% extends 'base.html' %}
+
+{% block title %}AI Image Generator - SocialSync{% endblock %}
+
+{% block extra_css %}
+<style>
+    .generator-container {
+        max-width: 1500px;
+        margin: 0 auto;
+        padding: 2rem 2.5rem;
+    }
+
+    /* API Key Warning */
+    .api-key-warning {
+        background: linear-gradient(145deg, #1a1a1a 0%, #111111 100%);
+        border-radius: 1.5rem;
+        border: 2px solid rgba(16, 185, 129, 0.3);
+        margin-bottom: 2rem;
+        overflow: hidden;
+        position: relative;
+    }
+
+    .api-key-warning::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, #10b981, #34d399, #10b981);
+    }
+
+    .warning-content {
+        padding: 1.5rem 2rem;
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+    }
+
+    .warning-icon {
+        width: 55px;
+        height: 55px;
+        background: linear-gradient(135deg, #10b981, #34d399);
+        border-radius: 1rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        color: white;
+        flex-shrink: 0;
+    }
+
+    .warning-text {
+        flex: 1;
+    }
+
+    .warning-text h3 {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: #34d399;
+        margin-bottom: 0.25rem;
+    }
+
+    .warning-text p {
+        color: #94a3b8;
+        font-size: 0.95rem;
+    }
+
+    .warning-btn {
+        padding: 0.875rem 1.5rem;
+        background: linear-gradient(135deg, #10b981, #34d399);
+        color: white;
+        border-radius: 0.875rem;
+        font-size: 0.95rem;
+        font-weight: 700;
+        text-decoration: none;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: all 0.3s;
+        flex-shrink: 0;
+    }
+
+    .warning-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(16, 185, 129, 0.4);
+    }
+
+    /* Hero Header */
+    .generator-hero {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        padding: 2.5rem;
+        border-radius: 2rem;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        margin-bottom: 2rem;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .generator-hero::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, transparent, #10b981, #34d399, #6ee7b7, #34d399, #10b981, transparent);
+        background-size: 200% 100%;
+        animation: shimmer 8s linear infinite;
+    }
+
+    @keyframes shimmer {
+        0% { background-position: -200% 0; }
+        100% { background-position: 200% 0; }
+    }
+
+    .hero-content {
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+    }
+
+    .hero-icon {
+        width: 75px;
+        height: 75px;
+        background: linear-gradient(135deg, #10b981, #34d399, #6ee7b7);
+        border-radius: 1.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2.25rem;
+        color: white;
+        box-shadow: 0 10px 30px rgba(16, 185, 129, 0.4);
+        animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+        0%, 100% { box-shadow: 0 10px 30px rgba(16, 185, 129, 0.4); }
+        50% { box-shadow: 0 15px 40px rgba(16, 185, 129, 0.6); }
+    }
+
+    .hero-text h1 {
+        font-size: 2.5rem;
+        font-weight: 900;
+        background: linear-gradient(135deg, #10b981, #34d399, #6ee7b7);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 0.35rem;
+    }
+
+    .hero-text p {
+        color: #94a3b8;
+        font-size: 1.05rem;
+    }
+
+    /* Main Layout */
+    .main-layout {
+        display: grid;
+        grid-template-columns: 1fr 380px;
+        gap: 2rem;
+    }
+
+    /* Form Card */
+    .form-card {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        border-radius: 1.5rem;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        overflow: hidden;
+    }
+
+    .card-header {
+        padding: 1.5rem 2rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .card-header i {
+        color: #34d399;
+        font-size: 1.25rem;
+    }
+
+    .card-header h2 {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: #e5e7eb;
+    }
+
+    .card-body {
+        padding: 2rem;
+    }
+
+    /* Form Elements */
+    .form-group {
+        margin-bottom: 1.5rem;
+    }
+
+    .form-label {
+        display: block;
+        margin-bottom: 0.75rem;
+        font-weight: 600;
+        color: #e5e7eb;
+        font-size: 0.9rem;
+    }
+
+    .form-label .required {
+        color: #f87171;
+        margin-left: 0.25rem;
+    }
+
+    .form-control {
+        width: 100%;
+        padding: 1rem 1.25rem;
+        background: rgba(255, 255, 255, 0.05);
+        border: 2px solid rgba(255, 255, 255, 0.1);
+        border-radius: 0.875rem;
+        font-size: 1rem;
+        color: #e5e7eb;
+        transition: all 0.3s;
+    }
+
+    .form-control::placeholder {
+        color: #64748b;
+    }
+
+    .form-control:focus {
+        outline: none;
+        background: rgba(255, 255, 255, 0.08);
+        border-color: rgba(16, 185, 129, 0.5);
+        box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.1);
+    }
+
+    textarea.form-control {
+        min-height: 120px;
+        resize: vertical;
+    }
+
+    select.form-control {
+        cursor: pointer;
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%2394a3b8' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10l-5 5z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 1rem center;
+        padding-right: 2.5rem;
+    }
+
+    /* ========== Product Upload Styles ========== */
+    .product-upload-section {
+        background: linear-gradient(145deg, rgba(139, 92, 246, 0.08), rgba(139, 92, 246, 0.03));
+        border: 2px solid rgba(139, 92, 246, 0.2);
+        border-radius: 1rem;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        transition: all 0.3s;
+    }
+
+    .product-upload-section.active {
+        border-color: rgba(139, 92, 246, 0.5);
+        box-shadow: 0 0 20px rgba(139, 92, 246, 0.1);
+    }
+
+    .product-section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 0.75rem;
+    }
+
+    .product-section-header h3 {
+        font-size: 1rem; font-weight: 700; color: #a78bfa;
+        display: flex; align-items: center; gap: 0.5rem; margin: 0;
+    }
+
+    .product-toggle {
+        position: relative;
+        width: 48px; height: 26px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 13px;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+
+    .product-toggle.active {
+        background: linear-gradient(135deg, #8b5cf6, #a78bfa);
+    }
+
+    .product-toggle::after {
+        content: '';
+        position: absolute;
+        width: 20px; height: 20px;
+        background: white;
+        border-radius: 50%;
+        top: 3px; left: 3px;
+        transition: transform 0.3s;
+    }
+
+    .product-toggle.active::after {
+        transform: translateX(22px);
+    }
+
+    .product-upload-area {
+        display: none;
+    }
+
+    .product-upload-area.show {
+        display: block;
+    }
+
+    .product-dropzone {
+        border: 2px dashed rgba(139, 92, 246, 0.3);
+        border-radius: 0.75rem;
+        padding: 2rem;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.3s;
+        position: relative;
+    }
+
+    .product-dropzone:hover {
+        border-color: rgba(139, 92, 246, 0.6);
+        background: rgba(139, 92, 246, 0.05);
+    }
+
+    .product-dropzone.dragover {
+        border-color: #8b5cf6;
+        background: rgba(139, 92, 246, 0.1);
+        transform: scale(1.01);
+    }
+
+    .product-dropzone-icon {
+        font-size: 2rem;
+        color: #a78bfa;
+        margin-bottom: 0.5rem;
+    }
+
+    .product-dropzone-text {
+        color: #e5e7eb;
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+    }
+
+    .product-dropzone-hint {
+        font-size: 0.8rem;
+        color: #64748b;
+    }
+
+    .product-dropzone input[type="file"] {
+        position: absolute;
+        top: 0; left: 0; width: 100%; height: 100%;
+        opacity: 0; cursor: pointer;
+    }
+
+    .product-preview {
+        display: none;
+        margin-top: 1rem;
+        position: relative;
+    }
+
+    .product-preview.show {
+        display: block;
+    }
+
+    .product-preview-inner {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        background: rgba(139, 92, 246, 0.08);
+        border: 1px solid rgba(139, 92, 246, 0.2);
+        border-radius: 0.75rem;
+        padding: 1rem;
+    }
+
+    .product-preview-img {
+        width: 80px;
+        height: 80px;
+        object-fit: contain;
+        border-radius: 0.5rem;
+        background: rgba(0,0,0,0.2);
+    }
+
+    .product-preview-info {
+        flex: 1;
+    }
+
+    .product-preview-name {
+        font-weight: 600;
+        color: #e5e7eb;
+        font-size: 0.9rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 200px;
+    }
+
+    .product-preview-size {
+        font-size: 0.8rem; color: #64748b;
+    }
+
+    .product-preview-badge {
+        background: rgba(139, 92, 246, 0.2);
+        color: #a78bfa;
+        font-size: 0.75rem;
+        padding: 0.2rem 0.5rem;
+        border-radius: 0.25rem;
+        display: inline-block;
+        margin-top: 0.3rem;
+    }
+
+    .product-remove-btn {
+        background: rgba(239, 68, 68, 0.2);
+        color: #f87171;
+        border: none;
+        width: 32px; height: 32px;
+        border-radius: 50%;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.3s;
+    }
+
+    .product-remove-btn:hover {
+        background: rgba(239, 68, 68, 0.4);
+    }
+
+    .product-settings {
+        display: none;
+        margin-top: 1rem;
+    }
+
+    .product-settings.show {
+        display: block;
+    }
+
+    .product-position-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0.5rem;
+        margin-top: 0.5rem;
+    }
+
+    .product-pos-option {
+        background: rgba(255, 255, 255, 0.03);
+        border: 2px solid rgba(139, 92, 246, 0.15);
+        border-radius: 0.5rem;
+        padding: 0.75rem 0.5rem;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.3s;
+        color: #94a3b8;
+        font-size: 0.8rem;
+    }
+
+    .product-pos-option:hover {
+        border-color: rgba(139, 92, 246, 0.4);
+    }
+
+    .product-pos-option.active {
+        border-color: #8b5cf6;
+        background: rgba(139, 92, 246, 0.15);
+        color: #a78bfa;
+    }
+
+    .range-slider.purple::-webkit-slider-thumb {
+        background: #8b5cf6;
+    }
+    .range-value.purple {
+        color: #a78bfa;
+    }
+
+    .result-product-badge {
+        display: none;
+        background: rgba(139, 92, 246, 0.2);
+        color: #a78bfa;
+        padding: 0.4rem 0.8rem;
+        border-radius: 0.5rem;
+        font-size: 0.8rem;
+        font-weight: 600;
+    }
+
+    .result-product-badge.show { display: flex; align-items: center; gap: 0.4rem; }
+
+    .form-hint {
+        margin-top: 0.5rem;
+        font-size: 0.85rem;
+        color: #64748b;
+    }
+
+    /* Form Row */
+    .form-row {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem;
+    }
+
+    .form-row-3 {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1rem;
+    }
+
+    /* Style Grid */
+    .style-grid {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 0.75rem;
+    }
+
+    .style-option {
+        background: rgba(255, 255, 255, 0.03);
+        border: 2px solid rgba(255, 255, 255, 0.1);
+        border-radius: 0.75rem;
+        padding: 0.75rem;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+
+    .style-option:hover {
+        background: rgba(255, 255, 255, 0.06);
+        border-color: rgba(16, 185, 129, 0.3);
+    }
+
+    .style-option.active {
+        background: rgba(16, 185, 129, 0.1);
+        border-color: #34d399;
+    }
+
+    .style-option i {
+        font-size: 1.5rem;
+        color: #94a3b8;
+        margin-bottom: 0.5rem;
+        display: block;
+    }
+
+    .style-option.active i {
+        color: #34d399;
+    }
+
+    .style-option span {
+        font-size: 0.75rem;
+        color: #94a3b8;
+        font-weight: 600;
+    }
+
+    .style-option.active span {
+        color: #34d399;
+    }
+
+    .style-option input {
+        display: none;
+    }
+
+    /* Logo Section */
+    .logo-section {
+        background: rgba(16, 185, 129, 0.05);
+        border: 1px solid rgba(16, 185, 129, 0.1);
+        border-radius: 1rem;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .logo-section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 1rem;
+    }
+
+    .logo-section-header h3 {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #34d399;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .logo-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+    }
+
+    .logo-item {
+        background: rgba(255, 255, 255, 0.05);
+        border: 2px solid rgba(255, 255, 255, 0.1);
+        border-radius: 0.75rem;
+        padding: 0.5rem;
+        cursor: pointer;
+        transition: all 0.3s;
+        aspect-ratio: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+    }
+
+    .logo-item:hover {
+        border-color: rgba(16, 185, 129, 0.3);
+    }
+
+    .logo-item.active {
+        border-color: #34d399;
+        background: rgba(16, 185, 129, 0.1);
+    }
+
+    .logo-item img {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+    }
+
+    .logo-item.add-logo {
+        border-style: dashed;
+    }
+
+    .logo-item.add-logo i {
+        color: #64748b;
+        font-size: 1.5rem;
+    }
+
+    .logo-item input {
+        display: none;
+    }
+
+    /* Position Grid */
+    .position-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 0.5rem;
+    }
+
+    .position-option {
+        background: rgba(255, 255, 255, 0.03);
+        border: 2px solid rgba(255, 255, 255, 0.1);
+        border-radius: 0.5rem;
+        padding: 0.5rem;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.3s;
+        font-size: 0.75rem;
+        color: #94a3b8;
+    }
+
+    .position-option:hover {
+        border-color: rgba(16, 185, 129, 0.3);
+    }
+
+    .position-option.active {
+        background: rgba(16, 185, 129, 0.1);
+        border-color: #34d399;
+        color: #34d399;
+    }
+
+    .position-option input {
+        display: none;
+    }
+
+    /* Range Slider */
+    .range-group {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .range-slider {
+        flex: 1;
+        -webkit-appearance: none;
+        height: 6px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 3px;
+        outline: none;
+    }
+
+    .range-slider::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 18px;
+        height: 18px;
+        background: linear-gradient(135deg, #10b981, #34d399);
+        border-radius: 50%;
+        cursor: pointer;
+        box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4);
+    }
+
+    .range-value {
+        min-width: 40px;
+        text-align: center;
+        font-weight: 600;
+        color: #34d399;
+    }
+
+    /* Advanced Toggle */
+    .advanced-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 1rem 1.25rem;
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: 0.875rem;
+        cursor: pointer;
+        margin-bottom: 1rem;
+        transition: all 0.3s;
+    }
+
+    .advanced-toggle:hover {
+        background: rgba(255, 255, 255, 0.05);
+    }
+
+    .advanced-toggle span {
+        font-weight: 600;
+        color: #e5e7eb;
+    }
+
+    .advanced-toggle i {
+        color: #94a3b8;
+        transition: transform 0.3s;
+    }
+
+    .advanced-toggle.open i {
+        transform: rotate(180deg);
+    }
+
+    .advanced-options {
+        display: none;
+        padding-top: 1rem;
+    }
+
+    .advanced-options.show {
+        display: block;
+    }
+
+    /* Generate Button */
+    .generate-btn {
+        width: 100%;
+        padding: 1.25rem;
+        background: linear-gradient(135deg, #10b981, #34d399);
+        color: white;
+        border: none;
+        border-radius: 1rem;
+        font-size: 1.1rem;
+        font-weight: 800;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.75rem;
+        transition: all 0.3s;
+        box-shadow: 0 4px 20px rgba(16, 185, 129, 0.3);
+        margin-top: 1.5rem;
+    }
+
+    .generate-btn:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 30px rgba(16, 185, 129, 0.4);
+    }
+
+    .generate-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+    }
+
+    .generate-btn .spinner {
+        width: 22px;
+        height: 22px;
+        border: 3px solid rgba(255,255,255,0.3);
+        border-top-color: white;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+
+    /* Result Section */
+    .result-section {
+        display: none;
+        margin-top: 2rem;
+    }
+
+    .result-section.show {
+        display: block;
+    }
+
+    .result-card {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        border-radius: 1.5rem;
+        border: 1px solid rgba(16, 185, 129, 0.2);
+        overflow: hidden;
+    }
+
+    .result-image-container {
+        position: relative;
+        background: #0a0a0a;
+    }
+
+    .result-image {
+        width: 100%;
+        display: block;
+    }
+
+    .result-actions {
+        padding: 1.5rem;
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1rem;
+    }
+
+    .result-btn {
+        padding: 0.875rem;
+        border-radius: 0.75rem;
+        font-size: 0.9rem;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        transition: all 0.3s;
+        border: none;
+    }
+
+    .result-btn.download {
+        background: linear-gradient(135deg, #10b981, #34d399);
+        color: white;
+    }
+
+    .result-btn.save {
+        background: rgba(139, 92, 246, 0.1);
+        color: #a855f7;
+        border: 1px solid rgba(139, 92, 246, 0.2);
+    }
+
+    .result-btn.regenerate {
+        background: rgba(59, 130, 246, 0.1);
+        color: #60a5fa;
+        border: 1px solid rgba(59, 130, 246, 0.2);
+    }
+
+    .result-btn.new {
+        background: rgba(255, 255, 255, 0.05);
+        color: #94a3b8;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .result-btn:hover {
+        transform: translateY(-2px);
+    }
+
+    /* RIGHT SIDEBAR - Renamed to avoid conflict with base.html left sidebar */
+    .image-sidebar {
+        display: block !important;
+        position: relative !important;
+        width: 100% !important;
+        height: auto !important;
+        transform: none !important;
+        background: transparent !important;
+        border: none !important;
+        top: auto !important;
+        left: auto !important;
+        overflow: visible !important;
+        flex-direction: column !important;
+        padding: 0 !important;
+    }
+
+    .image-sidebar-inner {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+    }
+
+    .image-sidebar .sidebar-card {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        border-radius: 1.5rem;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        overflow: hidden;
+    }
+
+    .image-sidebar .sidebar-card .card-header {
+        padding: 1.25rem 1.5rem;
+    }
+
+    .image-sidebar .sidebar-card .card-body {
+        padding: 1.25rem 1.5rem;
+    }
+
+    /* Quick Links */
+    .quick-links {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .quick-link {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 0.875rem 1rem;
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: 0.75rem;
+        text-decoration: none;
+        transition: all 0.3s;
+    }
+
+    .quick-link:hover {
+        background: rgba(255, 255, 255, 0.06);
+        transform: translateX(5px);
+    }
+
+    .quick-link-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 0.625rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1rem;
+        color: white;
+    }
+
+    .quick-link-icon.settings { background: linear-gradient(135deg, #10b981, #34d399); }
+    .quick-link-icon.logos { background: linear-gradient(135deg, #8b5cf6, #a855f7); }
+    .quick-link-icon.history { background: linear-gradient(135deg, #3b82f6, #60a5fa); }
+    .quick-link-icon.saved { background: linear-gradient(135deg, #f59e0b, #fbbf24); }
+
+    .quick-link-text {
+        flex: 1;
+    }
+
+    .quick-link-text span {
+        display: block;
+        font-weight: 600;
+        color: #e5e7eb;
+        font-size: 0.9rem;
+    }
+
+    .quick-link-text small {
+        color: #64748b;
+        font-size: 0.8rem;
+    }
+
+    /* Recent Images */
+    .recent-images-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.75rem;
+    }
+
+    .recent-image-item {
+        aspect-ratio: 1;
+        border-radius: 0.75rem;
+        overflow: hidden;
+        cursor: pointer;
+        transition: all 0.3s;
+        border: 2px solid transparent;
+    }
+
+    .recent-image-item:hover {
+        transform: scale(1.05);
+        border-color: rgba(16, 185, 129, 0.3);
+    }
+
+    .recent-image-item img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    /* Usage Stats */
+    .usage-stats {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.75rem;
+    }
+
+    .stat-item {
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: 0.75rem;
+        padding: 1rem;
+        text-align: center;
+    }
+
+    .stat-value {
+        font-size: 1.5rem;
+        font-weight: 800;
+        color: #34d399;
+    }
+
+    .stat-label {
+        font-size: 0.75rem;
+        color: #64748b;
+        margin-top: 0.25rem;
+    }
+
+    /* Toast */
+    .toast {
+        position: fixed;
+        bottom: 2rem;
+        right: 2rem;
+        padding: 1rem 1.5rem;
+        background: linear-gradient(135deg, #10b981, #34d399);
+        color: white;
+        border-radius: 1rem;
+        font-weight: 600;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        transform: translateY(100px);
+        opacity: 0;
+        transition: all 0.3s ease;
+        z-index: 1000;
+    }
+
+    .toast.show {
+        transform: translateY(0);
+        opacity: 1;
+    }
+
+    .toast.error {
+        background: linear-gradient(135deg, #ef4444, #f87171);
+    }
+
+    /* Responsive */
+    @media (max-width: 1200px) {
+        .main-layout {
+            grid-template-columns: 1fr;
+        }
+
+        .image-sidebar-inner {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+
+    @media (max-width: 768px) {
+        .generator-container {
+            padding: 1.5rem;
+        }
+
+        .hero-content {
+            flex-direction: column;
+            text-align: center;
+        }
+
+        .form-row, .form-row-3 {
+            grid-template-columns: 1fr;
+        }
+
+        .style-grid {
+            grid-template-columns: repeat(3, 1fr);
+        }
+
+        .image-sidebar-inner {
+            grid-template-columns: 1fr;
+        }
+
+        .result-actions {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        .product-position-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        .warning-content {
+            flex-direction: column;
+            text-align: center;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="generator-container">
+    <!-- API Key Warning -->
+    {% if not has_api_key %}
+    <div class="api-key-warning">
+        <div class="warning-content">
+            <div class="warning-icon"><i class="fas fa-key"></i></div>
+            <div class="warning-text">
+                <h3>API Key Required</h3>
+                <p>Please set up your OpenAI or Gemini API key to start generating images</p>
+            </div>
+            <a href="{% url 'ai_image:api_settings' %}" class="warning-btn">
+                <i class="fas fa-cog"></i> Set Up API Key
+            </a>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Hero Header -->
+    <div class="generator-hero">
+        <div class="hero-content">
+            <div class="hero-icon"><i class="fas fa-image"></i></div>
+            <div class="hero-text">
+                <h1>AI Image Generator</h1>
+                <p>Create stunning images with AI • Add your logo • Multiple styles</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="main-layout">
+        <!-- Main Form -->
+        <div class="main-content">
+            <div class="form-card">
+                <div class="card-header">
+                    <i class="fas fa-magic"></i>
+                    <h2>Generate Image</h2>
+                </div>
+                <div class="card-body">
+                    <form id="generateForm" enctype="multipart/form-data">
+                        {% csrf_token %}
+                        
+                        <!-- Provider Selection -->
+                        <div class="form-group">
+                            <label class="form-label">AI Provider</label>
+                            <div class="provider-selection" style="display:flex; gap:1rem; margin-bottom:0.5rem;">
+                                {% if has_openai_key %}
+                                <label class="provider-option" style="flex:1; display:flex; align-items:center; gap:0.75rem; padding:1rem; background:rgba(255,255,255,0.03); border:2px solid rgba(16,185,129,0.2); border-radius:0.75rem; cursor:pointer; transition:all 0.3s;">
+                                    <input type="radio" name="provider" value="openai" {% if img_settings.default_provider == 'openai' %}checked{% endif %} style="display:none;">
+                                    <div style="width:40px; height:40px; background:rgba(16,185,129,0.2); border-radius:0.5rem; display:flex; align-items:center; justify-content:center; color:#34d399; font-size:1.1rem;">
+                                        <i class="fas fa-robot"></i>
+                                    </div>
+                                    <div>
+                                        <div style="font-weight:600; color:#e5e7eb;">OpenAI DALL-E</div>
+                                        <div style="font-size:0.75rem; color:#64748b;">Best quality, HD</div>
+                                    </div>
+                                </label>
+                                {% endif %}
+                                
+                                {% if has_gemini_key %}
+                                <label class="provider-option" style="flex:1; display:flex; align-items:center; gap:0.75rem; padding:1rem; background:rgba(255,255,255,0.03); border:2px solid rgba(59,130,246,0.2); border-radius:0.75rem; cursor:pointer; transition:all 0.3s;">
+                                    <input type="radio" name="provider" value="gemini" {% if img_settings.default_provider == 'gemini' or not has_openai_key %}checked{% endif %} style="display:none;">
+                                    <div style="width:40px; height:40px; background:rgba(59,130,246,0.2); border-radius:0.5rem; display:flex; align-items:center; justify-content:center; color:#60a5fa; font-size:1.1rem;">
+                                        <i class="fas fa-gem"></i>
+                                    </div>
+                                    <div>
+                                        <div style="font-weight:600; color:#e5e7eb;">Google Gemini</div>
+                                        <div style="font-size:0.75rem; color:#64748b;">Flexible, experimental</div>
+                                    </div>
+                                </label>
+                                {% endif %}
+                            </div>
+                            
+                            <!-- OpenAI Model Selection (shown when OpenAI selected) -->
+                            <div id="openaiModelSection" style="margin-top:0.75rem; display:{% if img_settings.default_provider == 'openai' %}block{% else %}none{% endif %};">
+                                <label class="form-label" style="font-size:0.8rem;">DALL-E Model</label>
+                                <select name="model" class="form-control" style="padding:0.75rem 1rem;">
+                                    <option value="dall-e-3" {% if img_settings.openai_model == 'dall-e-3' %}selected{% endif %}>DALL-E 3 (Best Quality)</option>
+                                    <option value="dall-e-2" {% if img_settings.openai_model == 'dall-e-2' %}selected{% endif %}>DALL-E 2 (Faster)</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <!-- Title -->
+                        <div class="form-group">
+                            <label class="form-label">Image Title <span class="required">*</span></label>
+                            <input type="text" name="title" class="form-control" placeholder="e.g., Product Showcase" required>
+                        </div>
+
+                        <!-- Prompt -->
+                        <div class="form-group">
+                            <label class="form-label">Describe Your Image <span class="required">*</span></label>
+                            <textarea name="prompt" class="form-control" rows="4" placeholder="A stunning mountain landscape at sunset with golden clouds, a serene lake reflecting the sky, pine trees in the foreground..." required></textarea>
+                            <p class="form-hint">Be as detailed as possible for best results. Include colors, mood, setting, and specific elements.</p>
+                        </div>
+
+                        <!-- Negative Prompt -->
+                        <div class="form-group">
+                            <label class="form-label">What to Avoid (Optional)</label>
+                            <input type="text" name="negative_prompt" class="form-control" placeholder="e.g., blurry, low quality, distorted, watermark">
+                        </div>
+
+                        <!-- ========== PRODUCT IMAGE UPLOAD ========== -->
+                        <div class="product-upload-section" id="productSection">
+                            <div class="product-section-header">
+                                <h3><i class="fas fa-box-open"></i> Upload Product Image</h3>
+                                <div class="product-toggle" id="productToggle" onclick="toggleProductUpload()"></div>
+                            </div>
+                            <p style="color: #64748b; font-size: 0.85rem; margin-bottom: 1rem;">Upload your product photo — the media you provide is your product. AI generates a professional scene and places your product in it!</p>
+                            
+                            <div class="product-upload-area" id="productUploadArea">
+                                <!-- Dropzone -->
+                                <div class="product-dropzone" id="productDropzone">
+                                    <div class="product-dropzone-icon"><i class="fas fa-cloud-upload-alt"></i></div>
+                                    <div class="product-dropzone-text">Drop your product image here or click to upload</div>
+                                    <div class="product-dropzone-hint">PNG, JPG, WebP • Max 10MB • PNG with transparent background works best</div>
+                                    <input type="file" name="product_image" id="productImageInput" accept="image/png,image/jpeg,image/gif,image/webp">
+                                </div>
+
+                                <!-- Preview -->
+                                <div class="product-preview" id="productPreview">
+                                    <div class="product-preview-inner">
+                                        <img src="" alt="Product" class="product-preview-img" id="productPreviewImg">
+                                        <div class="product-preview-info">
+                                            <div class="product-preview-name" id="productFileName">product.png</div>
+                                            <div class="product-preview-size" id="productFileSize">1.2 MB</div>
+                                            <div class="product-preview-badge"><i class="fas fa-check-circle"></i> Ready to compose</div>
+                                        </div>
+                                        <button type="button" class="product-remove-btn" onclick="removeProductImage()">
+                                            <i class="fas fa-times"></i>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Product Settings -->
+                                <div class="product-settings" id="productSettings">
+                                    <div class="form-group">
+                                        <label class="form-label" style="color: #a78bfa;">Product Position</label>
+                                        <div class="product-position-grid">
+                                            {% for value, label in product_position_choices %}
+                                            <div class="product-pos-option {% if value == 'center' %}active{% endif %}" 
+                                                 data-position="{{ value }}" onclick="selectProductPosition(this)">
+                                                <i class="fas fa-{% if value == 'center' %}crosshairs{% elif value == 'center_bottom' %}arrow-down{% elif value == 'left' %}arrow-left{% elif value == 'right' %}arrow-right{% elif value == 'center_top' %}arrow-up{% elif value == 'full' %}expand{% endif %}" style="display:block; margin-bottom:0.25rem;"></i>
+                                                {{ label }}
+                                            </div>
+                                            {% endfor %}
+                                        </div>
+                                        <input type="hidden" name="product_position" value="center" id="productPositionHidden">
+                                    </div>
+                                    <div class="form-group">
+                                        <label class="form-label" style="color: #a78bfa;">Product Size</label>
+                                        <div class="range-group">
+                                            <input type="range" name="product_scale" class="range-slider purple" min="20" max="90" value="50" id="productScaleSlider">
+                                            <span class="range-value purple" id="productScaleValue">50%</span>
+                                        </div>
+                                        <p class="form-hint">How large the product appears in the final image</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Style Selection -->
+                        <div class="form-group">
+                            <label class="form-label">Art Style</label>
+                            <div class="style-grid">
+                                {% for value, label in style_choices %}
+                                <label class="style-option {% if value == 'realistic' %}active{% endif %}">
+                                    <input type="radio" name="style" value="{{ value }}" {% if value == 'realistic' %}checked{% endif %}>
+                                    <i class="fas fa-{% if value == 'realistic' %}camera{% elif value == 'anime' %}film{% elif value == 'artistic' %}paint-brush{% elif value == 'cartoon' %}palette{% elif value == '3d_render' %}cube{% elif value == 'watercolor' %}water{% elif value == 'oil_painting' %}brush{% elif value == 'digital_art' %}desktop{% elif value == 'pixel_art' %}th{% elif value == 'sketch' %}pencil-alt{% elif value == 'cinematic' %}video{% elif value == 'fantasy' %}dragon{% elif value == 'minimalist' %}square{% elif value == 'vintage' %}clock{% elif value == 'neon' %}bolt{% else %}star{% endif %}"></i>
+                                    <span>{{ label }}</span>
+                                </label>
+                                {% endfor %}
+                            </div>
+                        </div>
+
+                        <!-- Size and Quality -->
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">Image Size</label>
+                                <select name="size" class="form-control">
+                                    {% for value, label in size_choices %}
+                                    <option value="{{ value }}" {% if value == '1024x1024' %}selected{% endif %}>{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Quality</label>
+                                <select name="quality" class="form-control">
+                                    {% for value, label in quality_choices %}
+                                    <option value="{{ value }}" {% if value == 'high' %}selected{% endif %}>{{ label }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Logo Section -->
+                        <div class="logo-section">
+                            <div class="logo-section-header">
+                                <h3><i class="fas fa-stamp"></i> Add Your Logo</h3>
+                                <a href="{% url 'ai_image:manage_logos' %}" style="color: #34d399; font-size: 0.85rem; text-decoration: none;">Manage Logos</a>
+                            </div>
+                            
+                            {% if logos %}
+                            <div class="logo-grid">
+                                <label class="logo-item active" data-logo-id="">
+                                    <input type="radio" name="logo_id" value="" checked>
+                                    <i class="fas fa-ban" style="color: #64748b; font-size: 1.5rem;"></i>
+                                </label>
+                                {% for logo in logos %}
+                                <label class="logo-item" data-logo-id="{{ logo.pk }}">
+                                    <input type="radio" name="logo_id" value="{{ logo.pk }}">
+                                    <img src="{{ logo.logo_file.url }}" alt="{{ logo.name }}">
+                                </label>
+                                {% endfor %}
+                            </div>
+                            
+                            <div class="form-group" id="logoPositionGroup" style="display: none;">
+                                <label class="form-label">Logo Position</label>
+                                <div class="position-grid">
+                                    {% for value, label in position_choices %}
+                                    {% if value != 'none' %}
+                                    <label class="position-option {% if value == 'bottom_right' %}active{% endif %}" data-position="{{ value }}">
+                                        {{ label }}
+                                    </label>
+                                    {% endif %}
+                                    {% endfor %}
+                                </div>
+                            </div>
+
+                            <div class="form-row" id="logoSettingsGroup" style="display: none;">
+                                <div class="form-group">
+                                    <label class="form-label">Logo Size</label>
+                                    <div class="range-group">
+                                        <input type="range" name="logo_size" class="range-slider" min="5" max="30" value="10">
+                                        <span class="range-value">10%</span>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Logo Opacity</label>
+                                    <div class="range-group">
+                                        <input type="range" name="logo_opacity" class="range-slider" min="10" max="100" value="100">
+                                        <span class="range-value">100%</span>
+                                    </div>
+                                </div>
+                            </div>
+                            {% else %}
+                            <p style="color: #64748b; text-align: center; padding: 1rem;">
+                                No logos uploaded yet. <a href="{% url 'ai_image:manage_logos' %}" style="color: #34d399;">Upload a logo</a>
+                            </p>
+                            <input type="hidden" name="logo_id" value="">
+                            {% endif %}
+                            <input type="hidden" name="logo_position" value="none" id="logoPositionHidden">
+                        </div>
+
+                        <!-- Advanced Options -->
+                        <div class="advanced-toggle" onclick="toggleAdvanced()">
+                            <span><i class="fas fa-sliders-h"></i> Advanced Options</span>
+                            <i class="fas fa-chevron-down"></i>
+                        </div>
+                        <div class="advanced-options" id="advancedOptions">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label class="form-label">Lighting</label>
+                                    <select name="lighting" class="form-control">
+                                        <option value="">Default</option>
+                                        <option value="natural">Natural Light</option>
+                                        <option value="studio">Studio Lighting</option>
+                                        <option value="dramatic">Dramatic</option>
+                                        <option value="soft">Soft/Diffused</option>
+                                        <option value="golden_hour">Golden Hour</option>
+                                        <option value="neon">Neon Lights</option>
+                                        <option value="backlit">Backlit</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Camera Angle</label>
+                                    <select name="camera_angle" class="form-control">
+                                        <option value="">Default</option>
+                                        <option value="front">Front View</option>
+                                        <option value="side">Side View</option>
+                                        <option value="aerial">Aerial/Bird's Eye</option>
+                                        <option value="low_angle">Low Angle</option>
+                                        <option value="high_angle">High Angle</option>
+                                        <option value="closeup">Close-up</option>
+                                        <option value="wide">Wide Shot</option>
+                                        <option value="macro">Macro</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label class="form-label">Seed (Optional)</label>
+                                    <input type="number" name="seed" class="form-control" placeholder="Random seed for reproducibility">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Enhance Prompt</label>
+                                    <select name="enhance_prompt" class="form-control">
+                                        <option value="true" selected>Yes - AI enhances prompt</option>
+                                        <option value="false">No - Use exact prompt</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="generate-btn" id="generateBtn" {% if not has_api_key %}disabled{% endif %}>
+                            <i class="fas fa-magic"></i>
+                            <span>Generate Image</span>
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Result Section -->
+            <div class="result-section" id="resultSection">
+                <div class="result-card">
+                    <div class="result-image-container">
+                        <img src="" alt="Generated Image" class="result-image" id="resultImage">
+                    </div>
+                    <div class="result-product-badge" id="resultProductBadge">
+                        <i class="fas fa-box-open"></i> Product Composited
+                    </div>
+                    <div class="result-actions">
+                        <button class="result-btn download" id="downloadBtn">
+                            <i class="fas fa-download"></i> Download
+                        </button>
+                        <button class="result-btn save" id="saveBtn">
+                            <i class="fas fa-bookmark"></i> Save
+                        </button>
+                        <button class="result-btn regenerate" id="regenerateBtn">
+                            <i class="fas fa-redo"></i> Regenerate
+                        </button>
+                        <button class="result-btn new" id="newBtn">
+                            <i class="fas fa-plus"></i> New
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="image-sidebar">
+            <div class="image-sidebar-inner">
+            <!-- Quick Links -->
+            <div class="sidebar-card">
+                <div class="card-header">
+                    <i class="fas fa-link"></i>
+                    <h2>Quick Links</h2>
+                </div>
+                <div class="card-body">
+                    <div class="quick-links">
+                        <a href="{% url 'ai_image:api_settings' %}" class="quick-link">
+                            <div class="quick-link-icon settings"><i class="fas fa-key"></i></div>
+                            <div class="quick-link-text">
+                                <span>API Settings</span>
+                                <small>{% if has_api_key %}Key connected{% else %}Set up key{% endif %}</small>
+                            </div>
+                        </a>
+                        <a href="{% url 'ai_image:manage_logos' %}" class="quick-link">
+                            <div class="quick-link-icon logos"><i class="fas fa-stamp"></i></div>
+                            <div class="quick-link-text">
+                                <span>My Logos</span>
+                                <small>{{ logos.count }} logo{% if logos.count != 1 %}s{% endif %} uploaded</small>
+                            </div>
+                        </a>
+                        <a href="{% url 'ai_image:history' %}" class="quick-link">
+                            <div class="quick-link-icon history"><i class="fas fa-history"></i></div>
+                            <div class="quick-link-text">
+                                <span>History</span>
+                                <small>View past generations</small>
+                            </div>
+                        </a>
+                        <a href="{% url 'ai_image:saved' %}" class="quick-link">
+                            <div class="quick-link-icon saved"><i class="fas fa-bookmark"></i></div>
+                            <div class="quick-link-text">
+                                <span>Saved Images</span>
+                                <small>Your collection</small>
+                            </div>
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Images -->
+            {% if recent_generations %}
+            <div class="sidebar-card">
+                <div class="card-header">
+                    <i class="fas fa-images"></i>
+                    <h2>Recent Images</h2>
+                </div>
+                <div class="card-body">
+                    <div class="recent-images-grid">
+                        {% for gen in recent_generations %}
+                        <a href="{% url 'ai_image:result' gen.pk %}" class="recent-image-item">
+                            <img src="{{ gen.get_display_image.url }}" alt="{{ gen.title }}">
+                        </a>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Usage Stats -->
+            <div class="sidebar-card">
+                <div class="card-header">
+                    <i class="fas fa-chart-bar"></i>
+                    <h2>Your Stats</h2>
+                </div>
+                <div class="card-body">
+                    <div class="usage-stats">
+                        <div class="stat-item">
+                            <div class="stat-value">{{ img_settings.total_images_generated }}</div>
+                            <div class="stat-label">Images Generated</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">{{ img_settings.total_api_calls }}</div>
+                            <div class="stat-label">API Calls</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            </div>  <!-- End image-sidebar-inner -->
+        </div>  <!-- End image-sidebar -->
+    </div>
+</div>
+
+<div class="toast" id="toast">Success!</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let currentGenerationId = null;
+    let productEnabled = false;
+
+    // ========== PRODUCT UPLOAD LOGIC ==========
+    function toggleProductUpload() {
+        productEnabled = !productEnabled;
+        const toggle = document.getElementById('productToggle');
+        const area = document.getElementById('productUploadArea');
+        const section = document.getElementById('productSection');
+        
+        toggle.classList.toggle('active', productEnabled);
+        area.classList.toggle('show', productEnabled);
+        section.classList.toggle('active', productEnabled);
+        
+        if (!productEnabled) {
+            removeProductImage();
+        }
+    }
+
+    // Product image input change
+    document.getElementById('productImageInput').addEventListener('change', function(e) {
+        handleProductFile(e.target.files[0]);
+    });
+
+    // Drag and drop
+    const productDropzone = document.getElementById('productDropzone');
+    
+    productDropzone.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        this.classList.add('dragover');
+    });
+    
+    productDropzone.addEventListener('dragleave', function(e) {
+        e.preventDefault();
+        this.classList.remove('dragover');
+    });
+    
+    productDropzone.addEventListener('drop', function(e) {
+        e.preventDefault();
+        this.classList.remove('dragover');
+        if (e.dataTransfer.files.length > 0) {
+            const input = document.getElementById('productImageInput');
+            input.files = e.dataTransfer.files;
+            handleProductFile(e.dataTransfer.files[0]);
+        }
+    });
+
+    function handleProductFile(file) {
+        if (!file) return;
+        
+        const maxSize = 10 * 1024 * 1024; // 10MB
+        if (file.size > maxSize) {
+            showToast('File too large. Max 10MB allowed.', 'error');
+            return;
+        }
+        
+        const allowedTypes = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
+        if (!allowedTypes.includes(file.type)) {
+            showToast('Invalid file type. Use PNG, JPG, GIF, or WebP.', 'error');
+            return;
+        }
+        
+        // Show preview
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            document.getElementById('productPreviewImg').src = e.target.result;
+            document.getElementById('productFileName').textContent = file.name;
+            document.getElementById('productFileSize').textContent = formatFileSize(file.size);
+            
+            document.getElementById('productDropzone').style.display = 'none';
+            document.getElementById('productPreview').classList.add('show');
+            document.getElementById('productSettings').classList.add('show');
+        };
+        reader.readAsDataURL(file);
+    }
+
+    function removeProductImage() {
+        document.getElementById('productImageInput').value = '';
+        document.getElementById('productPreview').classList.remove('show');
+        document.getElementById('productSettings').classList.remove('show');
+        document.getElementById('productDropzone').style.display = 'block';
+    }
+
+    function selectProductPosition(el) {
+        document.querySelectorAll('.product-pos-option').forEach(o => o.classList.remove('active'));
+        el.classList.add('active');
+        document.getElementById('productPositionHidden').value = el.dataset.position;
+    }
+
+    // Product scale slider
+    const productScaleSlider = document.getElementById('productScaleSlider');
+    if (productScaleSlider) {
+        productScaleSlider.addEventListener('input', function() {
+            document.getElementById('productScaleValue').textContent = this.value + '%';
+        });
+    }
+
+    function formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    // Provider selection
+    document.querySelectorAll('input[name="provider"]').forEach(radio => {
+        radio.addEventListener('change', function() {
+            const openaiSection = document.getElementById('openaiModelSection');
+            if (this.value === 'openai') {
+                openaiSection.style.display = 'block';
+            } else {
+                openaiSection.style.display = 'none';
+            }
+            
+            // Update visual selection
+            document.querySelectorAll('.provider-option').forEach(opt => {
+                opt.style.borderColor = 'rgba(255,255,255,0.1)';
+                opt.style.background = 'rgba(255,255,255,0.03)';
+            });
+            
+            const selectedLabel = this.parentElement;
+            if (this.value === 'openai') {
+                selectedLabel.style.borderColor = 'rgba(16,185,129,0.5)';
+                selectedLabel.style.background = 'rgba(16,185,129,0.1)';
+            } else {
+                selectedLabel.style.borderColor = 'rgba(59,130,246,0.5)';
+                selectedLabel.style.background = 'rgba(59,130,246,0.1)';
+            }
+        });
+        
+        // Initialize visual state on page load
+        if (radio.checked) {
+            const selectedLabel = radio.parentElement;
+            if (radio.value === 'openai') {
+                selectedLabel.style.borderColor = 'rgba(16,185,129,0.5)';
+                selectedLabel.style.background = 'rgba(16,185,129,0.1)';
+            } else {
+                selectedLabel.style.borderColor = 'rgba(59,130,246,0.5)';
+                selectedLabel.style.background = 'rgba(59,130,246,0.1)';
+            }
+        }
+    });
+
+    // Style selection
+    document.querySelectorAll('.style-option').forEach(option => {
+        option.addEventListener('click', function() {
+            document.querySelectorAll('.style-option').forEach(o => o.classList.remove('active'));
+            this.classList.add('active');
+        });
+    });
+
+    // Logo selection
+    document.querySelectorAll('.logo-item').forEach(item => {
+        item.addEventListener('click', function() {
+            document.querySelectorAll('.logo-item').forEach(i => i.classList.remove('active'));
+            this.classList.add('active');
+            
+            const logoId = this.dataset.logoId;
+            const positionGroup = document.getElementById('logoPositionGroup');
+            const settingsGroup = document.getElementById('logoSettingsGroup');
+            const positionHidden = document.getElementById('logoPositionHidden');
+            
+            if (logoId) {
+                positionGroup.style.display = 'block';
+                settingsGroup.style.display = 'grid';
+                positionHidden.value = 'bottom_right';
+            } else {
+                positionGroup.style.display = 'none';
+                settingsGroup.style.display = 'none';
+                positionHidden.value = 'none';
+            }
+        });
+    });
+
+    // Position selection
+    document.querySelectorAll('.position-option').forEach(option => {
+        option.addEventListener('click', function() {
+            document.querySelectorAll('.position-option').forEach(o => o.classList.remove('active'));
+            this.classList.add('active');
+            document.getElementById('logoPositionHidden').value = this.dataset.position;
+        });
+    });
+
+    // Range sliders
+    document.querySelectorAll('.range-slider').forEach(slider => {
+        const valueDisplay = slider.parentElement.querySelector('.range-value');
+        slider.addEventListener('input', function() {
+            valueDisplay.textContent = this.value + '%';
+        });
+    });
+
+    // Toggle advanced options
+    function toggleAdvanced() {
+        const toggle = document.querySelector('.advanced-toggle');
+        const options = document.getElementById('advancedOptions');
+        toggle.classList.toggle('open');
+        options.classList.toggle('show');
+    }
+
+    // Form submission
+    document.getElementById('generateForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        
+        const btn = document.getElementById('generateBtn');
+        const originalContent = btn.innerHTML;
+        btn.innerHTML = '<div class="spinner"></div><span>Generating...</span>';
+        btn.disabled = true;
+        
+        try {
+            const formData = new FormData(this);
+            
+            const response = await fetch('{% url "ai_image:generate" %}', {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}'
+                }
+            });
+            
+            const data = await response.json();
+            
+            if (data.redirect) {
+                showToast('Please set up your API key first', 'error');
+                setTimeout(() => window.location.href = data.redirect, 1500);
+                return;
+            }
+            
+            if (data.success) {
+                currentGenerationId = data.generation_id;
+                document.getElementById('resultImage').src = data.image_url;
+                document.getElementById('resultSection').classList.add('show');
+                document.getElementById('resultSection').scrollIntoView({ behavior: 'smooth' });
+                
+                // Show product badge if applicable
+                const productBadge = document.getElementById('resultProductBadge');
+                if (productBadge) {
+                    if (data.has_product) {
+                        productBadge.classList.add('show');
+                    } else {
+                        productBadge.classList.remove('show');
+                    }
+                }
+                
+                showToast('Image generated successfully!');
+            } else {
+                showToast(data.error || 'Failed to generate image', 'error');
+            }
+        } catch (error) {
+            showToast('Error: ' + error.message, 'error');
+        } finally {
+            btn.innerHTML = originalContent;
+            btn.disabled = false;
+        }
+    });
+
+    // Download button
+    document.getElementById('downloadBtn').addEventListener('click', function() {
+        if (currentGenerationId) {
+            window.location.href = `/ai-image/download/${currentGenerationId}/`;
+        }
+    });
+
+    // Save button
+    document.getElementById('saveBtn').addEventListener('click', async function() {
+        if (!currentGenerationId) return;
+        
+        try {
+            const response = await fetch('{% url "ai_image:save_image" %}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: `generation_id=${currentGenerationId}`
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                showToast('Image saved!');
+                this.innerHTML = '<i class="fas fa-check"></i> Saved';
+                this.disabled = true;
+            } else {
+                showToast(data.error || 'Failed to save', 'error');
+            }
+        } catch (error) {
+            showToast('Error saving image', 'error');
+        }
+    });
+
+    // Regenerate button
+    document.getElementById('regenerateBtn').addEventListener('click', function() {
+        document.getElementById('generateForm').dispatchEvent(new Event('submit'));
+    });
+
+    // New button
+    document.getElementById('newBtn').addEventListener('click', function() {
+        document.getElementById('generateForm').reset();
+        document.getElementById('resultSection').classList.remove('show');
+        document.querySelectorAll('.style-option').forEach((o, i) => {
+            o.classList.toggle('active', i === 0);
+        });
+        // Reset product upload
+        if (productEnabled) toggleProductUpload();
+        const productBadge = document.getElementById('resultProductBadge');
+        if (productBadge) productBadge.classList.remove('show');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+
+    // Toast
+    function showToast(message, type = 'success') {
+        const toast = document.getElementById('toast');
+        toast.textContent = message;
+        toast.className = 'toast ' + type;
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+</script>
+{% endblock %}

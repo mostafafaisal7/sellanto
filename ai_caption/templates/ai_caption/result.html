@@ -1,0 +1,499 @@
+{% extends 'base.html' %}
+
+{% block title %}Caption Result - Sellanto{% endblock %}
+
+{% block extra_css %}
+<style>
+    .result-container {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 2rem 2.5rem;
+    }
+
+    .success-card {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        border-radius: 2rem;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        border: 1px solid rgba(16, 185, 129, 0.2);
+        overflow: hidden;
+        position: relative;
+    }
+
+    .success-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, transparent, #10b981, #34d399, #10b981, transparent);
+        background-size: 200% 100%;
+        animation: gradient-shift 3s linear infinite;
+    }
+
+    @keyframes gradient-shift {
+        0% { background-position: 0% 0%; }
+        100% { background-position: 200% 0%; }
+    }
+
+    .success-header {
+        padding: 2rem;
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .success-icon {
+        width: 70px;
+        height: 70px;
+        background: linear-gradient(135deg, #10b981, #34d399);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2rem;
+        color: white;
+        box-shadow: 0 10px 30px rgba(16, 185, 129, 0.4);
+        animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.05); }
+    }
+
+    .success-text h1 {
+        font-size: 2rem;
+        font-weight: 800;
+        background: linear-gradient(135deg, #10b981, #34d399);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 0.25rem;
+    }
+
+    .success-text p {
+        color: #94a3b8;
+        font-size: 1rem;
+    }
+
+    .card-body {
+        padding: 2rem;
+    }
+
+    /* Media Preview */
+    .media-section {
+        margin-bottom: 2rem;
+        border-radius: 1rem;
+        overflow: hidden;
+        background: rgba(0, 0, 0, 0.3);
+    }
+
+    .media-section img,
+    .media-section video {
+        width: 100%;
+        max-height: 400px;
+        object-fit: contain;
+    }
+
+    /* Input Section */
+    .input-section {
+        background: rgba(139, 92, 246, 0.05);
+        border: 1px solid rgba(139, 92, 246, 0.2);
+        border-radius: 1rem;
+        padding: 1.25rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .section-label {
+        font-size: 0.75rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #a855f7;
+        margin-bottom: 0.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .input-text {
+        color: #94a3b8;
+        font-size: 0.95rem;
+        line-height: 1.6;
+    }
+
+    /* Caption Section */
+    .caption-section {
+        background: rgba(16, 185, 129, 0.05);
+        border: 1px solid rgba(16, 185, 129, 0.2);
+        border-radius: 1rem;
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+        position: relative;
+    }
+
+    .caption-section::before {
+        content: '"';
+        position: absolute;
+        top: 0.5rem;
+        left: 1rem;
+        font-size: 3rem;
+        color: rgba(16, 185, 129, 0.2);
+        font-family: Georgia, serif;
+    }
+
+    .caption-text {
+        font-size: 1.1rem;
+        line-height: 1.9;
+        color: #e5e7eb;
+        white-space: pre-wrap;
+        padding-left: 1rem;
+    }
+
+    /* Hashtags */
+    .hashtags-section {
+        background: rgba(59, 130, 246, 0.05);
+        border: 1px solid rgba(59, 130, 246, 0.2);
+        border-radius: 1rem;
+        padding: 1rem 1.25rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .hashtags-text {
+        color: #60a5fa;
+        font-weight: 500;
+        font-size: 0.95rem;
+    }
+
+    /* Analysis */
+    .analysis-section {
+        background: rgba(245, 158, 11, 0.05);
+        border: 1px solid rgba(245, 158, 11, 0.2);
+        border-radius: 1rem;
+        padding: 1.25rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .analysis-section .section-label {
+        color: #f59e0b;
+    }
+
+    .analysis-text {
+        color: #94a3b8;
+        font-size: 0.9rem;
+        line-height: 1.6;
+    }
+
+    /* Meta Info */
+    .meta-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .meta-item {
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: 1rem;
+        padding: 1rem;
+        text-align: center;
+    }
+
+    .meta-icon {
+        width: 40px;
+        height: 40px;
+        background: linear-gradient(135deg, #8b5cf6, #a855f7);
+        border-radius: 0.75rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 0.5rem;
+        color: white;
+    }
+
+    .meta-label {
+        font-size: 0.75rem;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    .meta-value {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #e5e7eb;
+        margin-top: 0.25rem;
+    }
+
+    /* Actions */
+    .actions-grid {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: 1rem;
+    }
+
+    .action-btn {
+        padding: 1rem;
+        border-radius: 1rem;
+        font-size: 0.9rem;
+        font-weight: 700;
+        cursor: pointer;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.5rem;
+        transition: all 0.3s;
+        border: none;
+        text-decoration: none;
+    }
+
+    .action-btn i {
+        font-size: 1.25rem;
+    }
+
+    .btn-copy {
+        background: rgba(59, 130, 246, 0.1);
+        color: #60a5fa;
+        border: 1px solid rgba(59, 130, 246, 0.2);
+    }
+
+    .btn-copy:hover {
+        background: rgba(59, 130, 246, 0.2);
+        transform: translateY(-3px);
+    }
+
+    .btn-save {
+        background: rgba(16, 185, 129, 0.1);
+        color: #34d399;
+        border: 1px solid rgba(16, 185, 129, 0.2);
+    }
+
+    .btn-save:hover {
+        background: rgba(16, 185, 129, 0.2);
+        transform: translateY(-3px);
+    }
+
+    .btn-use {
+        background: linear-gradient(135deg, #f59e0b, #fbbf24);
+        color: white;
+        border: none;
+    }
+
+    .btn-use:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 25px rgba(245, 158, 11, 0.4);
+    }
+
+    .btn-regen {
+        background: rgba(139, 92, 246, 0.1);
+        color: #a855f7;
+        border: 1px solid rgba(139, 92, 246, 0.2);
+    }
+
+    .btn-regen:hover {
+        background: rgba(139, 92, 246, 0.2);
+        transform: translateY(-3px);
+    }
+
+    .btn-new {
+        background: rgba(239, 68, 68, 0.1);
+        color: #f87171;
+        border: 1px solid rgba(239, 68, 68, 0.2);
+    }
+
+    .btn-new:hover {
+        background: rgba(239, 68, 68, 0.2);
+        transform: translateY(-3px);
+    }
+
+    /* Toast */
+    .toast {
+        position: fixed;
+        bottom: 2rem;
+        right: 2rem;
+        padding: 1rem 1.5rem;
+        background: linear-gradient(135deg, #10b981, #34d399);
+        color: white;
+        border-radius: 1rem;
+        font-weight: 600;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        transform: translateY(100px);
+        opacity: 0;
+        transition: all 0.3s ease;
+        z-index: 1000;
+    }
+
+    .toast.show {
+        transform: translateY(0);
+        opacity: 1;
+    }
+
+    @media (max-width: 768px) {
+        .result-container {
+            padding: 1.5rem;
+        }
+
+        .success-header {
+            flex-direction: column;
+            text-align: center;
+        }
+
+        .actions-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="result-container">
+    <div class="success-card">
+        <div class="success-header">
+            <div class="success-icon">
+                <i class="fas fa-check"></i>
+            </div>
+            <div class="success-text">
+                <h1>Caption Generated!</h1>
+                <p>Your AI-powered caption is ready</p>
+            </div>
+        </div>
+
+        <div class="card-body">
+            {% if caption.media_file %}
+            <div class="media-section">
+                {% if caption.media_type == 'video' %}
+                <video src="{{ caption.media_file.url }}" controls></video>
+                {% else %}
+                <img src="{{ caption.media_file.url }}" alt="Media">
+                {% endif %}
+            </div>
+            {% endif %}
+
+            {% if caption.input_text %}
+            <div class="input-section">
+                <div class="section-label"><i class="fas fa-pen"></i> Your Input</div>
+                <div class="input-text">{{ caption.input_text }}</div>
+            </div>
+            {% endif %}
+
+            {% if caption.media_analysis %}
+            <div class="analysis-section">
+                <div class="section-label"><i class="fas fa-brain"></i> AI Media Analysis</div>
+                <div class="analysis-text">{{ caption.media_analysis }}</div>
+            </div>
+            {% endif %}
+
+            <div class="caption-section">
+                <div class="section-label"><i class="fas fa-quote-left"></i> Generated Caption</div>
+                <div class="caption-text" id="caption-text">{{ caption.generated_caption }}</div>
+            </div>
+
+            {% if caption.generated_hashtags %}
+            <div class="hashtags-section">
+                <div class="hashtags-text" id="hashtags-text">{{ caption.generated_hashtags }}</div>
+            </div>
+            {% endif %}
+
+            <div class="meta-grid">
+                <div class="meta-item">
+                    <div class="meta-icon"><i class="fas fa-palette"></i></div>
+                    <div class="meta-label">Tone</div>
+                    <div class="meta-value">{{ caption.get_tone_display }}</div>
+                </div>
+                <div class="meta-item">
+                    <div class="meta-icon"><i class="fas fa-share-alt"></i></div>
+                    <div class="meta-label">Platform</div>
+                    <div class="meta-value">{{ caption.get_platform_display }}</div>
+                </div>
+                <div class="meta-item">
+                    <div class="meta-icon"><i class="fas fa-clock"></i></div>
+                    <div class="meta-label">Time</div>
+                    <div class="meta-value">{{ caption.processing_time|floatformat:1 }}s</div>
+                </div>
+                <div class="meta-item">
+                    <div class="meta-icon"><i class="fas fa-coins"></i></div>
+                    <div class="meta-label">Tokens</div>
+                    <div class="meta-value">{{ caption.tokens_used }}</div>
+                </div>
+            </div>
+
+            <div class="actions-grid">
+                <button class="action-btn btn-copy" onclick="copyCaption()">
+                    <i class="fas fa-copy"></i>
+                    <span>Copy</span>
+                </button>
+                <button class="action-btn btn-save" onclick="saveCaption()">
+                    <i class="fas fa-bookmark"></i>
+                    <span>Save</span>
+                </button>
+                <button class="action-btn btn-use" onclick="useCaption()">
+                    <i class="fas fa-paper-plane"></i>
+                    <span>Use</span>
+                </button>
+                <button class="action-btn btn-regen" onclick="location.href='{% url 'ai_caption:generator' %}'">
+                    <i class="fas fa-redo"></i>
+                    <span>Regenerate</span>
+                </button>
+                <a href="{% url 'ai_caption:generator' %}" class="action-btn btn-new">
+                    <i class="fas fa-plus"></i>
+                    <span>New</span>
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Hidden form for use caption -->
+<form id="useCaptionForm" method="POST" action="{% url 'ai_caption:use_caption' %}" style="display: none;">
+    {% csrf_token %}
+    <input type="hidden" name="caption" id="captionForPost">
+</form>
+
+<div class="toast" id="toast">Success!</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function copyCaption() {
+        const caption = document.getElementById('caption-text').textContent;
+        const hashtags = document.getElementById('hashtags-text')?.textContent || '';
+        navigator.clipboard.writeText(caption + (hashtags ? '\n\n' + hashtags : '')).then(() => showToast('Copied!'));
+    }
+
+    async function saveCaption() {
+        try {
+            const response = await fetch('{% url "ai_caption:api_save" %}', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRFToken': '{{ csrf_token }}' },
+                body: new URLSearchParams({
+                    caption_text: document.getElementById('caption-text').textContent,
+                    hashtags: document.getElementById('hashtags-text')?.textContent || '',
+                    caption_id: '{{ caption.pk }}'
+                })
+            });
+            const data = await response.json();
+            showToast(data.success ? 'Saved!' : 'Failed');
+        } catch(e) {
+            showToast('Error');
+        }
+    }
+
+    function useCaption() {
+        const caption = document.getElementById('caption-text').textContent;
+        const hashtags = document.getElementById('hashtags-text')?.textContent || '';
+        const fullCaption = caption + (hashtags ? '\n\n' + hashtags : '');
+        
+        document.getElementById('captionForPost').value = fullCaption;
+        document.getElementById('useCaptionForm').submit();
+    }
+
+    function showToast(msg) {
+        const toast = document.getElementById('toast');
+        toast.textContent = msg;
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+</script>
+{% endblock %}

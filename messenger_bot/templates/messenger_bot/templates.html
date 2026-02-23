@@ -1,0 +1,434 @@
+<!-- C:\Users\Trust computer\Desktop\Final_version_socialSync\ai_caption\templates\ai_caption\templates.html -->
+
+{% extends 'base.html' %}
+
+{% block title %}Caption Templates - SocialSync{% endblock %}
+
+{% block extra_css %}
+<style>
+    .templates-container {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 2rem 2.5rem;
+    }
+
+    .templates-hero {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        padding: 2.5rem;
+        border-radius: 2rem;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        margin-bottom: 2rem;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .templates-hero::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, transparent, #f59e0b, #fbbf24, #f59e0b, transparent);
+        background-size: 200% 100%;
+        animation: gradient-shift 3s linear infinite;
+    }
+
+    @keyframes gradient-shift {
+        0% { background-position: 0% 0%; }
+        100% { background-position: 200% 0%; }
+    }
+
+    .hero-content {
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+    }
+
+    .hero-icon {
+        width: 70px;
+        height: 70px;
+        background: linear-gradient(135deg, #f59e0b, #fbbf24);
+        border-radius: 1.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2rem;
+        color: white;
+        box-shadow: 0 10px 30px rgba(245, 158, 11, 0.4);
+    }
+
+    .hero-text h1 {
+        font-size: 2.25rem;
+        font-weight: 800;
+        background: linear-gradient(135deg, #f59e0b, #fbbf24);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 0.25rem;
+    }
+
+    .hero-text p {
+        color: #94a3b8;
+    }
+
+    .hero-actions {
+        margin-left: auto;
+    }
+
+    .btn-create {
+        padding: 1rem 2rem;
+        background: linear-gradient(135deg, #8b5cf6, #a855f7);
+        color: white;
+        border: none;
+        border-radius: 1rem;
+        font-size: 1rem;
+        font-weight: 700;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        text-decoration: none;
+        box-shadow: 0 4px 15px rgba(139, 92, 246, 0.3);
+        transition: all 0.3s;
+    }
+
+    .btn-create:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(139, 92, 246, 0.4);
+    }
+
+    /* Section */
+    .section-title {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 1.5rem;
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #e5e7eb;
+    }
+
+    .section-title i {
+        color: #f59e0b;
+    }
+
+    /* Templates Grid */
+    .templates-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+        gap: 1.5rem;
+        margin-bottom: 3rem;
+    }
+
+    .template-card {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        border-radius: 1.5rem;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        overflow: hidden;
+        transition: all 0.3s;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    }
+
+    .template-card:hover {
+        transform: translateY(-5px);
+        border-color: rgba(245, 158, 11, 0.2);
+        box-shadow: 0 20px 60px rgba(245, 158, 11, 0.15);
+    }
+
+    .card-header {
+        padding: 1.25rem 1.5rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .template-name {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: #e5e7eb;
+    }
+
+    .category-badge {
+        padding: 0.35rem 0.75rem;
+        background: rgba(245, 158, 11, 0.1);
+        border: 1px solid rgba(245, 158, 11, 0.2);
+        border-radius: 0.5rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: #fbbf24;
+        text-transform: capitalize;
+    }
+
+    .card-body {
+        padding: 1.5rem;
+    }
+
+    .template-preview {
+        font-size: 0.95rem;
+        color: #94a3b8;
+        line-height: 1.7;
+        display: -webkit-box;
+        -webkit-line-clamp: 4;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        margin-bottom: 1rem;
+        padding: 1rem;
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: 0.75rem;
+        border-left: 3px solid #f59e0b;
+    }
+
+    .template-meta {
+        display: flex;
+        gap: 1rem;
+        font-size: 0.85rem;
+        color: #64748b;
+    }
+
+    .template-meta span {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+    }
+
+    .template-meta i {
+        color: #a855f7;
+    }
+
+    .card-footer {
+        padding: 1rem 1.5rem;
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+        display: flex;
+        gap: 0.75rem;
+    }
+
+    .card-btn {
+        flex: 1;
+        padding: 0.75rem;
+        border-radius: 0.75rem;
+        font-size: 0.9rem;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        transition: all 0.3s;
+        border: none;
+    }
+
+    .btn-use {
+        background: linear-gradient(135deg, #f59e0b, #fbbf24);
+        color: white;
+    }
+
+    .btn-use:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 15px rgba(245, 158, 11, 0.3);
+    }
+
+    .btn-delete {
+        background: rgba(239, 68, 68, 0.1);
+        color: #f87171;
+        border: 1px solid rgba(239, 68, 68, 0.2);
+        flex: 0;
+        padding: 0.75rem;
+    }
+
+    .btn-delete:hover {
+        background: rgba(239, 68, 68, 0.2);
+    }
+
+    /* Empty State */
+    .empty-state {
+        text-align: center;
+        padding: 4rem 2rem;
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        border-radius: 2rem;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .empty-icon {
+        width: 100px;
+        height: 100px;
+        background: linear-gradient(135deg, #f59e0b, #fbbf24);
+        border-radius: 2rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 1.5rem;
+        font-size: 2.5rem;
+        color: white;
+    }
+
+    .empty-state h3 {
+        font-size: 1.5rem;
+        color: #e5e7eb;
+        margin-bottom: 0.5rem;
+    }
+
+    .empty-state p {
+        color: #64748b;
+        margin-bottom: 1.5rem;
+    }
+
+    .toast {
+        position: fixed;
+        bottom: 2rem;
+        right: 2rem;
+        padding: 1rem 1.5rem;
+        background: linear-gradient(135deg, #10b981, #34d399);
+        color: white;
+        border-radius: 1rem;
+        font-weight: 600;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        transform: translateY(100px);
+        opacity: 0;
+        transition: all 0.3s ease;
+        z-index: 1000;
+    }
+
+    .toast.show {
+        transform: translateY(0);
+        opacity: 1;
+    }
+
+    @media (max-width: 768px) {
+        .templates-container {
+            padding: 1.5rem;
+        }
+
+        .hero-content {
+            flex-direction: column;
+            text-align: center;
+        }
+
+        .hero-actions {
+            margin-left: 0;
+        }
+
+        .templates-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="templates-container">
+    <div class="templates-hero">
+        <div class="hero-content">
+            <div class="hero-icon"><i class="fas fa-file-alt"></i></div>
+            <div class="hero-text">
+                <h1>Caption Templates</h1>
+                <p>Pre-made templates for quick caption generation</p>
+            </div>
+            <div class="hero-actions">
+                <a href="{% url 'ai_caption:create_template' %}" class="btn-create">
+                    <i class="fas fa-plus"></i> Create Template
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Global Templates -->
+    {% if global_templates %}
+    <h2 class="section-title"><i class="fas fa-globe"></i> Global Templates</h2>
+    <div class="templates-grid">
+        {% for template in global_templates %}
+        <div class="template-card" data-id="{{ template.pk }}">
+            <div class="card-header">
+                <span class="template-name">{{ template.name }}</span>
+                <span class="category-badge">{{ template.get_category_display }}</span>
+            </div>
+            <div class="card-body">
+                <div class="template-preview">{{ template.template_text|truncatewords:50 }}</div>
+                <div class="template-meta">
+                    <span><i class="fas fa-palette"></i> {{ template.get_tone_display }}</span>
+                    <span><i class="fas fa-share-alt"></i> {{ template.get_platform_display }}</span>
+                </div>
+            </div>
+            <div class="card-footer">
+                <button class="card-btn btn-use" onclick="useTemplate({{ template.pk }})">
+                    <i class="fas fa-magic"></i> Use Template
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- User Templates -->
+    <h2 class="section-title"><i class="fas fa-user"></i> My Templates</h2>
+    {% if user_templates %}
+    <div class="templates-grid">
+        {% for template in user_templates %}
+        <div class="template-card" data-id="{{ template.pk }}">
+            <div class="card-header">
+                <span class="template-name">{{ template.name }}</span>
+                <span class="category-badge">{{ template.get_category_display }}</span>
+            </div>
+            <div class="card-body">
+                <div class="template-preview">{{ template.template_text|truncatewords:50 }}</div>
+                <div class="template-meta">
+                    <span><i class="fas fa-palette"></i> {{ template.get_tone_display }}</span>
+                    <span><i class="fas fa-share-alt"></i> {{ template.get_platform_display }}</span>
+                </div>
+            </div>
+            <div class="card-footer">
+                <button class="card-btn btn-use" onclick="useTemplate({{ template.pk }})">
+                    <i class="fas fa-magic"></i> Use
+                </button>
+                <button class="card-btn btn-delete" onclick="deleteTemplate({{ template.pk }})">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-icon"><i class="fas fa-file-alt"></i></div>
+        <h3>No Custom Templates</h3>
+        <p>Create your own templates for quick caption generation</p>
+        <a href="{% url 'ai_caption:create_template' %}" class="btn-create">
+            <i class="fas fa-plus"></i> Create Template
+        </a>
+    </div>
+    {% endif %}
+</div>
+
+<div class="toast" id="toast">Success!</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    async function useTemplate(id) {
+        // Redirect to generator with template
+        window.location.href = `{% url 'ai_caption:generator' %}?template=${id}`;
+    }
+
+    async function deleteTemplate(id) {
+        if (!confirm('Delete this template?')) return;
+        try {
+            const response = await fetch(`/ai-caption/templates/delete/${id}/`, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+            });
+            if (response.ok) {
+                document.querySelector(`.template-card[data-id="${id}"]`).remove();
+                showToast('Deleted!');
+            }
+        } catch (e) {}
+    }
+
+    function showToast(msg) {
+        const toast = document.getElementById('toast');
+        toast.textContent = msg;
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,1234 @@
+<!-- C:\Users\Trust computer\Desktop\Final_version_socialSync\messenger_bot\templates\messenger_bot\dashboard.html -->
+
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Messenger Dashboard - AI Chatbot{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+    }
+
+    body {
+        background: #0d0d0d;
+        color: #e5e7eb;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    
+    .dashboard-container {
+        max-width: 1800px;
+        margin: 0 auto;
+        padding: 2rem;
+    }
+    
+    /* Header */
+    .header-section {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        padding: 2rem 2.5rem;
+        border-radius: 1.5rem;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        margin-bottom: 2rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .header-section h1 {
+        font-size: 2rem;
+        font-weight: 800;
+        background: linear-gradient(135deg, #ff6b6b 0%, #f06595 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .header-section p {
+        color: #94a3b8;
+        font-size: 0.95rem;
+        margin-top: 0.25rem;
+    }
+
+    .badge {
+        padding: 0.4rem 0.8rem;
+        border-radius: 0.5rem;
+        font-size: 0.75rem;
+        font-weight: 700;
+    }
+
+    .bg-success { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+    .bg-warning { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+
+    .btn-light {
+        padding: 0.75rem 1.25rem;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 0.75rem;
+        color: #94a3b8;
+        font-weight: 600;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: all 0.3s;
+    }
+
+    .btn-light:hover {
+        background: rgba(255, 255, 255, 0.08);
+        color: #fff;
+    }
+
+    /* Main Layout - 3 Columns */
+    .main-layout {
+        display: grid;
+        grid-template-columns: 320px 1fr 350px;
+        gap: 1.5rem;
+        height: calc(100vh - 220px);
+        min-height: 600px;
+    }
+
+    /* Conversations List */
+    .conversations-panel {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        border-radius: 1.25rem;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    .panel-header {
+        padding: 1.25rem 1.5rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        background: rgba(255, 255, 255, 0.02);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .panel-header h5 {
+        color: #fff;
+        font-weight: 700;
+        font-size: 0.95rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .btn-icon {
+        width: 32px;
+        height: 32px;
+        border-radius: 0.5rem;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: #94a3b8;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.3s;
+    }
+
+    .btn-icon:hover {
+        background: rgba(239, 68, 68, 0.2);
+        color: #ff6b6b;
+    }
+
+    .btn-icon.loading i {
+        animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+
+    .conversations-scroll {
+        flex: 1;
+        overflow-y: auto;
+    }
+
+    .conversation-item {
+        padding: 1rem 1.25rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+        cursor: pointer;
+        transition: all 0.2s;
+        text-decoration: none;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .conversation-item:hover {
+        background: rgba(255, 255, 255, 0.03);
+    }
+
+    .conversation-item.active {
+        background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(139, 92, 246, 0.2));
+        border-left: 3px solid #8b5cf6;
+    }
+
+    .conv-avatar {
+        width: 42px;
+        height: 42px;
+        border-radius: 50%;
+        object-fit: cover;
+        border: 2px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .conv-avatar-placeholder {
+        width: 42px;
+        height: 42px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #ff6b6b, #f06595);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: 700;
+        font-size: 1rem;
+    }
+
+    .conv-info {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .conv-name {
+        font-weight: 600;
+        color: #fff;
+        font-size: 0.9rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .conv-meta {
+        font-size: 0.75rem;
+        color: #64748b;
+        display: flex;
+        gap: 0.75rem;
+        margin-top: 0.25rem;
+    }
+
+    /* Messages Panel */
+    .messages-panel {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        border-radius: 1.25rem;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    .messages-header {
+        padding: 1.25rem 1.5rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        background: rgba(255, 255, 255, 0.02);
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .messages-header img {
+        width: 45px;
+        height: 45px;
+        border-radius: 50%;
+        border: 2px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .messages-header h5 {
+        color: #fff;
+        font-weight: 700;
+        font-size: 1rem;
+    }
+
+    .messages-header small {
+        color: #64748b;
+        font-size: 0.8rem;
+    }
+
+    .messages-body {
+        flex: 1;
+        overflow-y: auto;
+        padding: 1.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .message-row {
+        display: flex;
+    }
+
+    .message-row.bot {
+        justify-content: flex-end;
+    }
+
+    .message-bubble {
+        max-width: 75%;
+        padding: 1rem 1.25rem;
+        border-radius: 1rem;
+        font-size: 0.9rem;
+        line-height: 1.5;
+    }
+
+    .message-bubble.user {
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: #e5e7eb;
+        border-bottom-left-radius: 0.25rem;
+    }
+
+    .message-bubble.bot {
+        background: linear-gradient(135deg, rgba(99, 102, 241, 0.3), rgba(139, 92, 246, 0.3));
+        border: 1px solid rgba(139, 92, 246, 0.3);
+        color: #e5e7eb;
+        border-bottom-right-radius: 0.25rem;
+    }
+
+    .message-text {
+        white-space: pre-wrap;
+        word-wrap: break-word;
+    }
+
+    /* Voice Message Styling */
+    .voice-message {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .voice-message audio {
+        border-radius: 20px;
+        background: rgba(255, 255, 255, 0.1);
+    }
+
+    .voice-message .transcription {
+        background: rgba(255, 255, 255, 0.05);
+        padding: 0.5rem 0.75rem;
+        border-radius: 0.5rem;
+        border-left: 3px solid #8b5cf6;
+        margin-top: 0.25rem;
+    }
+
+    .voice-message .transcription small {
+        color: #94a3b8;
+        font-style: italic;
+    }
+
+    /* Message Image Styling */
+    .message-image {
+        margin-top: 0.5rem;
+    }
+
+    .message-image a {
+        display: inline-block;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .message-image a:hover {
+        transform: scale(1.02);
+    }
+
+    .message-image img {
+        max-width: 250px;
+        max-height: 300px;
+        border-radius: 0.75rem;
+        cursor: pointer;
+        border: 2px solid transparent;
+        transition: border-color 0.2s;
+    }
+
+    .message-image img:hover {
+        border-color: #8b5cf6;
+    }
+
+    .message-time {
+        font-size: 0.7rem;
+        color: #64748b;
+        margin-top: 0.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .message-time i {
+        color: #8b5cf6;
+    }
+
+    .token-badge {
+        background: rgba(251, 191, 36, 0.15);
+        color: #fbbf24;
+        padding: 0.1rem 0.4rem;
+        border-radius: 0.25rem;
+        font-size: 0.65rem;
+        font-weight: 600;
+    }
+
+    /* Human/AI Toggle Switch */
+    .mode-toggle {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        background: rgba(255, 255, 255, 0.05);
+        padding: 0.5rem 1rem;
+        border-radius: 2rem;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .mode-label {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: #64748b;
+        transition: all 0.3s;
+    }
+
+    .mode-label.active {
+        color: #fff;
+    }
+
+    .toggle-switch {
+        position: relative;
+        width: 50px;
+        height: 26px;
+    }
+
+    .toggle-switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+    }
+
+    .toggle-slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        transition: 0.4s;
+        border-radius: 26px;
+    }
+
+    .toggle-slider:before {
+        position: absolute;
+        content: "";
+        height: 20px;
+        width: 20px;
+        left: 3px;
+        bottom: 3px;
+        background-color: white;
+        transition: 0.4s;
+        border-radius: 50%;
+    }
+
+    .toggle-switch input:checked + .toggle-slider {
+        background: linear-gradient(135deg, #10b981, #34d399);
+    }
+
+    .toggle-switch input:checked + .toggle-slider:before {
+        transform: translateX(24px);
+    }
+
+    /* Reply Box */
+    .reply-box {
+        display: flex;
+        gap: 0.75rem;
+        padding: 1rem 1.25rem;
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+        background: rgba(255, 255, 255, 0.02);
+    }
+
+    .reply-box input {
+        flex: 1;
+        padding: 0.75rem 1rem;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 1.5rem;
+        color: #e5e7eb;
+        font-size: 0.9rem;
+        outline: none;
+        transition: all 0.3s;
+    }
+
+    .reply-box input:focus {
+        border-color: #8b5cf6;
+        background: rgba(139, 92, 246, 0.1);
+    }
+
+    .reply-box input::placeholder {
+        color: #64748b;
+    }
+
+    .send-btn {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        border: none;
+        color: white;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.3s;
+    }
+
+    .send-btn:hover {
+        transform: scale(1.1);
+        box-shadow: 0 4px 15px rgba(139, 92, 246, 0.4);
+    }
+
+    .send-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    /* Notifications Panel */
+    .notifications-panel {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        border-radius: 1.25rem;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    .notif-header {
+        padding: 1.25rem 1.5rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        background: rgba(255, 255, 255, 0.02);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .notif-header h5 {
+        color: #fff;
+        font-weight: 700;
+        font-size: 0.95rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .notif-badge {
+        background: linear-gradient(135deg, #ef4444, #f87171);
+        color: white;
+        font-size: 0.7rem;
+        font-weight: 700;
+        padding: 0.2rem 0.5rem;
+        border-radius: 10px;
+        min-width: 20px;
+        text-align: center;
+    }
+
+    .notif-scroll {
+        flex: 1;
+        overflow-y: auto;
+    }
+
+    .notif-item {
+        padding: 1rem 1.25rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .notif-item:hover {
+        background: rgba(255, 255, 255, 0.03);
+    }
+
+    .notif-item.unread {
+        background: rgba(239, 68, 68, 0.05);
+        border-left: 3px solid #ef4444;
+    }
+
+    .notif-item.resolved {
+        opacity: 0.5;
+    }
+
+    .notif-type {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .notif-type-icon {
+        font-size: 1.1rem;
+    }
+
+    .notif-type-label {
+        font-size: 0.7rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .notif-priority {
+        font-size: 0.65rem;
+        padding: 0.15rem 0.4rem;
+        border-radius: 3px;
+        font-weight: 600;
+    }
+
+    .priority-high { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+    .priority-medium { background: rgba(245, 158, 11, 0.2); color: #f59e0b; }
+    .priority-low { background: rgba(16, 185, 129, 0.2); color: #10b981; }
+
+    .notif-title {
+        font-weight: 600;
+        color: #e5e7eb;
+        font-size: 0.85rem;
+        margin-bottom: 0.25rem;
+    }
+
+    .notif-summary {
+        font-size: 0.8rem;
+        color: #94a3b8;
+        line-height: 1.4;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+
+    .notif-footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 0.5rem;
+    }
+
+    .notif-sender {
+        font-size: 0.75rem;
+        color: #64748b;
+    }
+
+    .notif-time {
+        font-size: 0.7rem;
+        color: #64748b;
+    }
+
+    .notif-actions {
+        display: flex;
+        gap: 0.5rem;
+        margin-top: 0.5rem;
+    }
+
+    .notif-btn {
+        padding: 0.3rem 0.6rem;
+        border-radius: 0.4rem;
+        font-size: 0.7rem;
+        font-weight: 600;
+        cursor: pointer;
+        border: none;
+        transition: all 0.2s;
+    }
+
+    .notif-btn.view {
+        background: rgba(99, 102, 241, 0.2);
+        color: #818cf8;
+    }
+
+    .notif-btn.resolve {
+        background: rgba(16, 185, 129, 0.2);
+        color: #34d399;
+    }
+
+    .notif-btn:hover {
+        transform: scale(1.05);
+    }
+
+    /* Empty State */
+    .empty-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        color: #64748b;
+        text-align: center;
+        padding: 2rem;
+    }
+
+    .empty-state i {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        opacity: 0.5;
+    }
+
+    .empty-state h4 {
+        font-size: 1.1rem;
+        color: #94a3b8;
+        margin-bottom: 0.5rem;
+    }
+
+    .empty-state p {
+        font-size: 0.85rem;
+    }
+
+    /* Toast */
+    .toast {
+        position: fixed;
+        bottom: 2rem;
+        right: 2rem;
+        padding: 1rem 1.5rem;
+        background: linear-gradient(135deg, #10b981, #34d399);
+        color: white;
+        border-radius: 0.75rem;
+        font-weight: 600;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+        transform: translateY(100px);
+        opacity: 0;
+        transition: all 0.3s;
+        z-index: 1000;
+    }
+
+    .toast.show {
+        transform: translateY(0);
+        opacity: 1;
+    }
+
+    .toast.error {
+        background: linear-gradient(135deg, #ef4444, #f87171);
+    }
+
+    /* Responsive */
+    @media (max-width: 1400px) {
+        .main-layout {
+            grid-template-columns: 280px 1fr 300px;
+        }
+    }
+
+    @media (max-width: 1200px) {
+        .main-layout {
+            grid-template-columns: 1fr 320px;
+        }
+        .conversations-panel {
+            display: none;
+        }
+    }
+
+    @media (max-width: 992px) {
+        .main-layout {
+            grid-template-columns: 1fr;
+        }
+        .notifications-panel {
+            display: none;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-container">
+    <!-- Header -->
+    <div class="header-section">
+        <div>
+            <h1>
+                <i class="fas fa-robot"></i>
+                Messenger Dashboard
+            </h1>
+            <p>
+                <i class="fab fa-facebook-messenger"></i>
+                {{ connection.page_name }} • 
+                {% if connection.auto_reply_enabled %}
+                    <span class="badge bg-success">Auto Reply ON</span>
+                {% else %}
+                    <span class="badge bg-warning">Auto Reply OFF</span>
+                {% endif %}
+                •
+                <span class="badge" style="background: rgba(251, 191, 36, 0.2); color: #fbbf24;">
+                    🪙 {{ total_tokens|default:0 }} tokens
+                </span>
+            </p>
+        </div>
+        <div>
+            <a href="{% url 'messenger_bot:settings' %}" class="btn-light">
+                <i class="fas fa-cog"></i> Settings
+            </a>
+        </div>
+    </div>
+
+    <!-- Main 3-Column Layout -->
+    <div class="main-layout">
+        <!-- Left: Conversations -->
+        <div class="conversations-panel">
+            <div class="panel-header">
+                <h5><i class="fas fa-comments"></i> Conversations ({{ conversations.count }})</h5>
+                <button class="btn-icon" onclick="refreshUserInfo()" title="Refresh User Names">
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+            </div>
+            
+            <div class="conversations-scroll">
+                {% if conversations %}
+                    {% for conv in conversations %}
+                    <a href="?conversation={{ conv.id }}" class="conversation-item {% if selected_conversation.id == conv.id %}active{% endif %}">
+                        {% if conv.sender_profile_pic %}
+                            <img src="{{ conv.sender_profile_pic }}" alt="" class="conv-avatar">
+                        {% else %}
+                            <div class="conv-avatar-placeholder">
+                                {{ conv.sender_name|default:conv.sender_id|first|upper }}
+                            </div>
+                        {% endif %}
+                        
+                        <div class="conv-info">
+                            <div class="conv-name">{{ conv.sender_name|default:conv.sender_id }}</div>
+                            <div class="conv-meta">
+                                <span><i class="fas fa-comment-dots"></i> {{ conv.message_count }}</span>
+                                <span><i class="fas fa-clock"></i> {{ conv.last_message_at|timesince }} ago</span>
+                            </div>
+                        </div>
+                    </a>
+                    {% endfor %}
+                {% else %}
+                    <div class="empty-state">
+                        <i class="fas fa-inbox"></i>
+                        <h4>No Conversations</h4>
+                        <p>Messages will appear here</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Middle: Messages -->
+        <div class="messages-panel">
+            {% if selected_conversation %}
+                <div class="messages-header">
+                    {% if selected_conversation.sender_profile_pic %}
+                        <img src="{{ selected_conversation.sender_profile_pic }}" alt="">
+                    {% else %}
+                        <div class="conv-avatar-placeholder" style="width:45px;height:45px;">
+                            {{ selected_conversation.sender_name|default:selected_conversation.sender_id|first|upper }}
+                        </div>
+                    {% endif %}
+                    <div style="flex: 1;">
+                        <h5>{{ selected_conversation.sender_name|default:selected_conversation.sender_id }}</h5>
+                        <small><i class="fas fa-comment-dots"></i> {{ selected_conversation.message_count }} messages</small>
+                    </div>
+                    
+                    <!-- Human/AI Toggle Switch -->
+                    <div class="mode-toggle">
+                        <span class="mode-label {% if not selected_conversation.human_takeover %}active{% endif %}">🤖 AI</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="humanToggle" 
+                                   {% if selected_conversation.human_takeover %}checked{% endif %}
+                                   onchange="toggleHumanMode({{ selected_conversation.id }})">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span class="mode-label {% if selected_conversation.human_takeover %}active{% endif %}">👤 Human</span>
+                    </div>
+                </div>
+                
+                <div class="messages-body" id="messagesBody">
+                    {% for msg in messages %}
+                    <div class="message-row {% if msg.sender == 'bot' %}bot{% endif %}">
+                        <div class="message-bubble {% if msg.sender == 'user' %}user{% else %}bot{% endif %}">
+                            {% if msg.message_type == 'voice' and msg.file_url %}
+                                <!-- Audio Player for Voice Messages -->
+                                <div class="voice-message">
+                                    <audio controls preload="metadata" style="max-width: 100%; height: 40px;">
+                                        <source src="{{ msg.file_url }}" type="audio/mpeg">
+                                        <source src="{{ msg.file_url }}" type="audio/ogg">
+                                        Your browser does not support audio.
+                                    </audio>
+                                    {% if msg.text and msg.text != '[Attachment]' %}
+                                        <div class="transcription">
+                                            <small><i class="fas fa-quote-left"></i> {{ msg.text }}</small>
+                                        </div>
+                                    {% endif %}
+                                </div>
+                            {% elif msg.text %}
+                                <div class="message-text">{{ msg.text }}</div>
+                            {% endif %}
+                            
+                            {% if msg.image_url %}
+                                <!-- Clickable Image -->
+                                <div class="message-image">
+                                    <a href="{{ msg.image_url }}" target="_blank" title="Click to open full image">
+                                        <img src="{{ msg.image_url }}" alt="Image" loading="lazy">
+                                    </a>
+                                </div>
+                            {% endif %}
+                            
+                            <div class="message-time">
+                                {% if msg.sender == 'user' %}👤{% elif msg.model_used == 'human' %}👤{% else %}🤖{% endif %}
+                                {{ msg.timestamp|date:"M d, h:i A" }}
+                                {% if msg.message_type == 'voice' %}<i class="fas fa-microphone" title="Voice message"></i>{% endif %}
+                                {% if msg.sender == 'bot' and msg.tokens_used > 0 %}
+                                    <span class="token-badge">🪙 {{ msg.tokens_used }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% empty %}
+                    <div class="empty-state">
+                        <i class="fas fa-comment-slash"></i>
+                        <h4>No Messages</h4>
+                    </div>
+                    {% endfor %}
+                </div>
+                
+                <!-- Manual Reply Box -->
+                <div class="reply-box">
+                    <input type="text" id="manualReply" placeholder="Type a message..." 
+                           onkeypress="if(event.key==='Enter') sendManualMessage({{ selected_conversation.id }})">
+                    <button onclick="sendManualMessage({{ selected_conversation.id }})" class="send-btn">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+            {% else %}
+                <div class="empty-state">
+                    <i class="fas fa-comments"></i>
+                    <h4>Select a Conversation</h4>
+                    <p>Choose a conversation from the left</p>
+                </div>
+            {% endif %}
+        </div>
+
+        <!-- Right: Notifications -->
+        <div class="notifications-panel">
+            <div class="notif-header">
+                <h5>
+                    <i class="fas fa-bell"></i> Notifications
+                    {% if unread_count > 0 %}
+                        <span class="notif-badge">{{ unread_count }}</span>
+                    {% endif %}
+                </h5>
+                <div style="display: flex; gap: 0.5rem;">
+                    <button class="btn-icon" onclick="markAllRead()" title="Mark All Read">
+                        <i class="fas fa-check-double"></i>
+                    </button>
+                    <button class="btn-icon" onclick="deleteAllReadNotifications()" title="Delete All Read" style="color: #f87171;">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="notif-scroll" id="notificationsList">
+                {% if notifications %}
+                    {% for notif in notifications %}
+                    <div class="notif-item {% if not notif.is_read %}unread{% endif %} {% if notif.is_resolved %}resolved{% endif %}" 
+                         id="notif-{{ notif.id }}"
+                         data-id="{{ notif.id }}" 
+                         onclick="viewNotification({{ notif.id }}, {{ notif.conversation_id }})">
+                        
+                        <div class="notif-type">
+                            <span class="notif-type-icon">{{ notif.type_icon }}</span>
+                            <span class="notif-type-label" style="color: {{ notif.priority_color }}">
+                                {{ notif.get_notification_type_display }}
+                            </span>
+                            <span class="notif-priority priority-{{ notif.priority }}">
+                                {{ notif.priority|upper }}
+                            </span>
+                        </div>
+                        
+                        <div class="notif-title">{{ notif.title }}</div>
+                        <div class="notif-summary">{{ notif.summary }}</div>
+                        
+                        <div class="notif-footer">
+                            <span class="notif-sender">
+                                <i class="fas fa-user"></i> 
+                                {{ notif.conversation.sender_name|default:notif.conversation.sender_id|truncatechars:15 }}
+                            </span>
+                            <span class="notif-time">{{ notif.created_at|timesince }} ago</span>
+                        </div>
+                        
+                        <div class="notif-actions">
+                            {% if not notif.is_resolved %}
+                            <button class="notif-btn view" onclick="event.stopPropagation(); viewConversation({{ notif.conversation_id }})">
+                                <i class="fas fa-eye"></i> View
+                            </button>
+                            <button class="notif-btn resolve" onclick="event.stopPropagation(); resolveNotification({{ notif.id }})">
+                                <i class="fas fa-check"></i> Resolve
+                            </button>
+                            {% endif %}
+                            <button class="notif-btn" onclick="event.stopPropagation(); deleteNotification({{ notif.id }})" style="background: rgba(239, 68, 68, 0.1); color: #f87171;">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <div class="empty-state">
+                        <i class="fas fa-bell-slash"></i>
+                        <h4>No Notifications</h4>
+                        <p>Important messages will appear here</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function showToast(message, isError = false) {
+        const toast = document.getElementById('toast');
+        toast.textContent = message;
+        toast.className = 'toast' + (isError ? ' error' : '');
+        toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+
+    async function refreshUserInfo() {
+        const btn = document.querySelector('.btn-icon');
+        btn.classList.add('loading');
+        
+        try {
+            const response = await fetch('{% url "messenger_bot:refresh_user_info" %}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                }
+            });
+            const data = await response.json();
+            
+            if (data.success) {
+                showToast('✅ ' + data.message);
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                showToast(data.message || 'Failed', true);
+            }
+        } catch (error) {
+            showToast('Error: ' + error.message, true);
+        } finally {
+            btn.classList.remove('loading');
+        }
+    }
+
+    async function markAllRead() {
+        try {
+            const response = await fetch('{% url "messenger_bot:mark_all_notifications_read" %}', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}'
+                }
+            });
+            const data = await response.json();
+            
+            if (data.success) {
+                document.querySelectorAll('.notif-item.unread').forEach(el => {
+                    el.classList.remove('unread');
+                });
+                document.querySelector('.notif-badge')?.remove();
+                showToast('✅ All marked as read');
+            }
+        } catch (error) {
+            showToast('Error', true);
+        }
+    }
+
+    function viewNotification(notifId, convId) {
+        // Mark as read
+        fetch(`/messenger/notifications/${notifId}/read/`, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+        });
+        
+        // Go to conversation
+        window.location.href = `?conversation=${convId}`;
+    }
+
+    function viewConversation(convId) {
+        window.location.href = `?conversation=${convId}`;
+    }
+
+    async function resolveNotification(notifId) {
+        try {
+            const response = await fetch(`/messenger/notifications/${notifId}/resolve/`, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+            });
+            const data = await response.json();
+            
+            if (data.success) {
+                const item = document.querySelector(`.notif-item[data-id="${notifId}"]`);
+                item.classList.add('resolved');
+                item.querySelector('.notif-actions')?.remove();
+                showToast('✅ Resolved');
+            }
+        } catch (error) {
+            showToast('Error', true);
+        }
+    }
+
+    async function deleteNotification(notifId) {
+        try {
+            const response = await fetch(`/messenger/notifications/${notifId}/delete/`, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+            });
+            const data = await response.json();
+            
+            if (data.success) {
+                const item = document.getElementById(`notif-${notifId}`);
+                if (item) {
+                    item.style.transition = 'all 0.3s';
+                    item.style.opacity = '0';
+                    item.style.transform = 'translateX(100%)';
+                    setTimeout(() => item.remove(), 300);
+                }
+                showToast('🗑️ Deleted');
+            }
+        } catch (error) {
+            showToast('Error', true);
+        }
+    }
+
+    async function deleteAllReadNotifications() {
+        if (!confirm('Delete all read notifications?')) return;
+        
+        try {
+            const response = await fetch('{% url "messenger_bot:delete_all_read_notifications" %}', {
+                method: 'POST',
+                headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+            });
+            const data = await response.json();
+            
+            if (data.success) {
+                document.querySelectorAll('.notif-item:not(.unread)').forEach(item => {
+                    item.style.transition = 'all 0.3s';
+                    item.style.opacity = '0';
+                    setTimeout(() => item.remove(), 300);
+                });
+                showToast(`🗑️ Deleted ${data.deleted} notifications`);
+            }
+        } catch (error) {
+            showToast('Error', true);
+        }
+    }
+
+    // Poll for new notifications every 30 seconds
+    setInterval(async () => {
+        try {
+            const response = await fetch('{% url "messenger_bot:get_notifications" %}');
+            const data = await response.json();
+            
+            if (data.unread_count > 0) {
+                const badge = document.querySelector('.notif-badge');
+                if (badge) {
+                    badge.textContent = data.unread_count;
+                } else {
+                    const header = document.querySelector('.notif-header h5');
+                    header.innerHTML += `<span class="notif-badge">${data.unread_count}</span>`;
+                }
+            }
+        } catch (e) {}
+    }, 30000);
+
+    // Toggle Human/AI mode
+    async function toggleHumanMode(conversationId) {
+        try {
+            const response = await fetch(`/messenger/conversation/${conversationId}/toggle-human/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}'
+                }
+            });
+            const data = await response.json();
+            
+            if (data.success) {
+                // Update mode labels
+                const labels = document.querySelectorAll('.mode-label');
+                if (data.human_takeover) {
+                    labels[0].classList.remove('active');
+                    labels[1].classList.add('active');
+                    showToast('👤 Human mode enabled - AI will not auto-reply');
+                } else {
+                    labels[0].classList.add('active');
+                    labels[1].classList.remove('active');
+                    showToast('🤖 AI mode enabled - Auto-reply is active');
+                }
+            } else {
+                showToast(data.error || 'Failed to toggle mode', true);
+            }
+        } catch (error) {
+            showToast('Error: ' + error.message, true);
+        }
+    }
+
+    // Send manual message
+    async function sendManualMessage(conversationId) {
+        const input = document.getElementById('manualReply');
+        const message = input.value.trim();
+        
+        if (!message) {
+            showToast('Please enter a message', true);
+            return;
+        }
+        
+        const sendBtn = document.querySelector('.send-btn');
+        sendBtn.disabled = true;
+        
+        try {
+            const formData = new FormData();
+            formData.append('message', message);
+            
+            const response = await fetch(`/messenger/conversation/${conversationId}/send-message/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: formData
+            });
+            const data = await response.json();
+            
+            if (data.success) {
+                showToast('✅ Message sent!');
+                input.value = '';
+                
+                // Add message to UI
+                const messagesBody = document.getElementById('messagesBody');
+                const now = new Date();
+                const timeStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ', ' + 
+                               now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+                
+                const newMsg = document.createElement('div');
+                newMsg.className = 'message-row bot';
+                newMsg.innerHTML = `
+                    <div class="message-bubble bot">
+                        [Human] ${message}
+                        <div class="message-time">👤 ${timeStr}</div>
+                    </div>
+                `;
+                messagesBody.appendChild(newMsg);
+                messagesBody.scrollTop = messagesBody.scrollHeight;
+            } else {
+                showToast(data.error || 'Failed to send', true);
+            }
+        } catch (error) {
+            showToast('Error: ' + error.message, true);
+        } finally {
+            sendBtn.disabled = false;
+        }
+    }
+
+    // Scroll messages to bottom on load
+    document.addEventListener('DOMContentLoaded', function() {
+        const messagesBody = document.getElementById('messagesBody');
+        if (messagesBody) {
+            messagesBody.scrollTop = messagesBody.scrollHeight;
+        }
+    });
+</script>
+{% endblock %}

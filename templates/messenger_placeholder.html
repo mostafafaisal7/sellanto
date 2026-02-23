@@ -1,0 +1,626 @@
+<!-- messenger_placeholder.html -->
+{% extends 'base.html' %}
+
+{% block title %}Messenger AI Bot - SocialSync{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Hero Section */
+    .coming-soon-hero {
+        text-align: center;
+        padding: 3rem 0;
+        position: relative;
+    }
+    
+    .hero-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+        background: linear-gradient(135deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.1) 100%);
+        border: 1px solid rgba(102, 126, 234, 0.3);
+        border-radius: 50px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: #a78bfa;
+        margin-bottom: 2rem;
+        animation: pulse-badge 2s infinite;
+    }
+    
+    @keyframes pulse-badge {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(167, 139, 250, 0.4); }
+        50% { box-shadow: 0 0 20px 5px rgba(167, 139, 250, 0.1); }
+    }
+    
+    .hero-badge .dot {
+        width: 8px;
+        height: 8px;
+        background: #a78bfa;
+        border-radius: 50%;
+        animation: blink 1.5s infinite;
+    }
+    
+    @keyframes blink {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.3; }
+    }
+    
+    /* Floating Bot Icon */
+    .bot-icon-wrapper {
+        position: relative;
+        width: 140px;
+        height: 140px;
+        margin: 0 auto 2rem;
+    }
+    
+    .bot-icon-bg {
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 32px;
+        transform: rotate(-6deg);
+        opacity: 0.3;
+        animation: float-slow 6s ease-in-out infinite;
+    }
+    
+    .bot-icon-bg-2 {
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+        border-radius: 32px;
+        transform: rotate(6deg);
+        opacity: 0.2;
+        animation: float-slow 6s ease-in-out infinite reverse;
+    }
+    
+    .bot-icon {
+        position: relative;
+        width: 140px;
+        height: 140px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 4rem;
+        box-shadow: 
+            0 20px 50px rgba(102, 126, 234, 0.4),
+            inset 0 2px 0 rgba(255, 255, 255, 0.2);
+        animation: float 3s ease-in-out infinite;
+        overflow: hidden;
+    }
+    
+    .bot-icon::before {
+        content: '';
+        position: absolute;
+        top: -100%;
+        left: -100%;
+        width: 300%;
+        height: 300%;
+        background: linear-gradient(
+            45deg,
+            transparent 30%,
+            rgba(255, 255, 255, 0.1) 50%,
+            transparent 70%
+        );
+        animation: shine-slow 4s infinite;
+    }
+    
+    @keyframes shine-slow {
+        0% { transform: translateX(-100%) rotate(45deg); }
+        100% { transform: translateX(100%) rotate(45deg); }
+    }
+    
+    @keyframes float {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-15px); }
+    }
+    
+    @keyframes float-slow {
+        0%, 100% { transform: translateY(0) rotate(-6deg); }
+        50% { transform: translateY(-10px) rotate(-6deg); }
+    }
+    
+    /* Messenger Icon inside bot */
+    .messenger-icon {
+        width: 70px;
+        height: 70px;
+        background: white;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    }
+    
+    .messenger-icon i {
+        font-size: 2.5rem;
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+    
+    .hero-title {
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: 2.75rem;
+        font-weight: 700;
+        margin-bottom: 1rem;
+        background: linear-gradient(135deg, #f8f9fa 0%, #adb5bd 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+    
+    .hero-subtitle {
+        font-size: 1.1rem;
+        color: var(--text-muted);
+        max-width: 500px;
+        margin: 0 auto 2.5rem;
+        line-height: 1.7;
+    }
+    
+    /* Progress Section */
+    .progress-section {
+        max-width: 400px;
+        margin: 0 auto 3rem;
+    }
+    
+    .progress-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.75rem;
+    }
+    
+    .progress-label {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: var(--text-secondary);
+    }
+    
+    .progress-percent {
+        font-size: 0.85rem;
+        font-weight: 700;
+        color: #a78bfa;
+    }
+    
+    .progress-track {
+        height: 10px;
+        background: var(--bg-elevated);
+        border-radius: 10px;
+        overflow: hidden;
+        position: relative;
+    }
+    
+    .progress-fill {
+        height: 100%;
+        background: linear-gradient(90deg, #667eea, #764ba2, #667eea);
+        background-size: 200% 100%;
+        border-radius: 10px;
+        width: 35%;
+        animation: progress-load 1.5s ease-out, gradient-move 2s linear infinite;
+        position: relative;
+    }
+    
+    .progress-fill::after {
+        content: '';
+        position: absolute;
+        right: 0;
+        top: 0;
+        bottom: 0;
+        width: 20px;
+        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3));
+        animation: shimmer 1.5s infinite;
+    }
+    
+    @keyframes progress-load {
+        from { width: 0; }
+        to { width: 35%; }
+    }
+    
+    @keyframes gradient-move {
+        0% { background-position: 0% 0%; }
+        100% { background-position: 200% 0%; }
+    }
+    
+    @keyframes shimmer {
+        0%, 100% { opacity: 0; }
+        50% { opacity: 1; }
+    }
+    
+    /* Features Grid */
+    .features-section {
+        margin-bottom: 3rem;
+    }
+    
+    .features-title {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin-bottom: 1.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+    }
+    
+    .features-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 1rem;
+    }
+    
+    .feature-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-subtle);
+        border-radius: 16px;
+        padding: 1.5rem;
+        display: flex;
+        align-items: flex-start;
+        gap: 1rem;
+        transition: all 0.3s ease;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .feature-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: linear-gradient(90deg, transparent, #667eea, #764ba2, transparent);
+        opacity: 0;
+        transition: opacity 0.3s ease;
+    }
+    
+    .feature-card:hover {
+        border-color: rgba(102, 126, 234, 0.3);
+        transform: translateY(-4px);
+        box-shadow: 0 10px 30px rgba(102, 126, 234, 0.15);
+    }
+    
+    .feature-card:hover::before {
+        opacity: 1;
+    }
+    
+    .feature-icon {
+        width: 48px;
+        height: 48px;
+        background: linear-gradient(135deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.1) 100%);
+        border: 1px solid rgba(102, 126, 234, 0.2);
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        flex-shrink: 0;
+    }
+    
+    .feature-content h4 {
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 0.375rem;
+    }
+    
+    .feature-content p {
+        font-size: 0.85rem;
+        color: var(--text-muted);
+        line-height: 1.5;
+    }
+    
+    /* CTA Section */
+    .cta-section {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 1rem;
+    }
+    
+    .btn-messenger {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 0.875rem 1.75rem;
+        border-radius: 12px;
+        font-weight: 600;
+        font-size: 0.95rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.625rem;
+        text-decoration: none;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 20px rgba(102, 126, 234, 0.35);
+        border: none;
+        cursor: pointer;
+    }
+    
+    .btn-messenger:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 30px rgba(102, 126, 234, 0.5);
+    }
+    
+    .btn-secondary {
+        background: var(--bg-elevated);
+        color: var(--text-primary);
+        padding: 0.875rem 1.75rem;
+        border-radius: 12px;
+        font-weight: 600;
+        font-size: 0.95rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.625rem;
+        text-decoration: none;
+        transition: all 0.3s ease;
+        border: 1px solid var(--border-default);
+    }
+    
+    .btn-secondary:hover {
+        background: var(--bg-hover);
+        border-color: var(--border-strong);
+        transform: translateY(-2px);
+    }
+    
+    /* Notification Card */
+    .notify-card {
+        max-width: 500px;
+        margin: 3rem auto 0;
+        background: linear-gradient(135deg, rgba(102, 126, 234, 0.08) 0%, rgba(118, 75, 162, 0.05) 100%);
+        border: 1px solid rgba(102, 126, 234, 0.2);
+        border-radius: 16px;
+        padding: 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+    
+    .notify-icon {
+        width: 50px;
+        height: 50px;
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+    
+    .notify-icon i {
+        font-size: 1.25rem;
+        color: white;
+    }
+    
+    .notify-content h4 {
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 0.25rem;
+    }
+    
+    .notify-content p {
+        font-size: 0.85rem;
+        color: var(--text-muted);
+    }
+    
+    .notify-form {
+        display: flex;
+        gap: 0.5rem;
+        margin-top: 0.75rem;
+    }
+    
+    .notify-form input {
+        flex: 1;
+        padding: 0.625rem 1rem;
+        background: var(--bg-card);
+        border: 1px solid var(--border-default);
+        border-radius: 8px;
+        color: var(--text-primary);
+        font-size: 0.85rem;
+        font-family: inherit;
+    }
+    
+    .notify-form input::placeholder {
+        color: var(--text-muted);
+    }
+    
+    .notify-form input:focus {
+        outline: none;
+        border-color: #667eea;
+    }
+    
+    .notify-form button {
+        padding: 0.625rem 1rem;
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        color: white;
+        border: none;
+        border-radius: 8px;
+        font-weight: 600;
+        font-size: 0.85rem;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        white-space: nowrap;
+    }
+    
+    .notify-form button:hover {
+        transform: scale(1.02);
+    }
+    
+    /* Animation delays */
+    .animate-in {
+        animation: fadeInUp 0.6s ease-out forwards;
+    }
+    
+    @keyframes fadeInUp {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+    
+    .delay-1 { animation-delay: 0.1s; opacity: 0; }
+    .delay-2 { animation-delay: 0.2s; opacity: 0; }
+    .delay-3 { animation-delay: 0.3s; opacity: 0; }
+    .delay-4 { animation-delay: 0.4s; opacity: 0; }
+    .delay-5 { animation-delay: 0.5s; opacity: 0; }
+    .delay-6 { animation-delay: 0.6s; opacity: 0; }
+    
+    /* Responsive */
+    @media (max-width: 768px) {
+        .hero-title {
+            font-size: 2rem;
+        }
+        
+        .bot-icon-wrapper {
+            width: 120px;
+            height: 120px;
+        }
+        
+        .bot-icon {
+            width: 120px;
+            height: 120px;
+            border-radius: 24px;
+        }
+        
+        .messenger-icon {
+            width: 56px;
+            height: 56px;
+        }
+        
+        .messenger-icon i {
+            font-size: 2rem;
+        }
+        
+        .notify-card {
+            flex-direction: column;
+            text-align: center;
+        }
+        
+        .notify-form {
+            flex-direction: column;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="coming-soon-hero">
+    <!-- Badge -->
+    <div class="hero-badge animate-in">
+        <span class="dot"></span>
+        Coming Soon
+    </div>
+    
+    <!-- Bot Icon -->
+    <div class="bot-icon-wrapper animate-in delay-1">
+        <div class="bot-icon-bg"></div>
+        <div class="bot-icon-bg-2"></div>
+        <div class="bot-icon">
+            <div class="messenger-icon">
+                <i class="fab fa-facebook-messenger"></i>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Title -->
+    <h1 class="hero-title animate-in delay-2">Messenger AI Bot</h1>
+    <p class="hero-subtitle animate-in delay-2">
+        We're building an intelligent AI chatbot for Facebook Messenger with advanced RAG capabilities and seamless automation.
+    </p>
+    
+    <!-- Progress -->
+    <div class="progress-section animate-in delay-3">
+        <div class="progress-header">
+            <span class="progress-label">Development Progress</span>
+            <span class="progress-percent">35%</span>
+        </div>
+        <div class="progress-track">
+            <div class="progress-fill"></div>
+        </div>
+    </div>
+    
+    <!-- Features -->
+    <div class="features-section animate-in delay-4">
+        <h3 class="features-title">
+            <i class="fas fa-sparkles" style="color: #a78bfa;"></i>
+            Upcoming Features
+        </h3>
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-icon">💬</div>
+                <div class="feature-content">
+                    <h4>AI-Powered Responses</h4>
+                    <p>Intelligent automated replies trained on your business context</p>
+                </div>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">📄</div>
+                <div class="feature-content">
+                    <h4>PDF Knowledge Base</h4>
+                    <p>Upload documents and let AI learn from your content with RAG</p>
+                </div>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">🎨</div>
+                <div class="feature-content">
+                    <h4>Custom Personality</h4>
+                    <p>Define unique prompts and tone for your brand voice</p>
+                </div>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">🖼️</div>
+                <div class="feature-content">
+                    <h4>Image Understanding</h4>
+                    <p>AI can analyze and respond to images sent by users</p>
+                </div>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">📊</div>
+                <div class="feature-content">
+                    <h4>Analytics Dashboard</h4>
+                    <p>Track conversations, response times, and satisfaction</p>
+                </div>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">⚡</div>
+                <div class="feature-content">
+                    <h4>Real-time Sync</h4>
+                    <p>Instant message delivery with webhook integration</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- CTA Buttons -->
+    <div class="cta-section animate-in delay-5">
+        <a href="/platforms/connect/" class="btn-secondary">
+            <i class="fas fa-arrow-left"></i>
+            Back to Connections
+        </a>
+        <button class="btn-messenger" onclick="document.getElementById('notifySection').scrollIntoView({behavior: 'smooth'})">
+            <i class="fas fa-bell"></i>
+            Notify Me When Ready
+        </button>
+    </div>
+    
+    <!-- Notification Signup -->
+    <div class="notify-card animate-in delay-6" id="notifySection">
+        <div class="notify-icon">
+            <i class="fas fa-envelope"></i>
+        </div>
+        <div class="notify-content">
+            <h4>Get Notified</h4>
+            <p>Be the first to know when Messenger AI Bot launches!</p>
+            <form class="notify-form" onsubmit="event.preventDefault(); alert('Thanks! We\'ll notify you when it\'s ready.');">
+                <input type="email" placeholder="Enter your email..." required>
+                <button type="submit">Subscribe</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

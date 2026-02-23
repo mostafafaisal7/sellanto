@@ -1,0 +1,461 @@
+{% extends 'base.html' %}
+{% block title %}Voice Settings - SocialSync{% endblock %}
+
+{% block extra_css %}
+<style>
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1.5rem;
+    }
+    .page-header h1 {
+        font-size: 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .page-header h1 i {
+        color: #f472b6;
+    }
+    
+    .settings-layout {
+        display: grid;
+        grid-template-columns: 1fr 350px;
+        gap: 1.5rem;
+    }
+    @media (max-width: 1024px) {
+        .settings-layout {
+            grid-template-columns: 1fr;
+        }
+    }
+    
+    .card {
+        background: rgba(30,41,59,0.8);
+        border: 1px solid rgba(244,114,182,0.2);
+        border-radius: 1rem;
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+    }
+    .card-title {
+        font-size: 1rem;
+        color: #f472b6;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 1.25rem;
+        padding-bottom: 0.75rem;
+        border-bottom: 1px solid rgba(244,114,182,0.2);
+    }
+    
+    .form-group {
+        margin-bottom: 1.25rem;
+    }
+    .form-label {
+        display: block;
+        font-size: 0.85rem;
+        color: #e2e8f0;
+        margin-bottom: 0.5rem;
+        font-weight: 500;
+    }
+    .form-label small {
+        color: #64748b;
+        font-weight: 400;
+    }
+    .form-control {
+        width: 100%;
+        padding: 0.75rem 1rem;
+        background: rgba(15,23,42,0.8);
+        border: 1px solid rgba(244,114,182,0.3);
+        border-radius: 0.5rem;
+        color: #e2e8f0;
+        font-size: 0.9rem;
+        transition: all 0.3s;
+    }
+    .form-control:focus {
+        outline: none;
+        border-color: #f472b6;
+        box-shadow: 0 0 15px rgba(244,114,182,0.2);
+    }
+    .form-control::placeholder {
+        color: #64748b;
+    }
+    .form-hint {
+        font-size: 0.75rem;
+        color: #64748b;
+        margin-top: 0.35rem;
+    }
+    
+    .api-key-container {
+        position: relative;
+    }
+    .api-key-container input {
+        padding-right: 100px;
+        font-family: monospace;
+    }
+    .api-key-actions {
+        position: absolute;
+        right: 0.5rem;
+        top: 50%;
+        transform: translateY(-50%);
+        display: flex;
+        gap: 0.25rem;
+    }
+    .api-key-btn {
+        padding: 0.35rem 0.6rem;
+        background: rgba(244,114,182,0.2);
+        border: none;
+        border-radius: 0.25rem;
+        color: #f472b6;
+        font-size: 0.7rem;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    .api-key-btn:hover {
+        background: rgba(244,114,182,0.3);
+    }
+    
+    .btn-save {
+        width: 100%;
+        padding: 0.85rem;
+        background: linear-gradient(135deg, #ec4899, #f472b6);
+        border: none;
+        border-radius: 0.5rem;
+        color: #fff;
+        font-size: 0.95rem;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        transition: all 0.3s;
+    }
+    .btn-save:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 30px rgba(244,114,182,0.4);
+    }
+    
+    /* Stats Card */
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem;
+    }
+    .stat-item {
+        text-align: center;
+        padding: 1rem;
+        background: rgba(15,23,42,0.5);
+        border-radius: 0.75rem;
+    }
+    .stat-value {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: #f472b6;
+    }
+    .stat-label {
+        font-size: 0.75rem;
+        color: #64748b;
+        margin-top: 0.25rem;
+    }
+    
+    /* Voice Info */
+    .voice-info {
+        margin-bottom: 1.5rem;
+    }
+    .voice-item {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.75rem;
+        background: rgba(15,23,42,0.5);
+        border-radius: 0.5rem;
+        margin-bottom: 0.5rem;
+    }
+    .voice-item-icon {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1rem;
+    }
+    .voice-item-icon.alloy { background: linear-gradient(135deg, #6366f1, #8b5cf6); }
+    .voice-item-icon.echo { background: linear-gradient(135deg, #3b82f6, #06b6d4); }
+    .voice-item-icon.fable { background: linear-gradient(135deg, #f59e0b, #ef4444); }
+    .voice-item-icon.onyx { background: linear-gradient(135deg, #1f2937, #374151); }
+    .voice-item-icon.nova { background: linear-gradient(135deg, #ec4899, #f472b6); }
+    .voice-item-icon.shimmer { background: linear-gradient(135deg, #a855f7, #ec4899); }
+    .voice-item-info {
+        flex: 1;
+    }
+    .voice-item-name {
+        font-weight: 600;
+        font-size: 0.85rem;
+    }
+    .voice-item-desc {
+        font-size: 0.7rem;
+        color: #64748b;
+    }
+    
+    /* Model Info */
+    .model-info {
+        padding: 1rem;
+        background: rgba(15,23,42,0.5);
+        border-radius: 0.75rem;
+    }
+    .model-info h4 {
+        font-size: 0.85rem;
+        margin-bottom: 0.75rem;
+        color: #e2e8f0;
+    }
+    .model-item {
+        display: flex;
+        justify-content: space-between;
+        padding: 0.5rem 0;
+        border-bottom: 1px solid rgba(244,114,182,0.1);
+        font-size: 0.8rem;
+    }
+    .model-item:last-child {
+        border-bottom: none;
+    }
+    .model-name {
+        color: #e2e8f0;
+    }
+    .model-desc {
+        color: #64748b;
+    }
+    
+    /* Success message */
+    .success-msg {
+        padding: 1rem;
+        background: rgba(16,185,129,0.1);
+        border: 1px solid rgba(16,185,129,0.3);
+        border-radius: 0.5rem;
+        color: #34d399;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1><i class="fas fa-cog"></i> Voice Settings</h1>
+    <a href="{% url 'ai_voice:generator' %}" class="btn btn-sm" style="background:rgba(244,114,182,0.2); color:#f472b6;">
+        <i class="fas fa-microphone-alt"></i> Generator
+    </a>
+</div>
+
+{% if messages %}
+{% for message in messages %}
+<div class="success-msg">
+    <i class="fas fa-check-circle"></i> {{ message }}
+</div>
+{% endfor %}
+{% endif %}
+
+<form method="post">
+{% csrf_token %}
+
+<div class="settings-layout">
+    <!-- Main Settings -->
+    <div class="main-settings">
+        <div class="card">
+            <h3 class="card-title"><i class="fas fa-key"></i> API Configuration</h3>
+            
+            <div class="form-group">
+                <label class="form-label">
+                    OpenAI API Key
+                    <small>(Required for voice generation)</small>
+                </label>
+                <div class="api-key-container">
+                    <input type="password" name="api_key" id="apiKey" class="form-control" 
+                           placeholder="sk-proj-..." 
+                           value="{% if user_settings.openai_api_key %}{{ user_settings.openai_api_key }}{% endif %}">
+                    <div class="api-key-actions">
+                        <button type="button" class="api-key-btn" onclick="toggleApiKey()">
+                            <i class="fas fa-eye" id="toggleIcon"></i>
+                        </button>
+                        <button type="button" class="api-key-btn" onclick="clearApiKey()">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                </div>
+                {% if masked_key %}
+                <div class="form-hint">Current: {{ masked_key }}</div>
+                {% else %}
+                <div class="form-hint">Get your API key from <a href="https://platform.openai.com/api-keys" target="_blank" style="color:#f472b6;">OpenAI Platform</a></div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="card">
+            <h3 class="card-title"><i class="fas fa-sliders-h"></i> Default Settings</h3>
+            
+            <div class="form-group">
+                <label class="form-label">Default Voice</label>
+                <select name="default_voice" class="form-control">
+                    {% for value, label in voice_choices %}
+                    <option value="{{ value }}" {% if user_settings.default_voice == value %}selected{% endif %}>
+                        {{ value|title }} - {{ label|cut:"- " }}
+                    </option>
+                    {% endfor %}
+                </select>
+                <div class="form-hint">This voice will be pre-selected in the generator</div>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Default Model</label>
+                <select name="default_model" class="form-control">
+                    {% for value, label in model_choices %}
+                    <option value="{{ value }}" {% if user_settings.default_model == value %}selected{% endif %}>
+                        {{ label }}
+                    </option>
+                    {% endfor %}
+                </select>
+                <div class="form-hint">TTS-1-HD provides higher quality but is slower</div>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Default Speed</label>
+                <input type="number" name="default_speed" class="form-control" 
+                       value="{{ user_settings.default_speed }}" 
+                       min="0.25" max="4.0" step="0.05">
+                <div class="form-hint">Range: 0.25 (slow) to 4.0 (fast), 1.0 is normal</div>
+            </div>
+        </div>
+        
+        <button type="submit" class="btn-save">
+            <i class="fas fa-save"></i> Save Settings
+        </button>
+    </div>
+    
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <div class="card">
+            <h3 class="card-title"><i class="fas fa-chart-pie"></i> Usage Statistics</h3>
+            <div class="stats-grid">
+                <div class="stat-item">
+                    <div class="stat-value">{{ user_settings.total_generations }}</div>
+                    <div class="stat-label">Generations</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">{{ user_settings.total_characters_used|floatformat:0 }}</div>
+                    <div class="stat-label">Characters</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h3 class="card-title"><i class="fas fa-user-circle"></i> Available Voices</h3>
+            <div class="voice-info">
+                <div class="voice-item">
+                    <div class="voice-item-icon alloy">🎭</div>
+                    <div class="voice-item-info">
+                        <div class="voice-item-name">Alloy</div>
+                        <div class="voice-item-desc">Neutral, balanced voice</div>
+                    </div>
+                </div>
+                <div class="voice-item">
+                    <div class="voice-item-icon echo">🔊</div>
+                    <div class="voice-item-info">
+                        <div class="voice-item-name">Echo</div>
+                        <div class="voice-item-desc">Male, clear pronunciation</div>
+                    </div>
+                </div>
+                <div class="voice-item">
+                    <div class="voice-item-icon fable">🎩</div>
+                    <div class="voice-item-info">
+                        <div class="voice-item-name">Fable</div>
+                        <div class="voice-item-desc">British accent, storytelling</div>
+                    </div>
+                </div>
+                <div class="voice-item">
+                    <div class="voice-item-icon onyx">🎸</div>
+                    <div class="voice-item-info">
+                        <div class="voice-item-name">Onyx</div>
+                        <div class="voice-item-desc">Deep male, authoritative</div>
+                    </div>
+                </div>
+                <div class="voice-item">
+                    <div class="voice-item-icon nova">✨</div>
+                    <div class="voice-item-info">
+                        <div class="voice-item-name">Nova</div>
+                        <div class="voice-item-desc">Female, friendly tone</div>
+                    </div>
+                </div>
+                <div class="voice-item">
+                    <div class="voice-item-icon shimmer">💫</div>
+                    <div class="voice-item-info">
+                        <div class="voice-item-name">Shimmer</div>
+                        <div class="voice-item-desc">Soft female, gentle</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h3 class="card-title"><i class="fas fa-info-circle"></i> Model Info</h3>
+            <div class="model-info">
+                <h4>TTS-1 (Standard)</h4>
+                <div class="model-item">
+                    <span class="model-name">Speed</span>
+                    <span class="model-desc">Faster</span>
+                </div>
+                <div class="model-item">
+                    <span class="model-name">Quality</span>
+                    <span class="model-desc">Good</span>
+                </div>
+                <div class="model-item">
+                    <span class="model-name">Cost</span>
+                    <span class="model-desc">$0.015 / 1K chars</span>
+                </div>
+            </div>
+            <div class="model-info" style="margin-top:1rem;">
+                <h4>TTS-1-HD (High Quality)</h4>
+                <div class="model-item">
+                    <span class="model-name">Speed</span>
+                    <span class="model-desc">Slower</span>
+                </div>
+                <div class="model-item">
+                    <span class="model-name">Quality</span>
+                    <span class="model-desc">Best</span>
+                </div>
+                <div class="model-item">
+                    <span class="model-name">Cost</span>
+                    <span class="model-desc">$0.030 / 1K chars</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+</form>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function toggleApiKey() {
+    const input = document.getElementById('apiKey');
+    const icon = document.getElementById('toggleIcon');
+    
+    if (input.type === 'password') {
+        input.type = 'text';
+        icon.classList.remove('fa-eye');
+        icon.classList.add('fa-eye-slash');
+    } else {
+        input.type = 'password';
+        icon.classList.remove('fa-eye-slash');
+        icon.classList.add('fa-eye');
+    }
+}
+
+function clearApiKey() {
+    document.getElementById('apiKey').value = '';
+}
+</script>
+{% endblock %}

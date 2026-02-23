@@ -1,0 +1,374 @@
+<!-- C:\Users\Trust computer\Desktop\Final_version_socialSync\messenger_bot\templates\messenger_bot\success.html -->
+
+{% extends 'base.html' %}
+
+{% block title %}Connection Successful - SocialSync{% endblock %}
+
+{% block extra_css %}
+<style>
+    .success-container {
+        max-width: 900px;
+        margin: 3rem auto;
+        padding: 0 1rem;
+    }
+
+    .success-card {
+        background: white;
+        border-radius: 1rem;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
+    }
+
+    .success-header {
+        background: linear-gradient(135deg, #10b981, #059669);
+        color: white;
+        padding: 3rem 2rem;
+        text-align: center;
+    }
+
+    .success-icon {
+        font-size: 5rem;
+        margin-bottom: 1rem;
+        animation: bounce 1s ease-in-out;
+    }
+
+    @keyframes bounce {
+
+        0%,
+        100% {
+            transform: translateY(0);
+        }
+
+        50% {
+            transform: translateY(-20px);
+        }
+    }
+
+    .success-header h1 {
+        margin: 0 0 0.5rem;
+        font-size: 2.5rem;
+    }
+
+    .success-header p {
+        margin: 0;
+        font-size: 1.2rem;
+        opacity: 0.9;
+    }
+
+    .success-body {
+        padding: 2rem;
+    }
+
+    .connection-info {
+        background: #f9fafb;
+        padding: 1.5rem;
+        border-radius: 0.5rem;
+        margin-bottom: 2rem;
+    }
+
+    .connection-info h3 {
+        margin: 0 0 1rem;
+        color: #1f2937;
+    }
+
+    .info-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 0.75rem;
+        padding: 0.5rem;
+        background: white;
+        border-radius: 0.5rem;
+    }
+
+    .info-icon {
+        font-size: 1.5rem;
+    }
+
+    .webhook-section {
+        background: #eff6ff;
+        border-left: 4px solid #3b82f6;
+        padding: 1.5rem;
+        border-radius: 0.5rem;
+        margin-bottom: 2rem;
+    }
+
+    .webhook-section h3 {
+        margin: 0 0 1rem;
+        color: #1e40af;
+    }
+
+    .webhook-steps {
+        margin: 1rem 0;
+    }
+
+    .webhook-step {
+        margin-bottom: 1rem;
+        padding-left: 1.5rem;
+        position: relative;
+    }
+
+    .webhook-step::before {
+        content: attr(data-step);
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 25px;
+        height: 25px;
+        background: #3b82f6;
+        color: white;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        font-size: 0.875rem;
+    }
+
+    .code-box {
+        background: #1f2937;
+        color: #10b981;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        font-family: monospace;
+        font-size: 0.9rem;
+        margin: 0.5rem 0;
+        position: relative;
+        overflow-x: auto;
+    }
+
+    .copy-btn {
+        position: absolute;
+        top: 0.5rem;
+        right: 0.5rem;
+        background: #374151;
+        color: white;
+        border: none;
+        padding: 0.25rem 0.75rem;
+        border-radius: 0.25rem;
+        cursor: pointer;
+        font-size: 0.875rem;
+    }
+
+    .copy-btn:hover {
+        background: #4b5563;
+    }
+
+    .action-buttons {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+        margin-top: 2rem;
+    }
+
+    .btn {
+        padding: 1rem 2rem;
+        border-radius: 0.5rem;
+        font-weight: 600;
+        text-align: center;
+        text-decoration: none;
+        transition: all 0.3s;
+        border: none;
+        cursor: pointer;
+        font-size: 1rem;
+    }
+
+    .btn-primary {
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        color: white;
+    }
+
+    .btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+    }
+
+    .btn-secondary {
+        background: white;
+        color: #667eea;
+        border: 2px solid #667eea;
+    }
+
+    .btn-secondary:hover {
+        background: #f9fafb;
+    }
+
+    .feature-list {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 1rem;
+        margin: 2rem 0;
+    }
+
+    .feature-item {
+        display: flex;
+        align-items: start;
+        gap: 0.75rem;
+        padding: 1rem;
+        background: #f9fafb;
+        border-radius: 0.5rem;
+    }
+
+    .feature-icon {
+        font-size: 1.5rem;
+    }
+
+    .feature-text h4 {
+        margin: 0 0 0.25rem;
+        color: #1f2937;
+    }
+
+    .feature-text p {
+        margin: 0;
+        color: #6b7280;
+        font-size: 0.875rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="success-container">
+    <div class="success-card">
+        <!-- Success Header -->
+        <div class="success-header">
+            <div class="success-icon">🎉</div>
+            <h1>Connection Successful!</h1>
+            <p>Your Messenger AI Bot is ready to go</p>
+        </div>
+
+        <!-- Success Body -->
+        <div class="success-body">
+            <!-- Connection Info -->
+            <div class="connection-info">
+                <h3>✅ Connected Successfully</h3>
+                <div class="info-item">
+                    <span class="info-icon">💬</span>
+                    <div>
+                        <strong>Facebook Page:</strong> {{ connection.page_name }}
+                    </div>
+                </div>
+                <div class="info-item">
+                    <span class="info-icon">🤖</span>
+                    <div>
+                        <strong>AI Model:</strong> {{ connection.ai_config.get_openai_model_display }}
+                    </div>
+                </div>
+                <div class="info-item">
+                    <span class="info-icon">📄</span>
+                    <div>
+                        <strong>PDFs Uploaded:</strong> {{ connection.pdfs.count }} file(s)
+                    </div>
+                </div>
+            </div>
+
+            <!-- Webhook Setup Instructions -->
+            <div class="webhook-section">
+                <h3>🔔 Final Step: Setup Facebook Webhook</h3>
+                <p>To enable your bot to receive and respond to messages, configure the webhook in your Facebook App:
+                </p>
+
+                <div class="webhook-steps">
+                    <div class="webhook-step" data-step="1">
+                        <p><strong>Go to Facebook App Dashboard</strong></p>
+                        <p>Visit: <a href="https://developers.facebook.com/apps/"
+                                target="_blank">https://developers.facebook.com/apps/</a></p>
+                    </div>
+
+                    <div class="webhook-step" data-step="2">
+                        <p><strong>Add Messenger Product</strong></p>
+                        <p>Add "Messenger" product if not already added</p>
+                    </div>
+
+                    <div class="webhook-step" data-step="3">
+                        <p><strong>Setup Webhooks</strong></p>
+                        <p>Go to Messenger → Settings → Webhooks</p>
+                    </div>
+
+                    <div class="webhook-step" data-step="4">
+                        <p><strong>Add Callback URL</strong></p>
+                        <div class="code-box">
+                            <button class="copy-btn" onclick="copyToClipboard('webhookUrl')">Copy</button>
+                            <div id="webhookUrl">{{ webhook_url }}</div>
+                        </div>
+                    </div>
+
+                    <div class="webhook-step" data-step="5">
+                        <p><strong>Add Verify Token</strong></p>
+                        <div class="code-box">
+                            <button class="copy-btn" onclick="copyToClipboard('verifyToken')">Copy</button>
+                            <div id="verifyToken">{{ verify_token }}</div>
+                        </div>
+                    </div>
+
+                    <div class="webhook-step" data-step="6">
+                        <p><strong>Subscribe to Webhook Fields</strong></p>
+                        <p>Select: <code>messages</code>, <code>messaging_postbacks</code>,
+                            <code>messaging_optins</code></p>
+                    </div>
+
+                    <div class="webhook-step" data-step="7">
+                        <p><strong>Subscribe Page to Webhook</strong></p>
+                        <p>In "Webhooks" section, click "Add Subscriptions" and select your page</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- What's Next -->
+            <h3 style="margin-bottom: 1rem;">🚀 What Your Bot Can Do:</h3>
+            <div class="feature-list">
+                <div class="feature-item">
+                    <span class="feature-icon">💬</span>
+                    <div class="feature-text">
+                        <h4>Auto Responses</h4>
+                        <p>Instant AI-powered replies to user messages</p>
+                    </div>
+                </div>
+                <div class="feature-item">
+                    <span class="feature-icon">📄</span>
+                    <div class="feature-text">
+                        <h4>RAG Knowledge</h4>
+                        <p>Answers based on your uploaded PDFs</p>
+                    </div>
+                </div>
+                <div class="feature-item">
+                    <span class="feature-icon">🖼️</span>
+                    <div class="feature-text">
+                        <h4>Image Understanding</h4>
+                        <p>AI can analyze and respond to images</p>
+                    </div>
+                </div>
+                <div class="feature-item">
+                    <span class="feature-icon">📊</span>
+                    <div class="feature-text">
+                        <h4>Analytics</h4>
+                        <p>Track conversations and performance</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="action-buttons">
+                <a href="{% url 'messenger_bot:dashboard' %}" class="btn btn-primary">
+                    📊 View Dashboard
+                </a>
+                <a href="{% url 'messenger_bot:settings' %}" class="btn btn-secondary">
+                    ⚙️ Manage Settings
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function copyToClipboard(elementId) {
+        const text = document.getElementById(elementId).innerText;
+        navigator.clipboard.writeText(text).then(() => {
+            const btn = event.target;
+            btn.innerText = '✅ Copied!';
+            setTimeout(() => {
+                btn.innerText = 'Copy';
+            }, 2000);
+        });
+    }
+</script>
+{% endblock %}

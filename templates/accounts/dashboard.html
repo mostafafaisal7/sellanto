@@ -1,0 +1,938 @@
+<!-- # C:\Users\Trust computer\Desktop\Final_version_socialSync\templates\accounts\dashboard.html -->
+{% extends 'base.html' %}
+
+{% block title %}Dashboard - Sellanto{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+    }
+
+    body {
+        background: #0d0d0d;
+        color: #e5e7eb;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        line-height: 1.6;
+    }
+
+    .dashboard-container {
+        max-width: 1600px;
+        margin: 0 auto;
+        padding: 3rem 2.5rem;
+    }
+
+    /* Welcome Section */
+    .welcome-section {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        padding: 3rem 2.5rem;
+        border-radius: 2rem;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        margin-bottom: 3rem;
+        position: relative;
+        overflow: hidden;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    }
+
+    .welcome-section::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 200%;
+        height: 100%;
+        background: linear-gradient(90deg,
+                transparent,
+                rgba(239, 68, 68, 0.03),
+                transparent);
+        animation: shimmer 8s infinite;
+    }
+
+    @keyframes shimmer {
+        0% {
+            left: -100%;
+        }
+
+        100% {
+            left: 100%;
+        }
+    }
+
+    .welcome-section::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg,
+                transparent,
+                #ff6b6b,
+                #ee5a6f,
+                #f06595,
+                transparent);
+        background-size: 200% 100%;
+        animation: gradient-shift 3s linear infinite;
+    }
+
+    @keyframes gradient-shift {
+        0% {
+            background-position: 0% 0%;
+        }
+
+        100% {
+            background-position: 200% 0%;
+        }
+    }
+
+    .welcome-content {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 2rem;
+    }
+
+    .welcome-text h1 {
+        font-size: 2.75rem;
+        font-weight: 800;
+        background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 50%, #f06595 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 0.75rem;
+        letter-spacing: -0.03em;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .welcome-icon {
+        width: 55px;
+        height: 55px;
+        background: linear-gradient(135deg, #ff6b6b, #f06595);
+        border-radius: 1.25rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 1.75rem;
+        box-shadow: 0 10px 30px rgba(239, 68, 68, 0.4);
+        animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+
+        0%,
+        100% {
+            transform: scale(1);
+        }
+
+        50% {
+            transform: scale(1.05);
+        }
+    }
+
+    .welcome-text p {
+        color: #94a3b8;
+        font-size: 1.15rem;
+        font-weight: 500;
+    }
+
+    .welcome-time {
+        background: rgba(239, 68, 68, 0.1);
+        border: 1px solid rgba(239, 68, 68, 0.2);
+        padding: 1rem 2rem;
+        border-radius: 1.25rem;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        transition: all 0.3s;
+    }
+
+    .welcome-time:hover {
+        background: rgba(239, 68, 68, 0.15);
+        transform: translateY(-2px);
+        box-shadow: 0 10px 30px rgba(239, 68, 68, 0.2);
+    }
+
+    .time-icon {
+        font-size: 2rem;
+        color: #ff6b6b;
+    }
+
+    .time-info {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .current-time {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #fff;
+        line-height: 1;
+    }
+
+    .current-date {
+        font-size: 0.85rem;
+        color: #94a3b8;
+        margin-top: 0.25rem;
+    }
+
+    .header-badge {
+        background: rgba(239, 68, 68, 0.1);
+        border: 1px solid rgba(239, 68, 68, 0.2);
+        padding: 0.75rem 1.5rem;
+        border-radius: 1rem;
+        color: #ff6b6b;
+        font-weight: 600;
+        font-size: 0.9rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .pulse-dot {
+        width: 8px;
+        height: 8px;
+        background: #ff6b6b;
+        border-radius: 50%;
+        animation: pulse-dot 2s infinite;
+    }
+
+    @keyframes pulse-dot {
+
+        0%,
+        100% {
+            opacity: 1;
+            box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+        }
+
+        50% {
+            opacity: 0.7;
+            box-shadow: 0 0 0 8px rgba(239, 68, 68, 0);
+        }
+    }
+
+    /* Stats Grid */
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 2rem;
+        margin-bottom: 3rem;
+    }
+
+    .stat-card {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        padding: 2.5rem;
+        border-radius: 1.75rem;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        position: relative;
+        overflow: hidden;
+        transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    }
+
+    .stat-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: radial-gradient(circle at 20% 20%, rgba(239, 68, 68, 0.1), transparent 70%);
+        opacity: 0;
+        transition: opacity 0.5s;
+    }
+
+    .stat-card:hover {
+        transform: translateY(-12px);
+        border-color: rgba(239, 68, 68, 0.2);
+        box-shadow: 0 25px 60px rgba(239, 68, 68, 0.25);
+    }
+
+    .stat-card:hover::before {
+        opacity: 1;
+    }
+
+    .stat-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 2rem;
+        position: relative;
+        z-index: 1;
+    }
+
+    .stat-icon-wrapper {
+        width: 70px;
+        height: 70px;
+        border-radius: 1.25rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2rem;
+        position: relative;
+        transition: all 0.4s;
+    }
+
+    .stat-card:hover .stat-icon-wrapper {
+        transform: rotate(-10deg) scale(1.1);
+    }
+
+    .stat-icon-wrapper::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: 1.25rem;
+        padding: 2px;
+        background: linear-gradient(135deg, var(--icon-color-1), var(--icon-color-2));
+        -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+        -webkit-mask-composite: xor;
+        mask-composite: exclude;
+    }
+
+    .stat-icon-wrapper i {
+        background: linear-gradient(135deg, var(--icon-color-1), var(--icon-color-2));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        z-index: 1;
+    }
+
+    .stat-card:nth-child(1) {
+        --icon-color-1: #6366f1;
+        --icon-color-2: #8b5cf6;
+    }
+
+    .stat-card:nth-child(2) {
+        --icon-color-1: #f59e0b;
+        --icon-color-2: #ef4444;
+    }
+
+    .stat-card:nth-child(3) {
+        --icon-color-1: #10b981;
+        --icon-color-2: #06b6d4;
+    }
+
+    .stat-card:nth-child(4) {
+        --icon-color-1: #ec4899;
+        --icon-color-2: #8b5cf6;
+    }
+
+    .stat-trend {
+        background: rgba(16, 185, 129, 0.1);
+        border: 1px solid rgba(16, 185, 129, 0.2);
+        padding: 0.5rem 1rem;
+        border-radius: 0.75rem;
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #10b981;
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        transition: all 0.3s;
+    }
+
+    .stat-trend:hover {
+        transform: scale(1.05);
+        background: rgba(16, 185, 129, 0.15);
+    }
+
+    .stat-content {
+        position: relative;
+        z-index: 1;
+    }
+
+    .stat-value {
+        font-size: 3.5rem;
+        font-weight: 900;
+        color: #ffffff;
+        line-height: 1;
+        margin-bottom: 0.75rem;
+        letter-spacing: -0.04em;
+    }
+
+    .stat-label {
+        color: #64748b;
+        font-size: 0.95rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+    }
+
+    .stat-progress {
+        width: 100%;
+        height: 6px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 999px;
+        overflow: hidden;
+        margin-top: 1.5rem;
+    }
+
+    .stat-progress-bar {
+        height: 100%;
+        background: linear-gradient(90deg, var(--icon-color-1), var(--icon-color-2));
+        border-radius: 999px;
+        transition: width 1s ease-out;
+    }
+
+    /* Quick Actions */
+    .quick-actions {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        padding: 2.5rem;
+        border-radius: 2rem;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        margin-bottom: 3rem;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .quick-actions::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg,
+                transparent,
+                #f59e0b,
+                #ef4444,
+                #f59e0b,
+                transparent);
+        background-size: 200% 100%;
+        animation: gradient-shift 3s linear infinite;
+    }
+
+    .section-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2rem;
+        padding-bottom: 1.5rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .quick-actions h2 {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: #fff;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .quick-actions h2 i {
+        color: #f59e0b;
+        font-size: 1.5rem;
+    }
+
+    .action-buttons {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 1.5rem;
+        padding-bottom: 5rem;
+    }
+
+    .action-btn {
+        padding: 2rem 1.5rem;
+        background: linear-gradient(145deg, #1a1a1a 0%, #2d2d2d 100%);
+        color: white;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 1.5rem;
+        cursor: pointer;
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        text-decoration: none;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 1rem;
+        font-weight: 600;
+        font-size: 1rem;
+        position: relative;
+        overflow: hidden;
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+    }
+
+    .action-btn::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(135deg, #ef4444, #f59e0b);
+        opacity: 0;
+        transition: opacity 0.4s;
+    }
+
+    .action-btn:hover::before {
+        opacity: 0.1;
+    }
+
+    .action-btn:hover {
+        transform: translateY(-8px);
+        border-color: rgba(239, 68, 68, 0.3);
+        box-shadow: 0 20px 40px rgba(239, 68, 68, 0.3);
+    }
+
+    .action-btn-icon {
+        /* width: 65px;
+        height: 65px;
+        background: linear-gradient(135deg, #ef4444, #f59e0b);
+        border-radius: 1.25rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.75rem;
+        box-shadow: 0 10px 30px rgba(239, 68, 68, 0.3);
+        /* position: relative; */
+        /* z-index: 1; */
+        /* transition: all 0.4s; */
+        */
+    }
+
+    .action-btn:hover .action-btn-icon {
+        transform: scale(1.1) rotate(5deg);
+        box-shadow: 0 15px 40px rgba(239, 68, 68, 0.5);
+    }
+
+    .action-btn-text {
+        position: relative;
+        z-index: 1;
+        font-weight: 700;
+        font-size: 1.05rem;
+        color: #e5e7eb;
+        transition: color 0.3s;
+    }
+
+    .action-btn:hover .action-btn-text {
+        color: #fff;
+    }
+
+    /* Subscription Card */
+    .subscription-card {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        color: white;
+        padding: 3rem 2.5rem;
+        border-radius: 2rem;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .subscription-card::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -50%;
+        width: 100%;
+        height: 100%;
+        background: radial-gradient(circle, rgba(255, 255, 255, 0.1), transparent 70%);
+        animation: rotate 15s linear infinite;
+    }
+
+    @keyframes rotate {
+        0% {
+            transform: rotate(0deg);
+        }
+
+        100% {
+            transform: rotate(360deg);
+        }
+    }
+
+    .subscription-header {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2.5rem;
+        padding-bottom: 1.5rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .subscription-card h3 {
+        font-size: 1.75rem;
+        font-weight: 800;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .plan-badge {
+        background: rgba(255, 255, 255, 0.2);
+        backdrop-filter: blur(10px);
+        padding: 0.75rem 1.5rem;
+        border-radius: 1rem;
+        font-weight: 700;
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 1rem;
+        transition: all 0.3s;
+    }
+
+    .plan-badge:hover {
+        transform: scale(1.05);
+        background: rgba(255, 255, 255, 0.25);
+    }
+
+    .plan-icon {
+        width: 50px;
+        height: 50px;
+        background: rgba(255, 255, 255, 0.2);
+        backdrop-filter: blur(10px);
+        border-radius: 1rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        border: 1px solid rgba(255, 255, 255, 0.3);
+    }
+
+    .subscription-info {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 2rem;
+        position: relative;
+        z-index: 1;
+    }
+
+    .subscription-item {
+        text-align: center;
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        padding: 2rem 1.5rem;
+        border-radius: 1.5rem;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        transition: all 0.4s;
+    }
+
+    .subscription-item:hover {
+        transform: translateY(-8px);
+        background: rgba(255, 255, 255, 0.15);
+        box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3);
+    }
+
+    .subscription-item i {
+        font-size: 2rem;
+        margin-bottom: 1rem;
+        opacity: 0.9;
+    }
+
+    .subscription-value {
+        font-size: 2.5rem;
+        font-weight: 900;
+        margin-bottom: 0.5rem;
+        letter-spacing: -0.02em;
+        line-height: 1;
+    }
+
+    .subscription-label {
+        opacity: 0.95;
+        font-size: 0.95rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+        width: 12px;
+        height: 12px;
+    }
+
+    ::-webkit-scrollbar-track {
+        background: #0d0d0d;
+        border-radius: 10px;
+    }
+
+    ::-webkit-scrollbar-thumb {
+        background: linear-gradient(135deg, #ef4444, #f59e0b);
+        border-radius: 10px;
+        border: 2px solid #0d0d0d;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+        background: linear-gradient(135deg, #dc2626, #d97706);
+    }
+
+    /* Responsive */
+    @media (max-width: 1200px) {
+        .stats-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+
+    @media (max-width: 768px) {
+        .dashboard-container {
+            padding: 1.5rem;
+        }
+
+        .welcome-content {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .welcome-text h1 {
+            font-size: 2rem;
+        }
+
+        .stats-grid {
+            grid-template-columns: 1fr;
+            gap: 1.5rem;
+        }
+
+        .stat-value {
+            font-size: 2.5rem;
+        }
+
+        .action-buttons {
+            grid-template-columns: 1fr;
+        }
+
+        .subscription-info {
+            grid-template-columns: 1fr;
+            gap: 1.5rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-container">
+    <!-- Welcome Section -->
+    <div class="welcome-section">
+        <div class="welcome-content">
+            <div class="welcome-text">
+                <h1>
+                    <div class="welcome-icon">
+                        <i class="fas fa-sparkles"></i>
+                    </div>
+                    Welcome back, {{ user.username }}!
+                </h1>
+                <p>Here's what's happening with your social media today</p>
+            </div>
+            <div class="welcome-time">
+                <div class="time-icon">
+                    <i class="fas fa-clock"></i>
+                </div>
+                <div class="time-info">
+                    <div class="current-time" id="currentTime">00:00</div>
+                    <div class="current-date" id="currentDate">Loading...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Grid -->
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-header">
+                <div class="stat-icon-wrapper">
+                    <i class="fas fa-link"></i>
+                </div>
+                <div class="stat-trend">
+                    <i class="fas fa-arrow-up"></i>
+                    <span>Active</span>
+                </div>
+            </div>
+            <div class="stat-content">
+                <div class="stat-value">{{ user.social_accounts.count }}</div>
+                <div class="stat-label">Connected Accounts</div>
+                <div class="stat-progress">
+                    <div class="stat-progress-bar" style="width: 65%"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-header">
+                <div class="stat-icon-wrapper">
+                    <i class="fas fa-file-alt"></i>
+                </div>
+                <div class="stat-trend">
+                    <i class="fas fa-arrow-up"></i>
+                    <span>Growing</span>
+                </div>
+            </div>
+            <div class="stat-content">
+                <div class="stat-value">{{ total_posts }}</div>
+                <div class="stat-label">Total Posts</div>
+                <div class="stat-progress">
+                    <div class="stat-progress-bar" style="width: 80%"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-header">
+                <div class="stat-icon-wrapper">
+                    <i class="fas fa-calendar-check"></i>
+                </div>
+                <div class="stat-trend"
+                    style="background: rgba(245, 158, 11, 0.1); border-color: rgba(245, 158, 11, 0.2); color: #f59e0b;">
+                    <i class="fas fa-clock"></i>
+                    <span>Pending</span>
+                </div>
+            </div>
+            <div class="stat-content">
+                <div class="stat-value">{{ scheduled_posts }}</div>
+                <div class="stat-label">Scheduled Posts</div>
+                <div class="stat-progress">
+                    <div class="stat-progress-bar" style="width: 45%"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-header">
+                <div class="stat-icon-wrapper">
+                    <i class="fas fa-chart-line"></i>
+                </div>
+                <div class="stat-trend">
+                    <i class="fas fa-arrow-up"></i>
+                    <span>+{{ profile.posts_this_month }}</span>
+                </div>
+            </div>
+            <div class="stat-content">
+                <div class="stat-value">{{ profile.posts_this_month }}</div>
+                <div class="stat-label">Posts This Month</div>
+                <div class="stat-progress">
+                    <div class="stat-progress-bar" style="width: 55%"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="quick-actions">
+        <div class="section-header">
+            <h2><i class="fas fa-rocket"></i> Quick Actions</h2>
+        </div>
+        <div class="action-buttons">
+            <a href="{% url 'create_post' %}" class="action-btn">
+                <div class="action-btn-icon">
+                    <i class="fas fa-plus"></i>
+                </div>
+                <div class="action-btn-text">Create Post</div>
+            </a>
+
+            <a href="{% url 'platforms:connect_account' %}" class="action-btn">
+                <div class="action-btn-icon">
+                    <i class="fas fa-link"></i>
+                </div>
+                <div class="action-btn-text">Connect Account</div>
+            </a>
+
+            <a href="{% url 'ai_caption:generator' %}" class="action-btn">
+                <div class="action-btn-icon">
+                    <i class="fas fa-robot"></i>
+                </div>
+                <div class="action-btn-text">AI Caption</div>
+            </a>
+
+            <a href="{% url 'my_posts' %}" class="action-btn">
+                <div class="action-btn-icon">
+                    <i class="fas fa-chart-bar"></i>
+                </div>
+                <div class="action-btn-text">My Posts</div>
+            </a>
+
+            <a href="{% url 'ai_image:generator' %}" class="action-btn">
+                <div class="action-btn-icon">
+                    <i class="fas fa-image"></i>
+                </div>
+                <div class="action-btn-text">AI Image</div>
+            </a>
+
+            <a href="{% url 'ai_video:generator' %}" class="action-btn">
+                <div class="action-btn-icon">
+                    <i class="fas fa-video"></i>
+                </div>
+                <div class="action-btn-text">AI Video</div>
+            </a>
+
+            <a href="{% url 'ai_voice:generator' %}" class="action-btn">
+                <div class="action-btn-icon">
+                    <i class="fas fa-microphone"></i>
+                </div>
+                <div class="action-btn-text">AI Voice</div>
+            </a>
+
+        </div>
+
+        <!-- Subscription Info -->
+        <div class="quick-actions">
+            <div class="subscription-card">
+                <div class="subscription-header">
+                    <h3>
+                        <div class="plan-icon">
+                            <i class="fas fa-crown"></i>
+                        </div>
+                        Your Plan
+                    </h3>
+                    <div class="plan-badge">
+                        <i class="fas fa-star"></i>
+                        <span>{{ profile.get_subscription_plan_display }}</span>
+                    </div>
+                </div>
+                <div class="subscription-info">
+                    <div class="subscription-item">
+                        <i class="fas fa-users"></i>
+                        <div class="subscription-value">{{ profile.max_social_accounts }}</div>
+                        <div class="subscription-label">Social Accounts</div>
+                    </div>
+                    <div class="subscription-item">
+                        <i class="fas fa-file-invoice"></i>
+                        <div class="subscription-value">{{ profile.max_posts_per_month }}</div>
+                        <div class="subscription-label">Posts Per Month</div>
+                    </div>
+                    <div class="subscription-item">
+                        <i class="fas fa-check-circle"></i>
+                        <div class="subscription-value">{{ remaining_posts }}</div>
+                        <div class="subscription-label">Remaining Posts</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Update time and date
+        function updateDateTime() {
+            const now = new Date();
+
+            // Format time
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            document.getElementById('currentTime').textContent = `${hours}:${minutes}`;
+
+            // Format date
+            const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+            document.getElementById('currentDate').textContent = now.toLocaleDateString('en-US', options);
+        }
+
+        // Update immediately and then every minute
+        updateDateTime();
+        setInterval(updateDateTime, 60000);
+
+        // Animate progress bars on load
+        document.addEventListener('DOMContentLoaded', function () {
+            const progressBars = document.querySelectorAll('.stat-progress-bar');
+            progressBars.forEach(bar => {
+                const width = bar.style.width;
+                bar.style.width = '0%';
+                setTimeout(() => {
+                    bar.style.width = width;
+                }, 100);
+            });
+        });
+    </script>
+    {% endblock %}

@@ -1,0 +1,526 @@
+<!-- C:\Users\Trust computer\Desktop\Final_version_socialSync\templates\accounts\profile.html -->
+
+{% extends 'base.html' %}
+
+{% block title %}Profile - SocialSync{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+    }
+
+    body {
+        background: #0d0d0d;
+        color: #e5e7eb;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        line-height: 1.6;
+    }
+    
+    .profile-container {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 3rem 2.5rem;
+    }
+    
+    .profile-card {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        border-radius: 2rem;
+        padding: 3rem 2.5rem;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        position: relative;
+        overflow: hidden;
+    }
+
+    .profile-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 200%;
+        height: 100%;
+        background: linear-gradient(90deg, 
+            transparent, 
+            rgba(239, 68, 68, 0.03), 
+            transparent
+        );
+        animation: shimmer 8s infinite;
+    }
+
+    @keyframes shimmer {
+        0% { left: -100%; }
+        100% { left: 100%; }
+    }
+
+    .profile-card::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, 
+            transparent,
+            #ff6b6b,
+            #ee5a6f,
+            #f06595,
+            transparent
+        );
+        background-size: 200% 100%;
+        animation: gradient-shift 3s linear infinite;
+    }
+
+    @keyframes gradient-shift {
+        0% { background-position: 0% 0%; }
+        100% { background-position: 200% 0%; }
+    }
+    
+    .profile-header {
+        display: flex;
+        align-items: center;
+        gap: 2rem;
+        margin-bottom: 3rem;
+        padding-bottom: 2rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        position: relative;
+        z-index: 1;
+    }
+    
+    .avatar-section {
+        text-align: center;
+    }
+    
+    .avatar {
+        width: 130px;
+        height: 130px;
+        border-radius: 1.5rem;
+        background: linear-gradient(135deg, #ff6b6b, #f06595);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 3.5rem;
+        font-weight: 700;
+        margin-bottom: 1rem;
+        box-shadow: 0 15px 40px rgba(239, 68, 68, 0.4);
+        position: relative;
+        overflow: hidden;
+        transition: all 0.3s;
+    }
+
+    .avatar:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 20px 50px rgba(239, 68, 68, 0.5);
+    }
+    
+    .avatar img {
+        width: 100%;
+        height: 100%;
+        border-radius: 1.5rem;
+        object-fit: cover;
+    }
+    
+    .upload-btn {
+        padding: 0.75rem 1.5rem;
+        background: linear-gradient(135deg, #ef4444, #f59e0b);
+        color: white;
+        border: none;
+        border-radius: 0.75rem;
+        cursor: pointer;
+        font-size: 0.9rem;
+        font-weight: 700;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        transition: all 0.3s;
+        box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3);
+    }
+
+    .upload-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 25px rgba(239, 68, 68, 0.5);
+    }
+
+    .upload-btn i {
+        font-size: 1rem;
+    }
+    
+    .profile-info h1 {
+        font-size: 2.25rem;
+        font-weight: 800;
+        background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 50%, #f06595 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 1rem;
+        letter-spacing: -0.03em;
+    }
+    
+    .profile-meta {
+        display: flex;
+        gap: 1.5rem;
+        flex-wrap: wrap;
+    }
+    
+    .meta-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        background: rgba(255, 255, 255, 0.05);
+        padding: 0.5rem 1rem;
+        border-radius: 0.75rem;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        font-size: 0.9rem;
+        color: #94a3b8;
+        font-weight: 500;
+    }
+
+    .meta-item i {
+        color: #f59e0b;
+    }
+
+    .meta-item.approved {
+        background: rgba(16, 185, 129, 0.1);
+        border-color: rgba(16, 185, 129, 0.2);
+        color: #34d399;
+    }
+
+    .meta-item.approved i {
+        color: #10b981;
+    }
+
+    .meta-item.pending {
+        background: rgba(245, 158, 11, 0.1);
+        border-color: rgba(245, 158, 11, 0.2);
+        color: #fbbf24;
+    }
+
+    .meta-item.pending i {
+        color: #f59e0b;
+    }
+    
+    .info-box {
+        background: rgba(239, 68, 68, 0.1);
+        border-left: 4px solid #ef4444;
+        padding: 1.25rem;
+        border-radius: 0.75rem;
+        margin-bottom: 2rem;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        position: relative;
+        z-index: 1;
+    }
+
+    .info-box i {
+        font-size: 1.5rem;
+        color: #ff6b6b;
+    }
+
+    .info-box-content {
+        flex: 1;
+    }
+
+    .info-box strong {
+        color: #fff;
+        display: block;
+        margin-bottom: 0.25rem;
+    }
+
+    .info-box p {
+        color: #94a3b8;
+        font-size: 0.9rem;
+        margin: 0;
+    }
+
+    form {
+        position: relative;
+        z-index: 1;
+    }
+    
+    .form-group {
+        margin-bottom: 1.5rem;
+    }
+    
+    .form-label {
+        display: block;
+        margin-bottom: 0.75rem;
+        font-weight: 700;
+        color: #e5e7eb;
+        font-size: 0.9rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .form-label i {
+        color: #f59e0b;
+        font-size: 0.85rem;
+    }
+    
+    .form-control {
+        width: 100%;
+        padding: 1rem 1.25rem;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 0.75rem;
+        font-size: 1rem;
+        color: #e5e7eb;
+        font-family: 'Inter', sans-serif;
+        transition: all 0.3s;
+    }
+
+    .form-control::placeholder {
+        color: #64748b;
+    }
+    
+    .form-control:focus {
+        outline: none;
+        background: rgba(255, 255, 255, 0.08);
+        border-color: rgba(239, 68, 68, 0.5);
+        box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+    }
+    
+    .form-control:disabled {
+        background: rgba(255, 255, 255, 0.02);
+        cursor: not-allowed;
+        opacity: 0.5;
+    }
+
+    .form-hint {
+        display: block;
+        margin-top: 0.5rem;
+        font-size: 0.85rem;
+        color: #64748b;
+        font-style: italic;
+    }
+    
+    .btn-save {
+        width: 100%;
+        padding: 1.125rem 1.5rem;
+        background: linear-gradient(135deg, #ef4444, #f59e0b);
+        color: white;
+        border: none;
+        border-radius: 0.875rem;
+        font-size: 1.05rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.75rem;
+        box-shadow: 0 10px 30px rgba(239, 68, 68, 0.3);
+        margin-top: 2rem;
+    }
+    
+    .btn-save:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 15px 40px rgba(239, 68, 68, 0.5);
+    }
+
+    .btn-save:active {
+        transform: translateY(-1px);
+    }
+
+    .btn-save i {
+        font-size: 1.1rem;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+        width: 12px;
+    }
+
+    ::-webkit-scrollbar-track {
+        background: #0d0d0d;
+    }
+
+    ::-webkit-scrollbar-thumb {
+        background: linear-gradient(135deg, #ef4444, #f59e0b);
+        border-radius: 10px;
+        border: 2px solid #0d0d0d;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+        background: linear-gradient(135deg, #dc2626, #d97706);
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+        .profile-container {
+            padding: 1.5rem;
+        }
+
+        .profile-card {
+            padding: 2rem 1.5rem;
+        }
+
+        .profile-header {
+            flex-direction: column;
+            text-align: center;
+        }
+
+        .profile-info h1 {
+            font-size: 1.75rem;
+        }
+
+        .profile-meta {
+            justify-content: center;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="profile-container">
+    <div class="profile-card">
+        <!-- Profile Header -->
+        <div class="profile-header">
+            <div class="avatar-section">
+                <div class="avatar">
+                    {% if profile.avatar %}
+                        <img src="{{ profile.avatar.url }}" alt="{{ user.username }}">
+                    {% else %}
+                        {{ user.username.0|upper }}
+                    {% endif %}
+                </div>
+                <label for="avatar-upload" class="upload-btn">
+                    <i class="fas fa-camera"></i>
+                    Change Photo
+                </label>
+                <input type="file" id="avatar-upload" style="display: none;" accept="image/*">
+            </div>
+            
+            <div class="profile-info">
+                <h1>{{ user.username }}</h1>
+                <div class="profile-meta">
+                    <div class="meta-item">
+                        <i class="fas fa-envelope"></i>
+                        <span>{{ user.email }}</span>
+                    </div>
+                    <div class="meta-item">
+                        <i class="fas fa-calendar"></i>
+                        <span>Joined {{ user.date_joined|date:"F Y" }}</span>
+                    </div>
+                    {% if profile.is_approved %}
+                        <div class="meta-item approved">
+                            <i class="fas fa-check-circle"></i>
+                            <span>Approved</span>
+                        </div>
+                    {% else %}
+                        <div class="meta-item pending">
+                            <i class="fas fa-clock"></i>
+                            <span>Pending</span>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <div class="info-box">
+            <i class="fas fa-lightbulb"></i>
+            <div class="info-box-content">
+                <strong>Pro Tip</strong>
+                <p>Keep your profile updated to get personalized AI caption suggestions!</p>
+            </div>
+        </div>
+        
+        <!-- Profile Form -->
+        <form method="POST" enctype="multipart/form-data">
+            {% csrf_token %}
+            
+            <div class="form-group">
+                <label class="form-label" for="username">
+                    <i class="fas fa-user"></i>
+                    Username
+                </label>
+                <input 
+                    type="text" 
+                    id="username" 
+                    class="form-control" 
+                    value="{{ user.username }}"
+                    disabled
+                >
+                <small class="form-hint">Username cannot be changed</small>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label" for="email">
+                    <i class="fas fa-envelope"></i>
+                    Email
+                </label>
+                <input 
+                    type="email" 
+                    id="email" 
+                    name="email"
+                    class="form-control" 
+                    value="{{ user.email }}"
+                >
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label" for="phone">
+                    <i class="fas fa-phone"></i>
+                    Phone
+                </label>
+                <input 
+                    type="tel" 
+                    id="phone" 
+                    name="phone"
+                    class="form-control" 
+                    value="{{ profile.phone|default:'' }}"
+                    placeholder="+880 123 456 7890"
+                >
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label" for="company">
+                    <i class="fas fa-building"></i>
+                    Company
+                </label>
+                <input 
+                    type="text" 
+                    id="company" 
+                    name="company"
+                    class="form-control" 
+                    value="{{ profile.company|default:'' }}"
+                    placeholder="Your company name"
+                >
+            </div>
+            
+            <input type="file" name="avatar" style="display: none;" id="avatar-input">
+            
+            <button type="submit" class="btn-save">
+                <i class="fas fa-save"></i>
+                <span>Save Changes</span>
+            </button>
+        </form>
+    </div>
+</div>
+
+<script>
+    // Avatar upload handling
+    document.getElementById('avatar-upload').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (file) {
+            document.getElementById('avatar-input').files = e.target.files;
+            
+            // Preview
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                document.querySelector('.avatar').innerHTML = '<img src="' + e.target.result + '" alt="Avatar">';
+            };
+            reader.readAsDataURL(file);
+        }
+    });
+</script>
+{% endblock %}
+{% block extra_js %}{% endblock %}

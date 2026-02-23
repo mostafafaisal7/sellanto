@@ -1,0 +1,452 @@
+{% extends 'base.html' %}
+
+{% block title %}Generation History - AI Image Generator{% endblock %}
+
+{% block extra_css %}
+<style>
+    .history-container {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 2rem 2.5rem;
+    }
+
+    .history-hero {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        padding: 2.5rem;
+        border-radius: 2rem;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        margin-bottom: 2rem;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .history-hero::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, transparent, #3b82f6, #60a5fa, #3b82f6, transparent);
+    }
+
+    .hero-content {
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+    }
+
+    .hero-icon {
+        width: 70px;
+        height: 70px;
+        background: linear-gradient(135deg, #3b82f6, #60a5fa);
+        border-radius: 1.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2rem;
+        color: white;
+    }
+
+    .hero-text h1 {
+        font-size: 2rem;
+        font-weight: 800;
+        background: linear-gradient(135deg, #3b82f6, #60a5fa);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 0.25rem;
+    }
+
+    .hero-text p {
+        color: #94a3b8;
+    }
+
+    /* Filters */
+    .filters-bar {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        border-radius: 1rem;
+        padding: 1rem 1.5rem;
+        margin-bottom: 2rem;
+        display: flex;
+        gap: 1rem;
+        flex-wrap: wrap;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .filter-group {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .filter-group label {
+        color: #94a3b8;
+        font-size: 0.9rem;
+    }
+
+    .filter-select {
+        padding: 0.5rem 1rem;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 0.5rem;
+        color: #e5e7eb;
+        font-size: 0.9rem;
+    }
+
+    /* Images Grid */
+    .images-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 1.5rem;
+    }
+
+    .image-card {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        border-radius: 1.25rem;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        overflow: hidden;
+        transition: all 0.3s;
+    }
+
+    .image-card:hover {
+        transform: translateY(-5px);
+        border-color: rgba(59, 130, 246, 0.3);
+        box-shadow: 0 20px 40px rgba(59, 130, 246, 0.1);
+    }
+
+    .image-preview {
+        position: relative;
+        aspect-ratio: 1;
+        overflow: hidden;
+        background: #0a0a0a;
+    }
+
+    .image-preview img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        transition: transform 0.3s;
+    }
+
+    .image-card:hover .image-preview img {
+        transform: scale(1.05);
+    }
+
+    .image-overlay {
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(to top, rgba(0,0,0,0.8) 0%, transparent 50%);
+        opacity: 0;
+        transition: opacity 0.3s;
+        display: flex;
+        align-items: flex-end;
+        padding: 1rem;
+    }
+
+    .image-card:hover .image-overlay {
+        opacity: 1;
+    }
+
+    .overlay-actions {
+        display: flex;
+        gap: 0.5rem;
+        width: 100%;
+    }
+
+    .overlay-btn {
+        flex: 1;
+        padding: 0.5rem;
+        border-radius: 0.5rem;
+        font-size: 0.85rem;
+        font-weight: 600;
+        cursor: pointer;
+        border: none;
+        transition: all 0.3s;
+        text-decoration: none;
+        text-align: center;
+    }
+
+    .overlay-btn.view {
+        background: linear-gradient(135deg, #3b82f6, #60a5fa);
+        color: white;
+    }
+
+    .overlay-btn.download {
+        background: rgba(16, 185, 129, 0.9);
+        color: white;
+    }
+
+    .overlay-btn.delete {
+        background: rgba(239, 68, 68, 0.9);
+        color: white;
+        flex: 0;
+        padding: 0.5rem 0.75rem;
+    }
+
+    .image-info {
+        padding: 1rem;
+    }
+
+    .image-title {
+        font-weight: 700;
+        color: #e5e7eb;
+        margin-bottom: 0.5rem;
+        font-size: 0.95rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .image-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+
+    .meta-badge {
+        padding: 0.25rem 0.5rem;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 0.35rem;
+        font-size: 0.75rem;
+        color: #94a3b8;
+    }
+
+    .meta-badge.style {
+        background: rgba(139, 92, 246, 0.1);
+        color: #a855f7;
+    }
+
+    .meta-badge.status-completed {
+        background: rgba(16, 185, 129, 0.1);
+        color: #34d399;
+    }
+
+    .meta-badge.status-failed {
+        background: rgba(239, 68, 68, 0.1);
+        color: #f87171;
+    }
+
+    /* Empty State */
+    .empty-state {
+        text-align: center;
+        padding: 5rem 2rem;
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        border-radius: 2rem;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .empty-icon {
+        width: 100px;
+        height: 100px;
+        background: linear-gradient(135deg, #3b82f6, #60a5fa);
+        border-radius: 2rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 1.5rem;
+        font-size: 2.5rem;
+        color: white;
+    }
+
+    .empty-state h3 {
+        font-size: 1.5rem;
+        color: #e5e7eb;
+        margin-bottom: 0.5rem;
+    }
+
+    .empty-state p {
+        color: #64748b;
+        margin-bottom: 1.5rem;
+    }
+
+    .btn-primary {
+        padding: 0.875rem 1.5rem;
+        background: linear-gradient(135deg, #10b981, #34d399);
+        color: white;
+        border: none;
+        border-radius: 0.875rem;
+        font-weight: 600;
+        cursor: pointer;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    /* Pagination */
+    .pagination {
+        display: flex;
+        justify-content: center;
+        gap: 0.5rem;
+        margin-top: 2rem;
+    }
+
+    .page-link {
+        padding: 0.5rem 1rem;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 0.5rem;
+        color: #94a3b8;
+        text-decoration: none;
+        transition: all 0.3s;
+    }
+
+    .page-link:hover, .page-link.active {
+        background: linear-gradient(135deg, #3b82f6, #60a5fa);
+        border-color: transparent;
+        color: white;
+    }
+
+    @media (max-width: 768px) {
+        .history-container {
+            padding: 1.5rem;
+        }
+
+        .hero-content {
+            flex-direction: column;
+            text-align: center;
+        }
+
+        .filters-bar {
+            flex-direction: column;
+        }
+
+        .images-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="history-container">
+    <div class="history-hero">
+        <div class="hero-content">
+            <div class="hero-icon"><i class="fas fa-history"></i></div>
+            <div class="hero-text">
+                <h1>Generation History</h1>
+                <p>View all your generated images</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <form class="filters-bar" method="GET">
+        <div class="filter-group">
+            <label>Status:</label>
+            <select name="status" class="filter-select" onchange="this.form.submit()">
+                <option value="">All</option>
+                <option value="completed" {% if status_filter == 'completed' %}selected{% endif %}>Completed</option>
+                <option value="failed" {% if status_filter == 'failed' %}selected{% endif %}>Failed</option>
+            </select>
+        </div>
+        <div class="filter-group">
+            <label>Style:</label>
+            <select name="style" class="filter-select" onchange="this.form.submit()">
+                <option value="">All Styles</option>
+                {% for value, label in style_choices %}
+                <option value="{{ value }}" {% if style_filter == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </form>
+
+    {% if generations %}
+    <div class="images-grid">
+        {% for gen in generations %}
+        <div class="image-card" data-id="{{ gen.pk }}">
+            <div class="image-preview">
+                {% if gen.get_display_image %}
+                <img src="{{ gen.get_display_image.url }}" alt="{{ gen.title }}">
+                {% else %}
+                <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #64748b;">
+                    <i class="fas fa-image" style="font-size: 3rem;"></i>
+                </div>
+                {% endif %}
+                <div class="image-overlay">
+                    <div class="overlay-actions">
+                        <a href="{% url 'ai_image:result' gen.pk %}" class="overlay-btn view">
+                            <i class="fas fa-eye"></i> View
+                        </a>
+                        {% if gen.get_display_image %}
+                        <a href="{% url 'ai_image:download' gen.pk %}" class="overlay-btn download">
+                            <i class="fas fa-download"></i>
+                        </a>
+                        {% endif %}
+                        <button class="overlay-btn delete" onclick="deleteGeneration({{ gen.pk }})">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="image-info">
+                <div class="image-title">{{ gen.title }}</div>
+                <div class="image-meta">
+                    <span class="meta-badge style">{{ gen.get_style_display }}</span>
+                    <span class="meta-badge">{{ gen.size }}</span>
+                    <span class="meta-badge status-{{ gen.status }}">{{ gen.get_status_display }}</span>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Pagination -->
+    {% if generations.has_other_pages %}
+    <div class="pagination">
+        {% if generations.has_previous %}
+        <a href="?page={{ generations.previous_page_number }}" class="page-link">
+            <i class="fas fa-chevron-left"></i>
+        </a>
+        {% endif %}
+        
+        {% for num in generations.paginator.page_range %}
+        {% if generations.number == num %}
+        <span class="page-link active">{{ num }}</span>
+        {% elif num > generations.number|add:'-3' and num < generations.number|add:'3' %}
+        <a href="?page={{ num }}" class="page-link">{{ num }}</a>
+        {% endif %}
+        {% endfor %}
+        
+        {% if generations.has_next %}
+        <a href="?page={{ generations.next_page_number }}" class="page-link">
+            <i class="fas fa-chevron-right"></i>
+        </a>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-icon"><i class="fas fa-images"></i></div>
+        <h3>No Images Yet</h3>
+        <p>Start generating images to see them here</p>
+        <a href="{% url 'ai_image:generator' %}" class="btn-primary">
+            <i class="fas fa-magic"></i> Generate Image
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    async function deleteGeneration(id) {
+        if (!confirm('Delete this image?')) return;
+        
+        try {
+            const response = await fetch(`/ai-image/delete/${id}/`, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+            });
+            
+            if (response.ok) {
+                document.querySelector(`.image-card[data-id="${id}"]`).remove();
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    }
+</script>
+{% endblock %}

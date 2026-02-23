@@ -1,0 +1,939 @@
+<!-- # C:\Users\Trust computer\Desktop\Final_version_socialSync\templates\accounts\admin_dashboard.html -->
+
+{% extends 'base.html' %}
+
+{% block title %}Admin Dashboard - SocialSync{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+    * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+    }
+
+    body {
+        background: #0d0d0d;
+        color: #e5e7eb;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        line-height: 1.6;
+    }
+    
+    .admin-container {
+        max-width: 1600px;
+        margin: 0 auto;
+        padding: 3rem 2.5rem;
+    }
+    
+    /* Admin Header */
+    .admin-header {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        padding: 3rem 2.5rem;
+        border-radius: 2rem;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        margin-bottom: 3rem;
+        position: relative;
+        overflow: hidden;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    }
+
+    .admin-header::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 200%;
+        height: 100%;
+        background: linear-gradient(90deg, 
+            transparent, 
+            rgba(239, 68, 68, 0.03), 
+            transparent
+        );
+        animation: shimmer 8s infinite;
+    }
+
+    @keyframes shimmer {
+        0% { left: -100%; }
+        100% { left: 100%; }
+    }
+
+    .header-content {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 1.5rem;
+    }
+
+    .header-left h1 {
+        font-size: 2.75rem;
+        font-weight: 800;
+        background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 50%, #f06595 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 0.5rem;
+        letter-spacing: -0.03em;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .crown-icon {
+        width: 50px;
+        height: 50px;
+        background: linear-gradient(135deg, #ff6b6b, #f06595);
+        border-radius: 1rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 1.5rem;
+        box-shadow: 0 10px 30px rgba(239, 68, 68, 0.4);
+        animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.05); }
+    }
+
+    .header-subtitle {
+        color: #94a3b8;
+        font-size: 1.1rem;
+        font-weight: 400;
+    }
+
+    .header-right {
+        display: flex;
+        gap: 1rem;
+        align-items: center;
+    }
+
+    .header-badge {
+        background: rgba(239, 68, 68, 0.1);
+        border: 1px solid rgba(239, 68, 68, 0.2);
+        padding: 0.75rem 1.5rem;
+        border-radius: 1rem;
+        color: #ff6b6b;
+        font-weight: 600;
+        font-size: 0.9rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .pulse-dot {
+        width: 8px;
+        height: 8px;
+        background: #ff6b6b;
+        border-radius: 50%;
+        animation: pulse-dot 2s infinite;
+    }
+
+    @keyframes pulse-dot {
+        0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+        50% { opacity: 0.7; box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+    }
+    
+    /* Stats Grid */
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 2rem;
+        margin-bottom: 3rem;
+    }
+    
+    .stat-card {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        padding: 2.5rem;
+        border-radius: 1.75rem;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        position: relative;
+        overflow: hidden;
+        transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    }
+
+    .stat-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: radial-gradient(circle at 20% 20%, rgba(239, 68, 68, 0.1), transparent 70%);
+        opacity: 0;
+        transition: opacity 0.5s;
+    }
+
+    .stat-card:hover {
+        transform: translateY(-12px);
+        border-color: rgba(239, 68, 68, 0.2);
+        box-shadow: 0 25px 60px rgba(239, 68, 68, 0.25);
+    }
+
+    .stat-card:hover::before {
+        opacity: 1;
+    }
+    
+    .stat-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 2rem;
+        position: relative;
+        z-index: 1;
+    }
+    
+    .stat-icon-wrapper {
+        width: 70px;
+        height: 70px;
+        border-radius: 1.25rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2rem;
+        position: relative;
+        transition: all 0.4s;
+    }
+
+    .stat-card:hover .stat-icon-wrapper {
+        transform: rotate(-10deg) scale(1.1);
+    }
+
+    .stat-icon-wrapper::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: 1.25rem;
+        padding: 2px;
+        background: linear-gradient(135deg, var(--icon-color-1), var(--icon-color-2));
+        -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+        -webkit-mask-composite: xor;
+        mask-composite: exclude;
+    }
+
+    .stat-icon-wrapper i {
+        background: linear-gradient(135deg, var(--icon-color-1), var(--icon-color-2));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        z-index: 1;
+    }
+
+    .stat-card:nth-child(1) {
+        --icon-color-1: #6366f1;
+        --icon-color-2: #8b5cf6;
+    }
+
+    .stat-card:nth-child(2) {
+        --icon-color-1: #f59e0b;
+        --icon-color-2: #ef4444;
+    }
+
+    .stat-card:nth-child(3) {
+        --icon-color-1: #10b981;
+        --icon-color-2: #06b6d4;
+    }
+
+    .stat-card:nth-child(4) {
+        --icon-color-1: #ec4899;
+        --icon-color-2: #8b5cf6;
+    }
+
+    .stat-trend {
+        background: rgba(16, 185, 129, 0.1);
+        border: 1px solid rgba(16, 185, 129, 0.2);
+        padding: 0.5rem 1rem;
+        border-radius: 0.75rem;
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #10b981;
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+    }
+    
+    .stat-content {
+        position: relative;
+        z-index: 1;
+    }
+
+    .stat-value {
+        font-size: 3.5rem;
+        font-weight: 900;
+        color: #ffffff;
+        line-height: 1;
+        margin-bottom: 0.75rem;
+        letter-spacing: -0.04em;
+    }
+    
+    .stat-label {
+        color: #64748b;
+        font-size: 0.95rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        margin-bottom: 1rem;
+    }
+
+    .stat-progress {
+        width: 100%;
+        height: 6px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 999px;
+        overflow: hidden;
+        margin-top: 1.5rem;
+    }
+
+    .stat-progress-bar {
+        height: 100%;
+        background: linear-gradient(90deg, var(--icon-color-1), var(--icon-color-2));
+        border-radius: 999px;
+        transition: width 1s ease-out;
+    }
+    
+    /* Table Section */
+    .table-section {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        padding: 2.5rem;
+        border-radius: 2rem;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        position: relative;
+        overflow: hidden;
+    }
+
+    .table-section::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 4px;
+        background: linear-gradient(90deg, 
+            transparent,
+            #f59e0b,
+            #ef4444,
+            #f59e0b,
+            transparent
+        );
+        background-size: 200% 100%;
+        animation: gradient-shift 3s linear infinite;
+    }
+
+    @keyframes gradient-shift {
+        0% { background-position: 0% 0%; }
+        100% { background-position: 200% 0%; }
+    }
+    
+    .section-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2.5rem;
+        padding-bottom: 1.5rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .section-title {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: #fff;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .section-title i {
+        color: #f59e0b;
+    }
+
+    .filter-buttons {
+        display: flex;
+        gap: 0.75rem;
+    }
+
+    .filter-btn {
+        padding: 0.75rem 1.5rem;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 0.75rem;
+        color: #94a3b8;
+        font-weight: 600;
+        font-size: 0.875rem;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+
+    .filter-btn:hover,
+    .filter-btn.active {
+        background: linear-gradient(135deg, #ef4444, #f59e0b);
+        color: white;
+        border-color: transparent;
+        transform: translateY(-2px);
+    }
+    
+    /* Table Styles - COMPLETELY REDESIGNED */
+    .user-table-wrapper {
+        overflow-x: auto;
+        border-radius: 1.25rem;
+    }
+
+    .user-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    
+    .user-table thead {
+        background: rgba(255, 255, 255, 0.03);
+    }
+
+    .user-table th {
+        text-align: left;
+        padding: 1rem 1.25rem;
+        color: #64748b;
+        font-weight: 700;
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        border-bottom: 2px solid rgba(255, 255, 255, 0.06);
+        white-space: nowrap;
+    }
+    
+    .user-table td {
+        padding: 1rem 1.25rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+        color: #cbd5e1;
+        font-size: 0.875rem;
+        font-weight: 500;
+        height: 70px;
+    }
+    
+    .user-table tbody tr {
+        transition: all 0.3s;
+        position: relative;
+        height: 70px;
+    }
+
+    .user-table tbody tr::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 4px;
+        background: linear-gradient(135deg, #ef4444, #f59e0b);
+        opacity: 0;
+        transition: opacity 0.3s;
+    }
+
+    .user-table tbody tr:hover {
+        background: rgba(239, 68, 68, 0.03);
+    }
+
+    .user-table tbody tr:hover::before {
+        opacity: 1;
+    }
+
+    /* User Info - COMPLETELY FIXED */
+    .user-info {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        height: 100%;
+    }
+
+    .user-avatar {
+        width: 38px;
+        height: 38px;
+        min-width: 38px;
+        border-radius: 0.75rem;
+        background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: 700;
+        font-size: 0.95rem;
+        border: 2px solid rgba(99, 102, 241, 0.2);
+        flex-shrink: 0;
+    }
+
+    .user-details {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        min-width: 0;
+    }
+
+    .user-details strong {
+        color: #ffffff;
+        font-weight: 700;
+        font-size: 0.9rem;
+        line-height: 1.3;
+        white-space: nowrap;
+        margin-bottom: 2px;
+    }
+
+    .user-id {
+        color: #64748b;
+        font-size: 0.7rem;
+        font-weight: 500;
+        line-height: 1;
+    }
+    
+    .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.45rem 0.9rem;
+        border-radius: 0.6rem;
+        font-size: 0.75rem;
+        font-weight: 700;
+        border: 1.5px solid;
+        letter-spacing: 0.02em;
+        transition: all 0.3s;
+        white-space: nowrap;
+    }
+    
+    .badge-pending {
+        background: rgba(245, 158, 11, 0.08);
+        color: #fbbf24;
+        border-color: rgba(245, 158, 11, 0.25);
+    }
+
+    .badge-pending:hover {
+        background: rgba(245, 158, 11, 0.15);
+        transform: scale(1.05);
+    }
+    
+    .badge-approved {
+        background: rgba(16, 185, 129, 0.08);
+        color: #34d399;
+        border-color: rgba(16, 185, 129, 0.25);
+    }
+
+    .badge-approved:hover {
+        background: rgba(16, 185, 129, 0.15);
+        transform: scale(1.05);
+    }
+
+    .action-buttons {
+        display: flex;
+        gap: 0.6rem;
+        flex-wrap: nowrap;
+    }
+    
+    .btn-approve,
+    .btn-reject {
+        padding: 0.55rem 1.1rem;
+        border: none;
+        border-radius: 0.7rem;
+        cursor: pointer;
+        font-weight: 700;
+        font-size: 0.75rem;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        position: relative;
+        overflow: hidden;
+        white-space: nowrap;
+    }
+
+    .btn-approve {
+        background: linear-gradient(135deg, #10b981, #059669);
+        color: white;
+        box-shadow: 0 4px 15px rgba(16, 185, 129, 0.25);
+    }
+
+    .btn-approve::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(135deg, #059669, #047857);
+        opacity: 0;
+        transition: opacity 0.3s;
+    }
+
+    .btn-approve:hover::before {
+        opacity: 1;
+    }
+    
+    .btn-approve:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 25px rgba(16, 185, 129, 0.4);
+    }
+
+    .btn-approve:active {
+        transform: translateY(-1px);
+    }
+
+    .btn-approve i,
+    .btn-reject i {
+        position: relative;
+        z-index: 1;
+        font-size: 0.8rem;
+    }
+
+    .btn-approve span,
+    .btn-reject span {
+        position: relative;
+        z-index: 1;
+    }
+    
+    .btn-reject {
+        background: linear-gradient(135deg, #ef4444, #dc2626);
+        color: white;
+        box-shadow: 0 4px 15px rgba(239, 68, 68, 0.25);
+    }
+
+    .btn-reject::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(135deg, #dc2626, #b91c1c);
+        opacity: 0;
+        transition: opacity 0.3s;
+    }
+
+    .btn-reject:hover::before {
+        opacity: 1;
+    }
+    
+    .btn-reject:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 25px rgba(239, 68, 68, 0.4);
+    }
+
+    .btn-reject:active {
+        transform: translateY(-1px);
+    }
+    
+    /* Empty State */
+    .empty-state {
+        text-align: center;
+        padding: 5rem 2rem;
+    }
+    
+    .empty-icon-wrapper {
+        width: 120px;
+        height: 120px;
+        margin: 0 auto 2rem;
+        border-radius: 2rem;
+        background: linear-gradient(145deg, rgba(16, 185, 129, 0.1), rgba(6, 182, 212, 0.1));
+        border: 2px solid rgba(16, 185, 129, 0.2);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        animation: float 3s ease-in-out infinite;
+    }
+
+    @keyframes float {
+        0%, 100% { transform: translateY(0) rotate(0deg); }
+        50% { transform: translateY(-15px) rotate(5deg); }
+    }
+
+    .empty-icon-wrapper i {
+        font-size: 3.5rem;
+        background: linear-gradient(135deg, #10b981, #06b6d4);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+
+    .empty-state h3 {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: #fff;
+        margin-bottom: 0.75rem;
+    }
+
+    .empty-state p {
+        color: #64748b;
+        font-size: 1.05rem;
+        max-width: 400px;
+        margin: 0 auto;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+        width: 12px;
+        height: 12px;
+    }
+
+    ::-webkit-scrollbar-track {
+        background: #0d0d0d;
+        border-radius: 10px;
+    }
+
+    ::-webkit-scrollbar-thumb {
+        background: linear-gradient(135deg, #ef4444, #f59e0b);
+        border-radius: 10px;
+        border: 2px solid #0d0d0d;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+        background: linear-gradient(135deg, #dc2626, #d97706);
+    }
+
+    /* Responsive */
+    @media (max-width: 1200px) {
+        .stats-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+
+    @media (max-width: 768px) {
+        .admin-container {
+            padding: 1.5rem;
+        }
+
+        .stats-grid {
+            grid-template-columns: 1fr;
+            gap: 1.5rem;
+        }
+
+        .header-content {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .admin-header h1 {
+            font-size: 2rem;
+        }
+
+        .stat-value {
+            font-size: 2.5rem;
+        }
+
+        .user-table th,
+        .user-table td {
+            padding: 0.85rem;
+            font-size: 0.8rem;
+        }
+
+        .action-buttons {
+            flex-direction: column;
+        }
+
+        .filter-buttons {
+            flex-wrap: wrap;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="admin-container">
+    <!-- Admin Header -->
+    <div class="admin-header">
+        <div class="header-content">
+            <div class="header-left">
+                <h1>
+                    <div class="crown-icon">
+                        <i class="fas fa-crown"></i>
+                    </div>
+                    Admin Dashboard
+                </h1>
+                <p class="header-subtitle">Manage users and monitor system activity in real-time</p>
+            </div>
+            <div class="header-right">
+                <div class="header-badge">
+                    <span class="pulse-dot"></span>
+                    <span>Live</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Stats Grid -->
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-header">
+                <div class="stat-icon-wrapper">
+                    <i class="fas fa-users"></i>
+                </div>
+                <div class="stat-trend">
+                    <i class="fas fa-arrow-up"></i>
+                    <span>12%</span>
+                </div>
+            </div>
+            <div class="stat-content">
+                <div class="stat-value">{{ total_users }}</div>
+                <div class="stat-label">Total Users</div>
+                <div class="stat-progress">
+                    <div class="stat-progress-bar" style="width: 75%"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="stat-card">
+            <div class="stat-header">
+                <div class="stat-icon-wrapper">
+                    <i class="fas fa-clock"></i>
+                </div>
+                <div class="stat-trend" style="background: rgba(245, 158, 11, 0.1); border-color: rgba(245, 158, 11, 0.2); color: #f59e0b;">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <span>Action Required</span>
+                </div>
+            </div>
+            <div class="stat-content">
+                <div class="stat-value">{{ pending_users }}</div>
+                <div class="stat-label">Pending Approval</div>
+                <div class="stat-progress">
+                    <div class="stat-progress-bar" style="width: 45%"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="stat-card">
+            <div class="stat-header">
+                <div class="stat-icon-wrapper">
+                    <i class="fas fa-check-circle"></i>
+                </div>
+                <div class="stat-trend">
+                    <i class="fas fa-arrow-up"></i>
+                    <span>18%</span>
+                </div>
+            </div>
+            <div class="stat-content">
+                <div class="stat-value">{{ approved_users }}</div>
+                <div class="stat-label">Approved Users</div>
+                <div class="stat-progress">
+                    <div class="stat-progress-bar" style="width: 90%"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="stat-card">
+            <div class="stat-header">
+                <div class="stat-icon-wrapper">
+                    <i class="fas fa-link"></i>
+                </div>
+                <div class="stat-trend" style="background: rgba(139, 92, 246, 0.1); border-color: rgba(139, 92, 246, 0.2); color: #a78bfa;">
+                    <i class="fas fa-minus"></i>
+                    <span>0%</span>
+                </div>
+            </div>
+            <div class="stat-content">
+                <div class="stat-value">0</div>
+                <div class="stat-label">Active Connections</div>
+                <div class="stat-progress">
+                    <div class="stat-progress-bar" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Pending Users Table -->
+    <div class="table-section">
+        <div class="section-header">
+            <h2 class="section-title">
+                <i class="fas fa-user-clock"></i>
+                Pending User Approvals
+            </h2>
+            <div class="filter-buttons">
+                <button class="filter-btn active">All</button>
+                <button class="filter-btn">Pending</button>
+                <button class="filter-btn">Approved</button>
+            </div>
+        </div>
+        
+        {% if recent_users %}
+        <div class="user-table-wrapper">
+            <table class="user-table">
+                <thead>
+                    <tr>
+                        <th>USER</th>
+                        <th>EMAIL</th>
+                        <th>COMPANY</th>
+                        <th>REGISTERED</th>
+                        <th>STATUS</th>
+                        <th>ACTIONS</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for profile in recent_users %}
+                    <tr>
+                        <td>
+                            <div class="user-info">
+                                <div class="user-avatar">
+                                    {{ profile.user.username|slice:":1"|upper }}
+                                </div>
+                                <div class="user-details">
+                                    <strong>{{ profile.user.username }}</strong>
+                                    <span class="user-id">#{{ profile.id }}</span>
+                                </div>
+                            </div>
+                        </td>
+                        <td>{{ profile.user.email }}</td>
+                        <td>{{ profile.company|default:"—" }}</td>
+                        <td>{{ profile.created_at|date:"M d, Y" }}</td>
+                        <td>
+                            {% if profile.is_approved %}
+                                <span class="badge badge-approved">
+                                    <i class="fas fa-check"></i>
+                                    <span>Approved</span>
+                                </span>
+                            {% else %}
+                                <span class="badge badge-pending">
+                                    <i class="fas fa-clock"></i>
+                                    <span>Pending</span>
+                                </span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if not profile.is_approved %}
+                                <div class="action-buttons">
+                                    <a href="/admin/accounts/userprofile/{{ profile.id }}/change/" target="_blank" style="text-decoration: none;">
+                                        <button class="btn-approve">
+                                            <i class="fas fa-check"></i>
+                                            <span>Approve</span>
+                                        </button>
+                                    </a>
+                                    <button class="btn-reject">
+                                        <i class="fas fa-times"></i>
+                                        <span>Reject</span>
+                                    </button>
+                                </div>
+                            {% else %}
+                                <span style="color: #10b981; font-weight: 600;">—</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <div class="empty-icon-wrapper">
+                <i class="fas fa-check-double"></i>
+            </div>
+            <h3>All Caught Up!</h3>
+            <p>There are no pending user approvals at the moment. Great job keeping everything up to date!</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+    // Add smooth scroll progress animation
+    document.addEventListener('DOMContentLoaded', function() {
+        const progressBars = document.querySelectorAll('.stat-progress-bar');
+        progressBars.forEach(bar => {
+            const width = bar.style.width;
+            bar.style.width = '0%';
+            setTimeout(() => {
+                bar.style.width = width;
+            }, 100);
+        });
+    });
+</script>
+{% endblock %}

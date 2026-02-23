@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+
+{% block title %}AI Ad Image Generator - Coming Soon{% endblock %}
+
+{% block content %}
+<div style="max-width: 1200px; margin: 4rem auto; padding: 0 2rem; text-align: center;">
+    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 4rem; border-radius: 2rem; color: white; margin-bottom: 3rem;">
+        <h1 style="font-size: 3rem; margin-bottom: 1rem;">🎨 AI Ad Image Generator</h1>
+        <p style="font-size: 1.25rem; opacity: 0.9;">Create stunning ad images with AI - Coming Soon!</p>
+    </div>
+    
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem; margin-bottom: 3rem;">
+        <div style="background: white; padding: 2rem; border-radius: 1rem; box-shadow: 0 10px 40px rgba(0,0,0,0.1);">
+            <div style="font-size: 3rem; margin-bottom: 1rem;">✨</div>
+            <h3>AI-Powered Design</h3>
+            <p style="color: #6b7280;">Generate professional ad images using DALL-E 3 and Midjourney</p>
+        </div>
+        
+        <div style="background: white; padding: 2rem; border-radius: 1rem; box-shadow: 0 10px 40px rgba(0,0,0,0.1);">
+            <div style="font-size: 3rem; margin-bottom: 1rem;">🎯</div>
+            <h3>Brand Templates</h3>
+            <p style="color: #6b7280;">Customizable templates that match your brand identity</p>
+        </div>
+        
+        <div style="background: white; padding: 2rem; border-radius: 1rem; box-shadow: 0 10px 40px rgba(0,0,0,0.1);">
+            <div style="font-size: 3rem; margin-bottom: 1rem;">🚀</div>
+            <h3>One-Click Export</h3>
+            <p style="color: #6b7280;">Export in multiple formats and sizes for all platforms</p>
+        </div>
+    </div>
+    
+    <div style="background: #f9fafb; padding: 3rem; border-radius: 1rem;">
+        <h2 style="margin-bottom: 1rem;">🔔 Get Notified When We Launch</h2>
+        <p style="color: #6b7280; margin-bottom: 2rem;">Be the first to know when this feature goes live!</p>
+        <form style="max-width: 500px; margin: 0 auto; display: flex; gap: 1rem;">
+            <input type="email" placeholder="Your email address" style="flex: 1; padding: 1rem; border: 2px solid #e5e7eb; border-radius: 0.5rem; font-size: 1rem;">
+            <button type="submit" style="padding: 1rem 2rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 0.5rem; font-weight: 600; cursor: pointer;">
+                Notify Me
+            </button>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,127 @@
+{% extends 'admin_panel/base.html' %}
+{% block title %}Users{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1><i class="fas fa-users"></i> Users</h1>
+</div>
+
+<div class="card" style="margin-bottom:1rem;">
+    <form method="get" style="display:flex; gap:1rem; flex-wrap:wrap; align-items:flex-end;">
+        <div style="flex:1; min-width:200px;">
+            <label class="form-label">Search</label>
+            <input type="text" name="search" class="form-control" value="{{ search }}" placeholder="Username, email, company...">
+        </div>
+        <div>
+            <label class="form-label">Status</label>
+            <select name="status" class="form-control">
+                <option value="">All</option>
+                <option value="pending" {% if status == 'pending' %}selected{% endif %}>Pending</option>
+                <option value="approved" {% if status == 'approved' %}selected{% endif %}>Approved</option>
+            </select>
+        </div>
+        <div>
+            <label class="form-label">Plan</label>
+            <select name="plan" class="form-control">
+                <option value="">All Plans</option>
+                <option value="free" {% if plan_filter == 'free' %}selected{% endif %}>Free</option>
+                <option value="starter" {% if plan_filter == 'starter' %}selected{% endif %}>Starter</option>
+                <option value="pro" {% if plan_filter == 'pro' %}selected{% endif %}>Pro</option>
+                <option value="business" {% if plan_filter == 'business' %}selected{% endif %}>Business</option>
+            </select>
+        </div>
+        <button type="submit" class="btn btn-primary"><i class="fas fa-search"></i> Filter</button>
+        <a href="{% url 'admin_panel:user_list' %}" class="btn btn-danger"><i class="fas fa-times"></i> Clear</a>
+    </form>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3 class="card-title"><i class="fas fa-list"></i> All Users ({{ users|length }})</h3>
+        <button class="btn btn-success btn-sm" onclick="bulkApprove()"><i class="fas fa-check-double"></i> Bulk Approve</button>
+    </div>
+    
+    {% if users %}
+    <form id="bulkForm">
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr>
+                    <th><input type="checkbox" onclick="toggleAll(this)"></th>
+                    <th>User</th>
+                    <th>Status</th>
+                    <th>Plan</th>
+                    <th>Posts</th>
+                    <th>Accounts</th>
+                    <th>Tokens</th>
+                    <th>Cost</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for u in users %}
+            <tr>
+                <td><input type="checkbox" name="user_ids" value="{{ u.id }}"></td>
+                <td>
+                    <strong>{{ u.username }}</strong>
+                    <div style="font-size:0.7rem; color:#64748b;">{{ u.email }}</div>
+                </td>
+                <td>
+                    {% if u.is_approved %}
+                    <span class="badge badge-success">Approved</span>
+                    {% else %}
+                    <span class="badge badge-warning">Pending</span>
+                    {% endif %}
+                </td>
+                <td><span class="badge badge-primary">{{ u.plan }}</span></td>
+                <td>{{ u.post_count }}</td>
+                <td>{{ u.account_count }}</td>
+                <td><span class="token-badge">🪙 {{ u.total_tokens }}</span></td>
+                <td><span class="cost-badge">${{ u.estimated_cost }}</span></td>
+                <td>
+                    <a href="{% url 'admin_panel:user_detail' u.id %}" class="btn btn-primary btn-sm"><i class="fas fa-eye"></i></a>
+                    {% if not u.is_approved %}
+                    <button type="button" class="btn btn-success btn-sm" onclick="approveUser({{ u.id }})"><i class="fas fa-check"></i></button>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    </form>
+    {% else %}
+    <div class="empty-state"><i class="fas fa-users"></i><p>No users found</p></div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function toggleAll(el) {
+    document.querySelectorAll('input[name="user_ids"]').forEach(cb => cb.checked = el.checked);
+}
+
+async function approveUser(userId) {
+    const res = await fetch(`/admin-panel/users/${userId}/approve/`, {
+        method: 'POST', headers: {'X-CSRFToken': getCsrfToken()}
+    });
+    if (res.ok) { showToast('Approved!'); location.reload(); }
+    else showToast('Error', true);
+}
+
+async function bulkApprove() {
+    const selected = document.querySelectorAll('input[name="user_ids"]:checked');
+    if (!selected.length) { showToast('Select users first', true); return; }
+    
+    const formData = new FormData();
+    selected.forEach(cb => formData.append('user_ids', cb.value));
+    
+    const res = await fetch('/admin-panel/bulk/approve/', {
+        method: 'POST', headers: {'X-CSRFToken': getCsrfToken()}, body: formData
+    });
+    if (res.ok) { showToast(`Approved ${selected.length} users!`); location.reload(); }
+    else showToast('Error', true);
+}
+</script>
+{% endblock %}

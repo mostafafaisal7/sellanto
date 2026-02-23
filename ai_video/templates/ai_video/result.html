@@ -1,0 +1,486 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ generation.title }} - AI Video Generator{% endblock %}
+
+{% block extra_css %}
+<style>
+    .result-container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 2rem 2.5rem;
+    }
+
+    .result-layout {
+        display: grid;
+        grid-template-columns: 1fr 400px;
+        gap: 2rem;
+    }
+
+    .result-card {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        border-radius: 1.5rem;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        overflow: hidden;
+    }
+
+    .video-container {
+        position: relative;
+        background: #0a0a0a;
+    }
+
+    .result-video {
+        width: 100%;
+        display: block;
+        max-height: 500px;
+    }
+
+    .video-actions {
+        position: absolute;
+        top: 1rem;
+        right: 1rem;
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    .video-action-btn {
+        width: 45px;
+        height: 45px;
+        border-radius: 0.75rem;
+        background: rgba(0, 0, 0, 0.7);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: white;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.1rem;
+        transition: all 0.3s;
+    }
+
+    .video-action-btn:hover {
+        background: rgba(139, 92, 246, 0.8);
+        transform: scale(1.1);
+    }
+
+    .result-actions {
+        padding: 1.5rem;
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1rem;
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .action-btn {
+        padding: 0.875rem;
+        border-radius: 0.75rem;
+        font-size: 0.9rem;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        transition: all 0.3s;
+        border: none;
+        text-decoration: none;
+    }
+
+    .action-btn.download {
+        background: linear-gradient(135deg, #8b5cf6, #a855f7);
+        color: white;
+    }
+
+    .action-btn.save {
+        background: rgba(16, 185, 129, 0.1);
+        color: #34d399;
+        border: 1px solid rgba(16, 185, 129, 0.2);
+    }
+
+    .action-btn.share {
+        background: rgba(59, 130, 246, 0.1);
+        color: #60a5fa;
+        border: 1px solid rgba(59, 130, 246, 0.2);
+    }
+
+    .action-btn.delete {
+        background: rgba(239, 68, 68, 0.1);
+        color: #f87171;
+        border: 1px solid rgba(239, 68, 68, 0.2);
+    }
+
+    .action-btn:hover {
+        transform: translateY(-2px);
+    }
+
+    /* Details Card */
+    .details-card {
+        background: linear-gradient(145deg, #111111 0%, #1a1a1a 100%);
+        border-radius: 1.5rem;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        overflow: hidden;
+    }
+
+    .card-header {
+        padding: 1.5rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .card-header h2 {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #e5e7eb;
+    }
+
+    .card-body {
+        padding: 1.5rem;
+    }
+
+    .detail-group {
+        margin-bottom: 1.25rem;
+    }
+
+    .detail-group:last-child {
+        margin-bottom: 0;
+    }
+
+    .detail-label {
+        font-size: 0.8rem;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 0.5rem;
+    }
+
+    .detail-value {
+        color: #e5e7eb;
+        font-size: 0.95rem;
+    }
+
+    .detail-value.title {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: #a855f7;
+    }
+
+    .detail-value.prompt {
+        background: rgba(255, 255, 255, 0.03);
+        padding: 0.875rem;
+        border-radius: 0.75rem;
+        font-size: 0.9rem;
+        line-height: 1.6;
+    }
+
+    .badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+
+    .badge {
+        padding: 0.35rem 0.75rem;
+        border-radius: 0.5rem;
+        font-size: 0.8rem;
+        font-weight: 600;
+    }
+
+    .badge.style {
+        background: rgba(139, 92, 246, 0.1);
+        color: #a855f7;
+    }
+
+    .badge.duration {
+        background: rgba(59, 130, 246, 0.1);
+        color: #60a5fa;
+    }
+
+    .badge.resolution {
+        background: rgba(16, 185, 129, 0.1);
+        color: #34d399;
+    }
+
+    .badge.fps {
+        background: rgba(245, 158, 11, 0.1);
+        color: #fbbf24;
+    }
+
+    .badge.logo {
+        background: rgba(236, 72, 153, 0.1);
+        color: #f472b6;
+    }
+
+    .processing-info {
+        display: flex;
+        gap: 1rem;
+        margin-top: 1rem;
+        padding-top: 1rem;
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .processing-item {
+        flex: 1;
+        text-align: center;
+        padding: 0.75rem;
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: 0.5rem;
+    }
+
+    .processing-item .value {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: #a855f7;
+    }
+
+    .processing-item .label {
+        font-size: 0.75rem;
+        color: #64748b;
+    }
+
+    .back-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.875rem 1.5rem;
+        background: rgba(255, 255, 255, 0.05);
+        color: #94a3b8;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 0.875rem;
+        text-decoration: none;
+        margin-bottom: 1.5rem;
+        transition: all 0.3s;
+    }
+
+    .back-btn:hover {
+        background: rgba(255, 255, 255, 0.1);
+        color: #e5e7eb;
+    }
+
+    /* Error State */
+    .error-state {
+        padding: 3rem;
+        text-align: center;
+        color: #f87171;
+    }
+
+    .error-state i {
+        font-size: 4rem;
+        margin-bottom: 1rem;
+        opacity: 0.5;
+    }
+
+    @media (max-width: 1024px) {
+        .result-layout {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    @media (max-width: 768px) {
+        .result-container {
+            padding: 1.5rem;
+        }
+
+        .result-actions {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="result-container">
+    <a href="{% url 'ai_video:generator' %}" class="back-btn">
+        <i class="fas fa-arrow-left"></i> Back to Generator
+    </a>
+
+    <div class="result-layout">
+        <!-- Video Card -->
+        <div class="result-card">
+            <div class="video-container">
+                {% if generation.status == 'completed' and generation.get_display_video %}
+                <video controls class="result-video" poster="{% if generation.thumbnail %}{{ generation.thumbnail.url }}{% endif %}">
+                    <source src="{{ generation.get_display_video.url }}" type="video/mp4">
+                    Your browser does not support the video tag.
+                </video>
+                <div class="video-actions">
+                    <button class="video-action-btn" onclick="toggleFullscreen()">
+                        <i class="fas fa-expand"></i>
+                    </button>
+                </div>
+                {% elif generation.status == 'processing' %}
+                <div style="padding: 5rem; text-align: center; color: #fbbf24;">
+                    <i class="fas fa-spinner fa-spin" style="font-size: 3rem; margin-bottom: 1rem;"></i>
+                    <p>Video is being processed...</p>
+                </div>
+                {% elif generation.status == 'failed' %}
+                <div class="error-state">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <p>Video generation failed</p>
+                    {% if generation.error_message %}
+                    <p style="font-size: 0.9rem; opacity: 0.7; margin-top: 0.5rem;">{{ generation.error_message }}</p>
+                    {% endif %}
+                </div>
+                {% else %}
+                <div style="padding: 5rem; text-align: center; color: #64748b;">
+                    <i class="fas fa-video" style="font-size: 3rem; margin-bottom: 1rem;"></i>
+                    <p>Video not available</p>
+                </div>
+                {% endif %}
+            </div>
+            
+            {% if generation.status == 'completed' %}
+            <div class="result-actions">
+                <a href="{% url 'ai_video:download' generation.pk %}" class="action-btn download">
+                    <i class="fas fa-download"></i> Download
+                </a>
+                <button class="action-btn save" onclick="saveVideo()">
+                    <i class="fas fa-bookmark"></i> Save
+                </button>
+                <button class="action-btn share" onclick="shareVideo()">
+                    <i class="fas fa-share"></i> Share
+                </button>
+                <button class="action-btn delete" onclick="deleteVideo()">
+                    <i class="fas fa-trash"></i> Delete
+                </button>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Details Card -->
+        <div class="details-card">
+            <div class="card-header">
+                <h2>Video Details</h2>
+            </div>
+            <div class="card-body">
+                <div class="detail-group">
+                    <div class="detail-label">Title</div>
+                    <div class="detail-value title">{{ generation.title }}</div>
+                </div>
+
+                <div class="detail-group">
+                    <div class="detail-label">Prompt</div>
+                    <div class="detail-value prompt">{{ generation.prompt }}</div>
+                </div>
+
+                {% if generation.enhanced_prompt %}
+                <div class="detail-group">
+                    <div class="detail-label">Enhanced Prompt</div>
+                    <div class="detail-value prompt" style="font-size: 0.85rem;">{{ generation.enhanced_prompt }}</div>
+                </div>
+                {% endif %}
+
+                {% if generation.negative_prompt %}
+                <div class="detail-group">
+                    <div class="detail-label">Avoided</div>
+                    <div class="detail-value" style="color: #f87171;">{{ generation.negative_prompt }}</div>
+                </div>
+                {% endif %}
+
+                <div class="detail-group">
+                    <div class="detail-label">Settings</div>
+                    <div class="badges">
+                        <span class="badge style">{{ generation.get_style_display }}</span>
+                        <span class="badge duration">{{ generation.duration }}s</span>
+                        <span class="badge resolution">{{ generation.resolution }}</span>
+                        <span class="badge fps">{{ generation.fps }} FPS</span>
+                        {% if generation.logo and generation.logo_position != 'none' %}
+                        <span class="badge logo">Logo: {{ generation.get_logo_position_display }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {% if generation.camera_motion or generation.motion_intensity %}
+                <div class="detail-group">
+                    <div class="detail-label">Motion</div>
+                    <div class="badges">
+                        {% if generation.camera_motion %}
+                        <span class="badge" style="background: rgba(99, 102, 241, 0.1); color: #818cf8;">
+                            <i class="fas fa-camera"></i> {{ generation.get_camera_motion_display }}
+                        </span>
+                        {% endif %}
+                        {% if generation.motion_intensity %}
+                        <span class="badge" style="background: rgba(34, 211, 238, 0.1); color: #22d3ee;">
+                            <i class="fas fa-bolt"></i> {{ generation.get_motion_intensity_display }}
+                        </span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+
+                <div class="processing-info">
+                    <div class="processing-item">
+                        <div class="value">{{ generation.processing_time|floatformat:1 }}s</div>
+                        <div class="label">Processing Time</div>
+                    </div>
+                    <div class="processing-item">
+                        <div class="value">{% if generation.file_size_mb %}{{ generation.file_size_mb }}MB{% else %}--{% endif %}</div>
+                        <div class="label">File Size</div>
+                    </div>
+                    <div class="processing-item">
+                        <div class="value">{{ generation.created_at|date:"M d" }}</div>
+                        <div class="label">Created</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function toggleFullscreen() {
+        const video = document.querySelector('.result-video');
+        if (video.requestFullscreen) {
+            video.requestFullscreen();
+        }
+    }
+
+    async function saveVideo() {
+        try {
+            const response = await fetch('{% url "ai_video:save" %}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: 'generation_id={{ generation.pk }}'
+            });
+            const data = await response.json();
+            alert(data.success ? 'Video saved!' : data.error);
+        } catch (e) {
+            alert('Error saving video');
+        }
+    }
+
+    async function shareVideo() {
+        if (navigator.share) {
+            try {
+                await navigator.share({
+                    title: '{{ generation.title }}',
+                    text: 'Check out this AI-generated video!',
+                    url: window.location.href
+                });
+            } catch (e) {}
+        } else {
+            navigator.clipboard.writeText(window.location.href);
+            alert('Link copied to clipboard!');
+        }
+    }
+
+    async function deleteVideo() {
+        if (!confirm('Delete this video?')) return;
+        
+        try {
+            const response = await fetch('{% url "ai_video:delete" generation.pk %}', {
+                method: 'POST',
+                headers: { 'X-CSRFToken': '{{ csrf_token }}' }
+            });
+            if (response.ok) {
+                window.location.href = '{% url "ai_video:history" %}';
+            }
+        } catch (e) {
+            alert('Error deleting video');
+        }
+    }
+</script>
+{% endblock %}

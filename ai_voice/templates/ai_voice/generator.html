@@ -1,0 +1,821 @@
+{% extends 'base.html' %}
+{% block title %}AI Voice Generator - SocialSync{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Page Header */
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1.5rem;
+    }
+    .page-header h1 {
+        font-size: 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .page-header h1 i {
+        color: #f472b6;
+    }
+    
+    /* Layout */
+    .generator-layout {
+        display: grid;
+        grid-template-columns: 1fr 400px;
+        gap: 1.5rem;
+    }
+    @media (max-width: 1024px) {
+        .generator-layout {
+            grid-template-columns: 1fr;
+        }
+    }
+    
+    /* Card Styles */
+    .card {
+        background: rgba(30,41,59,0.8);
+        border: 1px solid rgba(244,114,182,0.2);
+        border-radius: 1rem;
+        padding: 1.5rem;
+        margin-bottom: 1rem;
+    }
+    .card-title {
+        font-size: 1rem;
+        color: #f472b6;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+    }
+    
+    /* Text Input */
+    .text-input-container {
+        position: relative;
+    }
+    .text-input {
+        width: 100%;
+        min-height: 200px;
+        padding: 1rem;
+        background: rgba(15,23,42,0.8);
+        border: 1px solid rgba(244,114,182,0.3);
+        border-radius: 0.75rem;
+        color: #e2e8f0;
+        font-size: 1rem;
+        line-height: 1.6;
+        resize: vertical;
+        transition: all 0.3s;
+    }
+    .text-input:focus {
+        outline: none;
+        border-color: #f472b6;
+        box-shadow: 0 0 20px rgba(244,114,182,0.2);
+    }
+    .char-counter {
+        position: absolute;
+        bottom: 0.75rem;
+        right: 0.75rem;
+        font-size: 0.75rem;
+        color: #64748b;
+    }
+    .char-counter.warning {
+        color: #fbbf24;
+    }
+    .char-counter.error {
+        color: #f87171;
+    }
+    
+    /* Voice Selection */
+    .voice-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+    }
+    @media (max-width: 768px) {
+        .voice-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+    .voice-option {
+        position: relative;
+    }
+    .voice-option input {
+        position: absolute;
+        opacity: 0;
+    }
+    .voice-option label {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 1rem;
+        background: rgba(15,23,42,0.6);
+        border: 2px solid rgba(244,114,182,0.2);
+        border-radius: 0.75rem;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+    .voice-option label:hover {
+        border-color: rgba(244,114,182,0.5);
+        background: rgba(244,114,182,0.1);
+    }
+    .voice-option input:checked + label {
+        border-color: #f472b6;
+        background: rgba(244,114,182,0.2);
+        box-shadow: 0 0 15px rgba(244,114,182,0.3);
+    }
+    .voice-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 0.5rem;
+        font-size: 1.2rem;
+    }
+    .voice-icon.alloy { background: linear-gradient(135deg, #6366f1, #8b5cf6); }
+    .voice-icon.echo { background: linear-gradient(135deg, #3b82f6, #06b6d4); }
+    .voice-icon.fable { background: linear-gradient(135deg, #f59e0b, #ef4444); }
+    .voice-icon.onyx { background: linear-gradient(135deg, #1f2937, #374151); }
+    .voice-icon.nova { background: linear-gradient(135deg, #ec4899, #f472b6); }
+    .voice-icon.shimmer { background: linear-gradient(135deg, #a855f7, #ec4899); }
+    .voice-name {
+        font-weight: 600;
+        font-size: 0.85rem;
+    }
+    .voice-desc {
+        font-size: 0.7rem;
+        color: #64748b;
+    }
+    .preview-btn {
+        position: absolute;
+        top: 0.5rem;
+        right: 0.5rem;
+        background: rgba(244,114,182,0.3);
+        border: none;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        transition: all 0.3s;
+    }
+    .voice-option:hover .preview-btn {
+        opacity: 1;
+    }
+    .preview-btn i {
+        font-size: 0.6rem;
+        color: #fff;
+    }
+    
+    /* Speed Slider */
+    .speed-control {
+        margin-bottom: 1rem;
+    }
+    .speed-label {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.5rem;
+    }
+    .speed-value {
+        font-weight: 600;
+        color: #f472b6;
+    }
+    .speed-slider {
+        width: 100%;
+        height: 8px;
+        -webkit-appearance: none;
+        background: rgba(244,114,182,0.2);
+        border-radius: 4px;
+        outline: none;
+    }
+    .speed-slider::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 20px;
+        height: 20px;
+        background: linear-gradient(135deg, #ec4899, #f472b6);
+        border-radius: 50%;
+        cursor: pointer;
+        box-shadow: 0 0 10px rgba(244,114,182,0.5);
+    }
+    .speed-presets {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 0.5rem;
+    }
+    .speed-preset {
+        font-size: 0.65rem;
+        color: #64748b;
+        cursor: pointer;
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.25rem;
+        transition: all 0.2s;
+    }
+    .speed-preset:hover {
+        color: #f472b6;
+        background: rgba(244,114,182,0.1);
+    }
+    
+    /* Settings Row */
+    .settings-row {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+    .setting-item {
+        flex: 1;
+    }
+    .setting-label {
+        font-size: 0.75rem;
+        color: #94a3b8;
+        margin-bottom: 0.35rem;
+        display: block;
+    }
+    .setting-select {
+        width: 100%;
+        padding: 0.6rem;
+        background: rgba(15,23,42,0.8);
+        border: 1px solid rgba(244,114,182,0.3);
+        border-radius: 0.5rem;
+        color: #e2e8f0;
+        font-size: 0.85rem;
+    }
+    .setting-select:focus {
+        outline: none;
+        border-color: #f472b6;
+    }
+    .setting-input {
+        width: 100%;
+        padding: 0.6rem;
+        background: rgba(15,23,42,0.8);
+        border: 1px solid rgba(244,114,182,0.3);
+        border-radius: 0.5rem;
+        color: #e2e8f0;
+        font-size: 0.85rem;
+    }
+    
+    /* Generate Button */
+    .generate-btn {
+        width: 100%;
+        padding: 1rem 2rem;
+        background: linear-gradient(135deg, #ec4899, #f472b6);
+        border: none;
+        border-radius: 0.75rem;
+        color: #fff;
+        font-size: 1rem;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        transition: all 0.3s;
+    }
+    .generate-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 30px rgba(244,114,182,0.4);
+    }
+    .generate-btn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+    }
+    .generate-btn.loading {
+        background: linear-gradient(135deg, #64748b, #94a3b8);
+    }
+    
+    /* Audio Player */
+    .audio-result {
+        display: none;
+        margin-top: 1rem;
+        padding: 1rem;
+        background: rgba(16,185,129,0.1);
+        border: 1px solid rgba(16,185,129,0.3);
+        border-radius: 0.75rem;
+    }
+    .audio-result.show {
+        display: block;
+        animation: slideIn 0.3s ease;
+    }
+    @keyframes slideIn {
+        from { opacity: 0; transform: translateY(-10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    .audio-player {
+        width: 100%;
+        margin-bottom: 0.75rem;
+    }
+    .audio-info {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 0.8rem;
+        color: #94a3b8;
+    }
+    .audio-actions {
+        display: flex;
+        gap: 0.5rem;
+    }
+    .audio-action-btn {
+        padding: 0.4rem 0.75rem;
+        background: rgba(16,185,129,0.2);
+        border: 1px solid rgba(16,185,129,0.3);
+        border-radius: 0.5rem;
+        color: #34d399;
+        font-size: 0.75rem;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    .audio-action-btn:hover {
+        background: rgba(16,185,129,0.3);
+    }
+    
+    /* Sidebar */
+    .right-sidebar .card {
+        border-color: rgba(139,92,246,0.2);
+    }
+    .right-sidebar .card-title {
+        color: #a78bfa;
+    }
+    
+    /* Recent Generations */
+    .recent-item {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.75rem;
+        background: rgba(15,23,42,0.6);
+        border-radius: 0.5rem;
+        margin-bottom: 0.5rem;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    .recent-item:hover {
+        background: rgba(139,92,246,0.2);
+    }
+    .recent-icon {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.9rem;
+    }
+    .recent-info {
+        flex: 1;
+        min-width: 0;
+    }
+    .recent-title {
+        font-size: 0.85rem;
+        font-weight: 500;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .recent-meta {
+        font-size: 0.7rem;
+        color: #64748b;
+    }
+    .recent-play {
+        color: #a78bfa;
+    }
+    
+    /* Tips */
+    .tip-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.5rem;
+        padding: 0.5rem 0;
+        border-bottom: 1px solid rgba(139,92,246,0.1);
+    }
+    .tip-item:last-child {
+        border-bottom: none;
+    }
+    .tip-icon {
+        color: #fbbf24;
+        margin-top: 0.2rem;
+    }
+    .tip-text {
+        font-size: 0.8rem;
+        color: #94a3b8;
+        line-height: 1.4;
+    }
+    
+    /* No API Key Alert */
+    .api-alert {
+        padding: 1rem;
+        background: rgba(251,191,36,0.1);
+        border: 1px solid rgba(251,191,36,0.3);
+        border-radius: 0.75rem;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+    .api-alert i {
+        color: #fbbf24;
+        font-size: 1.25rem;
+    }
+    .api-alert-content {
+        flex: 1;
+    }
+    .api-alert-title {
+        font-weight: 600;
+        color: #fbbf24;
+        margin-bottom: 0.25rem;
+    }
+    .api-alert-text {
+        font-size: 0.85rem;
+        color: #94a3b8;
+    }
+    .api-alert-btn {
+        padding: 0.5rem 1rem;
+        background: linear-gradient(135deg, #f59e0b, #fbbf24);
+        border: none;
+        border-radius: 0.5rem;
+        color: #000;
+        font-weight: 600;
+        cursor: pointer;
+        text-decoration: none;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1><i class="fas fa-microphone-alt"></i> AI Voice Generator</h1>
+    <div style="margin-bottom: 1rem; display:flex; gap:0.5rem; margin-top: 1rem ;">
+        <a href="{% url 'ai_voice:history' %}" class="btn btn-sm" style="background:rgba(139,92,246,0.2); color:#a78bfa; margin-right:0.5rem; ">
+            <i class="fas fa-history"></i> History
+        </a>
+        <a href="{% url 'ai_voice:settings' %}" class="btn btn-sm" style="background:rgba(244,114,182,0.2); color:#f472b6;">
+            <i class="fas fa-cog"></i> Settings
+        </a>
+    </div>
+</div>
+
+{% if not has_api_key %}
+<div class="api-alert">
+    <i class="fas fa-exclamation-triangle"></i>
+    <div class="api-alert-content">
+        <div class="api-alert-title">API Key Required</div>
+        <div class="api-alert-text">Add your OpenAI API key to start generating voice.</div>
+    </div>
+    <a href="{% url 'ai_voice:settings' %}" class="api-alert-btn">Add API Key</a>
+</div>
+{% endif %}
+
+<div class="generator-layout">
+    <!-- Main Column -->
+    <div class="main-column">
+        <div class="card">
+            <h3 class="card-title"><i class="fas fa-keyboard"></i> Enter Your Text</h3>
+            
+            <div style="margin-bottom:1rem;">
+                <input type="text" id="titleInput" class="setting-input" placeholder="Title (optional) - e.g., Podcast Intro">
+            </div>
+            
+            <div class="text-input-container">
+                <textarea id="textInput" class="text-input" placeholder="Enter the text you want to convert to speech...
+
+Example: Welcome to our podcast! Today we're going to discuss the latest trends in artificial intelligence and how they're shaping our future."></textarea>
+                <span class="char-counter" id="charCounter">0 / 4096</span>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h3 class="card-title"><i class="fas fa-user-circle"></i> Select Voice</h3>
+            
+            <div class="voice-grid">
+                {% for value, label in voice_choices %}
+                <div class="voice-option">
+                    <input type="radio" name="voice" id="voice_{{ value }}" value="{{ value }}" {% if value == user_settings.default_voice %}checked{% endif %}>
+                    <label for="voice_{{ value }}">
+                        <div class="voice-icon {{ value }}">
+                            {% if value == 'alloy' %}🎭{% elif value == 'echo' %}🔊{% elif value == 'fable' %}🎩{% elif value == 'onyx' %}🎸{% elif value == 'nova' %}✨{% else %}💫{% endif %}
+                        </div>
+                        <span class="voice-name">{{ value|title }}</span>
+                        <span class="voice-desc">{{ label|cut:"- " }}</span>
+                    </label>
+                    <button type="button" class="preview-btn" onclick="previewVoice('{{ value }}')" title="Preview">
+                        <i class="fas fa-play"></i>
+                    </button>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        
+        <div class="card">
+            <h3 class="card-title"><i class="fas fa-sliders-h"></i> Voice Settings</h3>
+            
+            <div class="speed-control">
+                <div class="speed-label">
+                    <span>Speed</span>
+                    <span class="speed-value" id="speedValue">{{ user_settings.default_speed }}x</span>
+                </div>
+                <input type="range" class="speed-slider" id="speedSlider" min="0.25" max="4.0" step="0.05" value="{{ user_settings.default_speed }}">
+                <div class="speed-presets">
+                    <span class="speed-preset" onclick="setSpeed(0.5)">0.5x Slow</span>
+                    <span class="speed-preset" onclick="setSpeed(1.0)">1.0x Normal</span>
+                    <span class="speed-preset" onclick="setSpeed(1.5)">1.5x Fast</span>
+                    <span class="speed-preset" onclick="setSpeed(2.0)">2.0x Faster</span>
+                </div>
+            </div>
+            
+            <div class="settings-row">
+                <div class="setting-item">
+                    <label class="setting-label">Model</label>
+                    <select id="modelSelect" class="setting-select">
+                        {% for value, label in model_choices %}
+                        <option value="{{ value }}" {% if value == user_settings.default_model %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="setting-item">
+                    <label class="setting-label">Format</label>
+                    <select id="formatSelect" class="setting-select">
+                        <option value="mp3" selected>MP3</option>
+                        <option value="wav">WAV</option>
+                        <option value="flac">FLAC</option>
+                        <option value="aac">AAC</option>
+                        <option value="opus">Opus</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+        
+        <button type="button" class="generate-btn" id="generateBtn" onclick="generateVoice()" {% if not has_api_key %}disabled{% endif %}>
+            <i class="fas fa-magic"></i> Generate Voice
+        </button>
+        
+        <div class="audio-result" id="audioResult">
+            <audio id="audioPlayer" class="audio-player" controls></audio>
+            <div class="audio-info">
+                <span id="audioInfo">Ready</span>
+                <div class="audio-actions">
+                    <button class="audio-action-btn" onclick="downloadAudio()">
+                        <i class="fas fa-download"></i> Download
+                    </button>
+                    <button class="audio-action-btn" onclick="regenerateAudio()">
+                        <i class="fas fa-redo"></i> Regenerate
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Right Sidebar -->
+    <div class="right-sidebar">
+        {% if recent_generations %}
+        <div class="card">
+            <h3 class="card-title"><i class="fas fa-clock"></i> Recent Generations</h3>
+            {% for gen in recent_generations %}
+            <div class="recent-item" onclick="playRecent('{{ gen.audio_file.url }}', '{{ gen.title|escapejs }}')">
+                <div class="recent-icon {{ gen.voice }}">
+                    {% if gen.voice == 'alloy' %}🎭{% elif gen.voice == 'echo' %}🔊{% elif gen.voice == 'fable' %}🎩{% elif gen.voice == 'onyx' %}🎸{% elif gen.voice == 'nova' %}✨{% else %}💫{% endif %}
+                </div>
+                <div class="recent-info">
+                    <div class="recent-title">{{ gen.title }}</div>
+                    <div class="recent-meta">{{ gen.voice|title }} • {{ gen.characters_used }} chars</div>
+                </div>
+                <i class="fas fa-play recent-play"></i>
+            </div>
+            {% endfor %}
+            <a href="{% url 'ai_voice:history' %}" style="display:block; text-align:center; margin-top:0.75rem; color:#a78bfa; font-size:0.8rem;">
+                View All History →
+            </a>
+        </div>
+        {% endif %}
+        
+        <div class="card">
+            <h3 class="card-title"><i class="fas fa-lightbulb"></i> Tips</h3>
+            <div class="tip-item">
+                <i class="fas fa-star tip-icon"></i>
+                <span class="tip-text">Use punctuation for natural pauses. Commas create short pauses, periods create longer ones.</span>
+            </div>
+            <div class="tip-item">
+                <i class="fas fa-star tip-icon"></i>
+                <span class="tip-text">TTS-1-HD provides higher quality audio but takes slightly longer to generate.</span>
+            </div>
+            <div class="tip-item">
+                <i class="fas fa-star tip-icon"></i>
+                <span class="tip-text">Different voices work better for different content. Try "Onyx" for serious content, "Nova" for friendly tones.</span>
+            </div>
+            <div class="tip-item">
+                <i class="fas fa-star tip-icon"></i>
+                <span class="tip-text">Maximum 4096 characters per generation. Break longer texts into multiple parts.</span>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h3 class="card-title"><i class="fas fa-chart-bar"></i> Your Stats</h3>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem; text-align:center;">
+                <div>
+                    <div style="font-size:1.5rem; font-weight:700; color:#f472b6;">{{ user_settings.total_generations }}</div>
+                    <div style="font-size:0.75rem; color:#64748b;">Generations</div>
+                </div>
+                <div>
+                    <div style="font-size:1.5rem; font-weight:700; color:#a78bfa;">{{ user_settings.total_characters_used|floatformat:0 }}</div>
+                    <div style="font-size:0.75rem; color:#64748b;">Characters</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Hidden audio for preview -->
+<audio id="previewAudio" style="display:none;"></audio>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const csrfToken = '{{ csrf_token }}';
+let currentGenerationId = null;
+let currentAudioUrl = null;
+
+// Character counter
+const textInput = document.getElementById('textInput');
+const charCounter = document.getElementById('charCounter');
+
+textInput.addEventListener('input', function() {
+    const count = this.value.length;
+    charCounter.textContent = `${count} / 4096`;
+    
+    charCounter.classList.remove('warning', 'error');
+    if (count > 3500) charCounter.classList.add('warning');
+    if (count > 4096) charCounter.classList.add('error');
+});
+
+// Speed slider
+const speedSlider = document.getElementById('speedSlider');
+const speedValue = document.getElementById('speedValue');
+
+speedSlider.addEventListener('input', function() {
+    speedValue.textContent = this.value + 'x';
+});
+
+function setSpeed(value) {
+    speedSlider.value = value;
+    speedValue.textContent = value + 'x';
+}
+
+// Generate voice
+async function generateVoice() {
+    const text = textInput.value.trim();
+    if (!text) {
+        showToast('Please enter some text', true);
+        return;
+    }
+    
+    if (text.length > 4096) {
+        showToast('Text too long. Maximum 4096 characters.', true);
+        return;
+    }
+    
+    const btn = document.getElementById('generateBtn');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
+    btn.disabled = true;
+    btn.classList.add('loading');
+    
+    try {
+        const formData = new FormData();
+        formData.append('text', text);
+        formData.append('title', document.getElementById('titleInput').value);
+        formData.append('voice', document.querySelector('input[name="voice"]:checked').value);
+        formData.append('model', document.getElementById('modelSelect').value);
+        formData.append('speed', speedSlider.value);
+        formData.append('format', document.getElementById('formatSelect').value);
+        
+        const response = await fetch('{% url "ai_voice:generate" %}', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrfToken },
+            body: formData
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            currentGenerationId = data.generation_id;
+            currentAudioUrl = data.audio_url;
+            
+            const audioPlayer = document.getElementById('audioPlayer');
+            audioPlayer.src = data.audio_url;
+            
+            document.getElementById('audioInfo').textContent = 
+                `${data.voice} • ${data.characters} chars • ${data.processing_time}s`;
+            
+            document.getElementById('audioResult').classList.add('show');
+            audioPlayer.play();
+            
+            showToast('Voice generated successfully!');
+        } else {
+            showToast(data.error || 'Generation failed', true);
+        }
+    } catch (error) {
+        showToast('Error: ' + error.message, true);
+    } finally {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+        btn.classList.remove('loading');
+    }
+}
+
+// Preview voice
+async function previewVoice(voice) {
+    const previewText = "Hello! This is a preview of the " + voice + " voice.";
+    
+    try {
+        const formData = new FormData();
+        formData.append('text', previewText);
+        formData.append('voice', voice);
+        formData.append('speed', speedSlider.value);
+        
+        const response = await fetch('{% url "ai_voice:preview" %}', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrfToken },
+            body: formData
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            const audio = document.getElementById('previewAudio');
+            audio.src = 'data:audio/mp3;base64,' + data.audio_base64;
+            audio.play();
+        }
+    } catch (error) {
+        console.error('Preview error:', error);
+    }
+}
+
+// Play recent
+function playRecent(url, title) {
+    const audioPlayer = document.getElementById('audioPlayer');
+    audioPlayer.src = url;
+    document.getElementById('audioInfo').textContent = title;
+    document.getElementById('audioResult').classList.add('show');
+    audioPlayer.play();
+}
+
+// Download
+function downloadAudio() {
+    if (currentAudioUrl) {
+        window.open(currentAudioUrl, '_blank');
+    }
+}
+
+// Regenerate
+async function regenerateAudio() {
+    if (currentGenerationId) {
+        const btn = document.querySelector('.audio-action-btn:last-child');
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        
+        try {
+            const response = await fetch(`/ai-voice/generation/${currentGenerationId}/regenerate/`, {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrfToken }
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                const audioPlayer = document.getElementById('audioPlayer');
+                audioPlayer.src = data.audio_url;
+                audioPlayer.play();
+                showToast('Regenerated!');
+            }
+        } catch (error) {
+            console.error(error);
+        }
+        
+        btn.innerHTML = '<i class="fas fa-redo"></i> Regenerate';
+    }
+}
+
+// Toast notification
+function showToast(message, isError = false) {
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+        position: fixed;
+        bottom: 2rem;
+        right: 2rem;
+        padding: 1rem 1.5rem;
+        background: ${isError ? 'rgba(239,68,68,0.9)' : 'rgba(16,185,129,0.9)'};
+        color: #fff;
+        border-radius: 0.5rem;
+        z-index: 9999;
+        animation: slideIn 0.3s ease;
+    `;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+}
+</script>
+{% endblock %}

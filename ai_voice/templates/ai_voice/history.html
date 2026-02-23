@@ -1,0 +1,420 @@
+{% extends 'base.html' %}
+{% block title %}Voice History - SocialSync{% endblock %}
+
+{% block extra_css %}
+<style>
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1.5rem;
+    }
+    .page-header h1 {
+        font-size: 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .page-header h1 i {
+        color: #a78bfa;
+    }
+    
+    /* Stats Cards */
+    .stats-row {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+    }
+    @media (max-width: 768px) {
+        .stats-row {
+            grid-template-columns: 1fr;
+        }
+    }
+    .stat-card {
+        background: rgba(30,41,59,0.8);
+        border: 1px solid rgba(139,92,246,0.2);
+        border-radius: 1rem;
+        padding: 1.25rem;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+    .stat-icon {
+        width: 50px;
+        height: 50px;
+        border-radius: 0.75rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.25rem;
+    }
+    .stat-icon.purple { background: rgba(139,92,246,0.2); color: #a78bfa; }
+    .stat-icon.pink { background: rgba(244,114,182,0.2); color: #f472b6; }
+    .stat-icon.green { background: rgba(16,185,129,0.2); color: #34d399; }
+    .stat-value {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: #fff;
+    }
+    .stat-label {
+        font-size: 0.75rem;
+        color: #64748b;
+    }
+    
+    /* Filters */
+    .filters-card {
+        background: rgba(30,41,59,0.8);
+        border: 1px solid rgba(139,92,246,0.2);
+        border-radius: 1rem;
+        padding: 1rem;
+        margin-bottom: 1.5rem;
+        display: flex;
+        gap: 1rem;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+    .filter-select {
+        padding: 0.5rem 1rem;
+        background: rgba(15,23,42,0.8);
+        border: 1px solid rgba(139,92,246,0.3);
+        border-radius: 0.5rem;
+        color: #e2e8f0;
+        font-size: 0.85rem;
+    }
+    .filter-btn {
+        padding: 0.5rem 1rem;
+        background: linear-gradient(135deg, #8b5cf6, #a78bfa);
+        border: none;
+        border-radius: 0.5rem;
+        color: #fff;
+        font-size: 0.85rem;
+        cursor: pointer;
+    }
+    .clear-btn {
+        padding: 0.5rem 1rem;
+        background: rgba(239,68,68,0.2);
+        border: 1px solid rgba(239,68,68,0.3);
+        border-radius: 0.5rem;
+        color: #f87171;
+        font-size: 0.85rem;
+        cursor: pointer;
+        text-decoration: none;
+    }
+    
+    /* Generation Card */
+    .generation-grid {
+        display: grid;
+        gap: 1rem;
+    }
+    .generation-card {
+        background: rgba(30,41,59,0.8);
+        border: 1px solid rgba(139,92,246,0.2);
+        border-radius: 1rem;
+        padding: 1.25rem;
+        transition: all 0.3s;
+    }
+    .generation-card:hover {
+        border-color: rgba(139,92,246,0.5);
+        transform: translateY(-2px);
+    }
+    .generation-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 1rem;
+    }
+    .generation-title {
+        font-size: 1rem;
+        font-weight: 600;
+        color: #e2e8f0;
+        margin-bottom: 0.25rem;
+    }
+    .generation-meta {
+        font-size: 0.75rem;
+        color: #64748b;
+        display: flex;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+    .generation-meta span {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+    }
+    .generation-actions {
+        display: flex;
+        gap: 0.5rem;
+    }
+    .action-btn {
+        width: 32px;
+        height: 32px;
+        border-radius: 0.5rem;
+        border: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    .action-btn.play {
+        background: rgba(16,185,129,0.2);
+        color: #34d399;
+    }
+    .action-btn.download {
+        background: rgba(59,130,246,0.2);
+        color: #60a5fa;
+    }
+    .action-btn.delete {
+        background: rgba(239,68,68,0.2);
+        color: #f87171;
+    }
+    .action-btn:hover {
+        transform: scale(1.1);
+    }
+    
+    .generation-text {
+        font-size: 0.85rem;
+        color: #94a3b8;
+        line-height: 1.5;
+        margin-bottom: 1rem;
+        padding: 0.75rem;
+        background: rgba(15,23,42,0.5);
+        border-radius: 0.5rem;
+        max-height: 100px;
+        overflow: hidden;
+    }
+    
+    .generation-footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    .voice-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.35rem 0.75rem;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 500;
+    }
+    .voice-badge.alloy { background: rgba(99,102,241,0.2); color: #818cf8; }
+    .voice-badge.echo { background: rgba(59,130,246,0.2); color: #60a5fa; }
+    .voice-badge.fable { background: rgba(245,158,11,0.2); color: #fbbf24; }
+    .voice-badge.onyx { background: rgba(75,85,99,0.3); color: #9ca3af; }
+    .voice-badge.nova { background: rgba(236,72,153,0.2); color: #f472b6; }
+    .voice-badge.shimmer { background: rgba(168,85,247,0.2); color: #c084fc; }
+    
+    .status-badge {
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.25rem;
+        font-size: 0.7rem;
+        font-weight: 600;
+    }
+    .status-badge.completed { background: rgba(16,185,129,0.2); color: #34d399; }
+    .status-badge.failed { background: rgba(239,68,68,0.2); color: #f87171; }
+    .status-badge.processing { background: rgba(245,158,11,0.2); color: #fbbf24; }
+    
+    /* Audio Player */
+    .audio-container {
+        margin-top: 0.75rem;
+    }
+    .audio-container audio {
+        width: 100%;
+        height: 40px;
+    }
+    
+    /* Empty State */
+    .empty-state {
+        text-align: center;
+        padding: 3rem;
+        color: #64748b;
+    }
+    .empty-state i {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        opacity: 0.5;
+    }
+    .empty-state p {
+        margin-bottom: 1rem;
+    }
+    .empty-state a {
+        color: #a78bfa;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1><i class="fas fa-history"></i> Voice Generation History</h1>
+    <a href="{% url 'ai_voice:generator' %}" class="btn btn-sm" style="background:linear-gradient(135deg,#ec4899,#f472b6); color:#fff; margin-bottom: 1rem; margin-top: 1rem;">
+        <i class="fas fa-plus"></i> New Generation
+    </a>
+</div>
+
+<!-- Stats -->
+<div class="stats-row">
+    <div class="stat-card">
+        <div class="stat-icon purple"><i class="fas fa-microphone-alt"></i></div>
+        <div>
+            <div class="stat-value">{{ total_generations }}</div>
+            <div class="stat-label">Total Generations</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon green"><i class="fas fa-check-circle"></i></div>
+        <div>
+            <div class="stat-value">{{ completed_generations }}</div>
+            <div class="stat-label">Completed</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon pink"><i class="fas fa-font"></i></div>
+        <div>
+            <div class="stat-value">{{ total_characters|floatformat:0 }}</div>
+            <div class="stat-label">Characters Used</div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters -->
+<form method="get" class="filters-card">
+    <select name="status" class="filter-select">
+        <option value="">All Status</option>
+        <option value="completed" {% if status_filter == 'completed' %}selected{% endif %}>Completed</option>
+        <option value="failed" {% if status_filter == 'failed' %}selected{% endif %}>Failed</option>
+        <option value="processing" {% if status_filter == 'processing' %}selected{% endif %}>Processing</option>
+    </select>
+    <select name="voice" class="filter-select">
+        <option value="">All Voices</option>
+        {% for value, label in voice_choices %}
+        <option value="{{ value }}" {% if voice_filter == value %}selected{% endif %}>{{ value|title }}</option>
+        {% endfor %}
+    </select>
+    <button type="submit" class="filter-btn"><i class="fas fa-filter"></i> Filter</button>
+    <a href="{% url 'ai_voice:history' %}" class="clear-btn"><i class="fas fa-times"></i> Clear</a>
+</form>
+
+<!-- Generations List -->
+<div class="generation-grid">
+    {% for gen in generations %}
+    <div class="generation-card" id="gen-{{ gen.id }}">
+        <div class="generation-header">
+            <div>
+                <div class="generation-title">{{ gen.title|default:"Untitled" }}</div>
+                <div class="generation-meta">
+                    <span><i class="fas fa-calendar"></i> {{ gen.created_at|date:"M d, Y H:i" }}</span>
+                    <span><i class="fas fa-font"></i> {{ gen.characters_used }} chars</span>
+                    {% if gen.processing_time %}
+                    <span><i class="fas fa-clock"></i> {{ gen.processing_time|floatformat:2 }}s</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="generation-actions">
+                {% if gen.audio_file %}
+                <button class="action-btn play" onclick="playAudio('{{ gen.audio_file.url }}')" title="Play">
+                    <i class="fas fa-play"></i>
+                </button>
+                <a href="{% url 'ai_voice:download' gen.id %}" class="action-btn download" title="Download">
+                    <i class="fas fa-download"></i>
+                </a>
+                {% endif %}
+                <button class="action-btn delete" onclick="deleteGeneration({{ gen.id }})" title="Delete">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </div>
+        
+        <div class="generation-text">{{ gen.text_preview }}</div>
+        
+        <div class="generation-footer">
+            <div style="display:flex; gap:0.5rem; align-items:center;">
+                <span class="voice-badge {{ gen.voice }}">
+                    {% if gen.voice == 'alloy' %}🎭{% elif gen.voice == 'echo' %}🔊{% elif gen.voice == 'fable' %}🎩{% elif gen.voice == 'onyx' %}🎸{% elif gen.voice == 'nova' %}✨{% else %}💫{% endif %}
+                    {{ gen.voice|title }}
+                </span>
+                <span style="font-size:0.7rem; color:#64748b;">{{ gen.speed }}x • {{ gen.model }}</span>
+            </div>
+            <span class="status-badge {{ gen.status }}">{{ gen.status|upper }}</span>
+        </div>
+        
+        {% if gen.audio_file %}
+        <div class="audio-container" id="audio-container-{{ gen.id }}" style="display:none;">
+            <audio controls style="width:100%;">
+                <source src="{{ gen.audio_file.url }}" type="audio/{{ gen.output_format }}">
+            </audio>
+        </div>
+        {% endif %}
+        
+        {% if gen.error_message %}
+        <div style="margin-top:0.75rem; padding:0.5rem; background:rgba(239,68,68,0.1); border-radius:0.5rem; font-size:0.75rem; color:#f87171;">
+            <i class="fas fa-exclamation-circle"></i> {{ gen.error_message }}
+        </div>
+        {% endif %}
+    </div>
+    {% empty %}
+    <div class="empty-state">
+        <i class="fas fa-microphone-slash"></i>
+        <p>No voice generations yet</p>
+        <a href="{% url 'ai_voice:generator' %}">Create your first voice →</a>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const csrfToken = '{{ csrf_token }}';
+
+function playAudio(url) {
+    // Create or get global audio player
+    let player = document.getElementById('globalAudioPlayer');
+    if (!player) {
+        player = document.createElement('audio');
+        player.id = 'globalAudioPlayer';
+        document.body.appendChild(player);
+    }
+    player.src = url;
+    player.play();
+}
+
+async function deleteGeneration(id) {
+    if (!confirm('Delete this generation?')) return;
+    
+    try {
+        const response = await fetch(`/ai-voice/generation/${id}/delete/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrfToken,
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        });
+        
+        if (response.ok) {
+            document.getElementById(`gen-${id}`).remove();
+            showToast('Deleted!');
+        }
+    } catch (error) {
+        showToast('Error deleting', true);
+    }
+}
+
+function showToast(message, isError = false) {
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+        position: fixed;
+        bottom: 2rem;
+        right: 2rem;
+        padding: 1rem 1.5rem;
+        background: ${isError ? 'rgba(239,68,68,0.9)' : 'rgba(16,185,129,0.9)'};
+        color: #fff;
+        border-radius: 0.5rem;
+        z-index: 9999;
+    `;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+}
+</script>
+{% endblock %}
