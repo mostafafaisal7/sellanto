@@ -18,11 +18,7 @@ SECRET_KEY = config('DJANGO_SECRET_KEY', default='django-insecure-rf#m85xc6pefl#
 DEBUG = config('DJANGO_DEBUG', default=True, cast=bool)
 
 ALLOWED_HOSTS = [
-    '127.0.0.1',
-    'localhost',
-    'abedintechllc.com',
-    'www.abedintechllc.com',
-    'idiomatic-davida-subacrid.ngrok-free.dev',
+    '*'
 ]
 
 CSRF_TRUSTED_ORIGINS = [
@@ -113,18 +109,28 @@ WSGI_APPLICATION = 'socialsync.wsgi.application'
 # }
 
 # MySQL Configuration (uses env vars for cPanel, falls back to local defaults)
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.mysql',
+#         'NAME': config('DB_NAME', default='sellento'),
+#         'USER': config('DB_USER', default='root'),
+#         'PASSWORD': config('DB_PASSWORD', default=''),
+#         'HOST': config('DB_HOST', default='localhost'),
+#         'PORT': config('DB_PORT', default='3306'),
+#         'OPTIONS': {
+#             'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+#             'charset': 'utf8mb4',
+#         },
+#     }
+# }
+
+
+
+
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.mysql',
-        'NAME': config('DB_NAME', default='sellento'),
-        'USER': config('DB_USER', default='root'),
-        'PASSWORD': config('DB_PASSWORD', default=''),
-        'HOST': config('DB_HOST', default='localhost'),
-        'PORT': config('DB_PORT', default='3306'),
-        'OPTIONS': {
-            'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
-            'charset': 'utf8mb4',
-        },
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
 
