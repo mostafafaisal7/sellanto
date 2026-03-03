@@ -18,9 +18,11 @@ import {
 import onboardingService from '../services/onboardingService';
 import { platformService } from '../services/platformService';
 import type { Workspace, Brand, LaunchPlan, SocialAccount } from '../types';
+import { useAuthStore } from '../store';
 
 export function BusinessProfilePage() {
   const navigate = useNavigate();
+  const { user, fetchUser } = useAuthStore();
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [connectedAccounts, setConnectedAccounts] = useState<SocialAccount[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
@@ -64,6 +66,15 @@ export function BusinessProfilePage() {
       setWorkspaces(ws);
       setBrands(br);
       setConnectedAccounts(accounts);
+
+      // If workspace + brand already exist but needs_onboarding is still true,
+      // the user is stuck in a redirect loop — unblock them automatically
+      if (ws.length > 0 && br.length > 0 && user?.onboarding_status?.needs_onboarding) {
+        try {
+          await onboardingService.skipOnboarding();
+          await fetchUser();
+        } catch { /* already skipped or completed, ignore */ }
+      }
 
       const plans: Record<number, LaunchPlan> = {};
       for (const brand of br) {
@@ -118,7 +129,10 @@ export function BusinessProfilePage() {
       setBrandGoals([]);
       setBrandAudiences([]);
       setShowBrandForm(false);
-      loadData();
+      // Mark onboarding as done so the redirect loop stops, then go to the app
+      await onboardingService.skipOnboarding();
+      await fetchUser();
+      navigate('/overflow');
     } catch {
       alert('Failed to create brand');
     } finally {
