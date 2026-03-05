@@ -228,3 +228,5 @@ CORS_ALLOWED_ORIGINS = [
 ]
 
 CORS_ALLOW_CREDENTIALS = True
+APP_VERSION = "v1-2-2/claudeAPI-setup"
+#check
