@@ -63,9 +63,7 @@ importlib_resources==6.5.2
 isort==5.13.2
 itsdangerous==2.2.0
 Jinja2==3.1.6
-<<<<<<< HEAD
-jiter==0.12.0
-MarkupSafe==3.0.3
+<<<<<<<   HEAD
 moviepy==2.2.1
 PyMySQL==1.1.1
 pytrends==4.9.2
