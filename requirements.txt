@@ -63,12 +63,11 @@ importlib_resources==6.5.2
 isort==5.13.2
 itsdangerous==2.2.0
 Jinja2==3.1.6
-<<<<<<<   HEAD
+
 moviepy==2.2.1
 PyMySQL==1.1.1
 pytrends==4.9.2
 numpy==2.4.0
-=======
 jiter==0.10.0
 joblib==1.5.1
 jsonpatch==1.33
