@@ -10,7 +10,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # API Key Configuration (fallbacks - users should set keys via Settings page)
 OPENAI_API_KEY = config('OPENAI_API_KEY', default='')
 GEMINI_API_KEY = config('GEMINI_API_KEY', default='')
-ANTHROPIC_API_KEY = config('ANTHROPIC_API_KEY', default='')
+ANTHROPIC_API_KEY = config('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', default='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')
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = config('DJANGO_SECRET_KEY', default='django-insecure-rf#m85xc6pefl#85gx(-g)%w)2_*_eg5*26ovyanr!7n%8vhm=')
@@ -107,28 +107,28 @@ WSGI_APPLICATION = 'socialsync.wsgi.application'
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
 # OLD SQLite Configuration (COMMENTED OUT FOR BACKUP)
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.sqlite3',
-#         'NAME': BASE_DIR / 'db.sqlite3',
-#     }
-# }
-
-# MySQL Configuration (uses env vars for cPanel, falls back to local defaults)
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.mysql',
-        'NAME': config('DB_NAME', default='sellento'),
-        'USER': config('DB_USER', default='root'),
-        'PASSWORD': config('DB_PASSWORD', default=''),
-        'HOST': config('DB_HOST', default='localhost'),
-        'PORT': config('DB_PORT', default='3306'),
-        'OPTIONS': {
-            'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
-            'charset': 'utf8mb4',
-        },
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
+
+# MySQL Configuration (uses env vars for cPanel, falls back to local defaults)
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.mysql',
+#         'NAME': config('DB_NAME', default='sellento'),
+#         'USER': config('DB_USER', default='root'),
+#         'PASSWORD': config('DB_PASSWORD', default=''),
+#         'HOST': config('DB_HOST', default='localhost'),
+#         'PORT': config('DB_PORT', default='3306'),
+#         'OPTIONS': {
+#             'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
+#             'charset': 'utf8mb4',
+#         },
+#     }
+# }
 
 
 # Password validation
@@ -155,7 +155,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE='Asia/Dhaka'
 
 USE_I18N = True
 
