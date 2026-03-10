@@ -548,7 +548,7 @@ Return ONLY valid JSON array — no markdown, no commentary."""},
 
             # Save prompts to history
             from brands.models import PromptHistory
-            combined_prompt = '\n---\n'.join(all_used_prompts) if all_used_prompts else ''
+            combined_prompt = '\n---\n'.join(p['prompt'] if isinstance(p, dict) else p for p in all_used_prompts) if all_used_prompts else ''
             PromptHistory.save_prompt(brand, 'competitors', combined_prompt)
 
             return Response({
