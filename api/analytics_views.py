@@ -9,6 +9,7 @@ from django.utils import timezone
 from datetime import timedelta
 
 from accounts.permissions import IsCreatorOrAbove, IsWorkspaceAdmin, IsViewerOrAbove
+from accounts.services.diamond_service import pre_check, deduct_diamonds
 
 from posts.models import Post
 from analytics.models import PostAnalytics, PostComment, LearningSignal, RepurposedContent
@@ -95,6 +96,16 @@ class AIReplyToCommentView(APIView):
         except PostComment.DoesNotExist:
             return Response({'error': 'Comment not found'}, status=status.HTTP_404_NOT_FOUND)
 
+        # Diamond Token pre-check
+        can_afford, cost, balance = pre_check(request.user, 'ai_reply_comment')
+        if not can_afford:
+            return Response({
+                'error': 'Insufficient Diamond Tokens',
+                'diamond_cost': cost,
+                'diamond_balance': balance,
+                'code': 'INSUFFICIENT_DIAMONDS',
+            }, status=402)
+
         service = get_llm_service(request.user)
 
         # Build context
@@ -140,6 +151,7 @@ Post caption: {(post.caption or '')[:300]}
         )
         if result.success:
             ai_reply = result.content.strip().strip('"')
+            deduct_diamonds(user=request.user, feature='ai_reply_comment', provider='claude', raw_tokens=result.tokens_used if hasattr(result, 'tokens_used') else 0)
         else:
             ai_reply = "Thank you for your comment! We appreciate your feedback."
 

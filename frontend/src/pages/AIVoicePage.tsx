@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import {
   SpeakerWaveIcon,
   SparklesIcon,
@@ -10,12 +10,11 @@ import {
   PauseIcon,
   TrashIcon,
   ArrowPathIcon,
-  CheckIcon,
-  KeyIcon,
   CheckCircleIcon,
 } from '@heroicons/react/24/outline';
 import { formatDistanceToNow } from 'date-fns';
 import { Button, Card, Input, Textarea, Spinner } from '../components/ui';
+import { DiamondCostIndicator } from '../components/diamond';
 import voiceService from '../services/voiceService';
 import type { VoiceGeneration, UserVoiceSettings } from '../services/voiceService';
 
@@ -63,9 +62,6 @@ export function AIVoicePage() {
   const [selectedFormat, setSelectedFormat] = useState('mp3');
 
   // Settings state
-  const [apiKey, setApiKey] = useState('');
-  const [showKey, setShowKey] = useState(false);
-  const [settingsSaved, setSettingsSaved] = useState(false);
   const [settings, setSettings] = useState<UserVoiceSettings | null>(null);
   const [defaultVoice, setDefaultVoice] = useState('alloy');
   const [defaultSpeed, setDefaultSpeed] = useState(1.0);
@@ -204,18 +200,12 @@ export function AIVoicePage() {
 
   const saveSettings = async () => {
     try {
-      const data: Record<string, unknown> = {
+      await voiceService.updateSettings({
         default_voice: defaultVoice,
         default_speed: defaultSpeed,
         default_model: defaultModel,
-      };
-      if (apiKey) data.openai_api_key = apiKey;
-
-      await voiceService.updateSettings(data as { openai_api_key?: string; default_voice?: string; default_speed?: number; default_model?: string });
-      setSettingsSaved(true);
-      setApiKey('');
+      });
       fetchSettings();
-      setTimeout(() => setSettingsSaved(false), 3000);
     } catch (err) {
       console.error('Failed to save settings:', err);
     }
@@ -444,7 +434,7 @@ export function AIVoicePage() {
                 leftIcon={<SparklesIcon className="w-5 h-5" />}
                 className="bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700"
               >
-                Generate Voice
+                Generate Voice <DiamondCostIndicator cost={5} className="ml-2" />
               </Button>
             </div>
           </div>
@@ -664,58 +654,20 @@ export function AIVoicePage() {
       {/* Settings Tab */}
       {activeTab === 'settings' && (
         <div className="max-w-2xl space-y-6">
-          <AnimatePresence>
-            {settingsSaved && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                className="p-4 bg-success/10 border border-success/20 rounded-xl flex items-center gap-3"
-              >
-                <CheckCircleIcon className="w-5 h-5 text-success" />
-                <p className="text-success">Settings saved successfully!</p>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* API Key */}
+          {/* Info: API keys managed by admin */}
           <Card>
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center">
-                <KeyIcon className="w-5 h-5 text-amber-400" />
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-green-500/20 flex items-center justify-center">
+                <CheckCircleIcon className="w-5 h-5 text-green-400" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-text-primary">API Configuration</h3>
-                <p className="text-sm text-text-secondary">Configure your OpenAI API key for Text-to-Speech</p>
+                <h3 className="text-lg font-semibold text-text-primary">AI Service Active</h3>
+                <p className="text-sm text-text-secondary">API keys are managed by your administrator</p>
               </div>
             </div>
-
-            <div className="space-y-4">
-              {settings?.has_api_key && (
-                <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-xl flex items-center gap-2">
-                  <CheckIcon className="w-4 h-4 text-green-400" />
-                  <span className="text-sm text-green-400">API key configured: {settings.masked_api_key}</span>
-                </div>
-              )}
-
-              <Input
-                label="OpenAI API Key"
-                type={showKey ? 'text' : 'password'}
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder={settings?.has_api_key ? 'Enter new key to update...' : 'sk-...'}
-              />
-
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={showKey}
-                  onChange={(e) => setShowKey(e.target.checked)}
-                  className="w-4 h-4 rounded text-violet-500 bg-dark-600 border-white/20"
-                />
-                <span className="text-sm text-text-secondary">Show API key</span>
-              </label>
-            </div>
+            <p className="text-xs text-text-muted">
+              All AI features are powered by Diamond Tokens. Contact your admin for API configuration.
+            </p>
           </Card>
 
           {/* Defaults */}
@@ -788,7 +740,7 @@ export function AIVoicePage() {
           <div className="pt-4 border-t border-white/5">
             <Button
               onClick={saveSettings}
-              leftIcon={<CheckIcon className="w-5 h-5" />}
+              leftIcon={<CheckCircleIcon className="w-5 h-5" />}
               className="bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700"
             >
               Save Settings

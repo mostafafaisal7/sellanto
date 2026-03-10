@@ -8,6 +8,7 @@ from rest_framework.views import APIView
 from rest_framework import viewsets
 
 from accounts.permissions import IsCreatorOrAbove, IsViewerOrAbove
+from accounts.services.diamond_service import pre_check, deduct_diamonds
 
 from posts.models import Post, PostCaption
 from accounts.services.llm_service import get_llm_service
@@ -170,6 +171,16 @@ Output:
         if override_prompt:
             prompt = override_prompt
 
+        # Diamond Token pre-check
+        can_afford, cost, balance = pre_check(request.user, 'caption')
+        if not can_afford:
+            return Response({
+                'error': 'Insufficient Diamond Tokens',
+                'diamond_cost': cost,
+                'diamond_balance': balance,
+                'code': 'INSUFFICIENT_DIAMONDS',
+            }, status=402)
+
         try:
             llm_result = service.chat_completion(
                 messages=[
@@ -186,6 +197,9 @@ Output:
                     {'error': llm_result.error or 'No AI API key configured. Go to Settings to add your OpenAI or Gemini key.'},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+
+            deduct_diamonds(user=request.user, feature='caption', provider='claude', raw_tokens=llm_result.tokens_used if hasattr(llm_result, 'tokens_used') else 0)
+
             result = json.loads(llm_result.content)
             generated = result.get('captions', [])
         except Exception as e:
@@ -270,12 +284,24 @@ class AdaptCaptionView(APIView):
         override_prompt = request.data.get('override_prompt', '')
         think_harder = request.data.get('think_harder', False)
 
+        # Diamond Token pre-check
+        can_afford, cost, balance = pre_check(request.user, 'caption_adapt')
+        if not can_afford:
+            return Response({
+                'error': 'Insufficient Diamond Tokens',
+                'diamond_cost': cost,
+                'diamond_balance': balance,
+                'code': 'INSUFFICIENT_DIAMONDS',
+            }, status=402)
+
         adapted = []
         all_used_prompts = []
         for platform in data['target_platforms']:
             adapted_caption, used_prompt = adapt_caption(source, platform, brand=brand, override_prompt=override_prompt or None, user=request.user, think_harder=think_harder)
             adapted.append(adapted_caption)
             all_used_prompts.append(used_prompt)
+
+        deduct_diamonds(user=request.user, feature='caption_adapt', provider='claude', raw_tokens=0)
 
         post.update_checklist()
         result = PostCaptionSerializer(adapted, many=True)

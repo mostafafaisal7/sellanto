@@ -8,6 +8,8 @@ from rest_framework.views import APIView
 from django.db.models import Count, Q
 from django.utils import timezone
 
+from accounts.services.diamond_service import pre_check, deduct_diamonds
+
 logger = logging.getLogger(__name__)
 
 from accounts.permissions import IsWorkspaceAdmin, IsCreatorOrAbove, IsViewerOrAbove
@@ -301,6 +303,16 @@ class CompetitorCrawlView(APIView):
         override_prompt = request.data.get('override_prompt', '')
         think_harder = request.data.get('think_harder', False)
 
+        # Diamond Token pre-check
+        can_afford, cost, balance = pre_check(request.user, 'competitor_analysis')
+        if not can_afford:
+            return Response({
+                'error': 'Insufficient Diamond Tokens',
+                'diamond_cost': cost,
+                'diamond_balance': balance,
+                'code': 'INSUFFICIENT_DIAMONDS',
+            }, status=402)
+
         try:
             from accounts.services.llm_service import get_llm_service
             import json
@@ -468,6 +480,8 @@ Return ONLY valid JSON array — no markdown, no commentary."""},
 
                 if not result.success:
                     return Response({'error': result.error}, status=status.HTTP_400_BAD_REQUEST)
+
+                deduct_diamonds(user=request.user, feature='competitor_analysis', provider='claude', raw_tokens=result.tokens_used if hasattr(result, 'tokens_used') else 0)
 
                 all_used_prompts.append({
                     'competitor': profile.handle_or_url,
@@ -807,6 +821,16 @@ Return ONLY a JSON array of exactly {count} objects:
         if override_prompt:
             prompt = override_prompt
 
+        # Diamond Token pre-check
+        can_afford, cost, balance = pre_check(request.user, 'strategy_ideas')
+        if not can_afford:
+            return Response({
+                'error': 'Insufficient Diamond Tokens',
+                'diamond_cost': cost,
+                'diamond_balance': balance,
+                'code': 'INSUFFICIENT_DIAMONDS',
+            }, status=402)
+
         try:
             from accounts.services.llm_service import get_llm_service
 
@@ -823,6 +847,8 @@ Return ONLY a JSON array of exactly {count} objects:
 
             if not result.success:
                 return Response({'error': result.error}, status=status.HTTP_400_BAD_REQUEST)
+
+            deduct_diamonds(user=request.user, feature='strategy_ideas', provider='claude', raw_tokens=result.tokens_used if hasattr(result, 'tokens_used') else 0)
 
             import json
             raw = result.content
@@ -973,6 +999,16 @@ Return ONLY this JSON:
         if override_prompt:
             prompt = override_prompt
 
+        # Diamond Token pre-check
+        can_afford, cost, balance = pre_check(request.user, 'idea_regenerate')
+        if not can_afford:
+            return Response({
+                'error': 'Insufficient Diamond Tokens',
+                'diamond_cost': cost,
+                'diamond_balance': balance,
+                'code': 'INSUFFICIENT_DIAMONDS',
+            }, status=402)
+
         try:
             llm_result = service.chat_completion(
                 messages=[
@@ -986,6 +1022,9 @@ Return ONLY this JSON:
             )
             if not llm_result.success:
                 return Response({'error': llm_result.error}, status=status.HTTP_400_BAD_REQUEST)
+
+            deduct_diamonds(user=request.user, feature='idea_regenerate', provider='claude', raw_tokens=llm_result.tokens_used if hasattr(llm_result, 'tokens_used') else 0)
+
             result = json.loads(llm_result.content)
         except Exception as e:
             return Response({'error': f'Regeneration failed: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -1068,11 +1107,24 @@ class GenerateTrendingView(APIView):
         except Brand.DoesNotExist:
             return Response({'error': 'Brand not found'}, status=status.HTTP_404_NOT_FOUND)
 
+        # Diamond Token pre-check
+        can_afford, cost, balance = pre_check(request.user, 'trending_generation')
+        if not can_afford:
+            return Response({
+                'error': 'Insufficient Diamond Tokens',
+                'diamond_cost': cost,
+                'diamond_balance': balance,
+                'code': 'INSUFFICIENT_DIAMONDS',
+            }, status=402)
+
         try:
             from .trending_service import generate_trending_for_brand
             override_prompt = request.data.get('override_prompt', '')
             think_harder = request.data.get('think_harder', False)
             result = generate_trending_for_brand(brand_id, request.user, override_prompt=override_prompt or None, think_harder=think_harder)
+
+            deduct_diamonds(user=request.user, feature='trending_generation', provider='claude', raw_tokens=0)
+
             return Response(result)
         except Exception as e:
             logger.error(f"Trending generation failed for brand {brand_id}: {e}", exc_info=True)
@@ -1293,6 +1345,16 @@ class SuggestCompetitorsView(APIView):
         override_prompt = request.data.get('override_prompt', '')
         think_harder = request.data.get('think_harder', False)
 
+        # Diamond Token pre-check
+        can_afford, cost, balance = pre_check(request.user, 'competitor_suggest')
+        if not can_afford:
+            return Response({
+                'error': 'Insufficient Diamond Tokens',
+                'diamond_cost': cost,
+                'diamond_balance': balance,
+                'code': 'INSUFFICIENT_DIAMONDS',
+            }, status=402)
+
         try:
             service = get_llm_service(request.user)
 
@@ -1372,6 +1434,8 @@ IMPORTANT: Only suggest companies you are confident are real. If unsure about a 
             if not llm_result.success:
                 return Response({'error': llm_result.error}, status=status.HTTP_400_BAD_REQUEST)
 
+            deduct_diamonds(user=request.user, feature='competitor_suggest', provider='claude', raw_tokens=llm_result.tokens_used if hasattr(llm_result, 'tokens_used') else 0)
+
             import json
             result = json.loads(llm_result.content)
             suggestions = result.get('competitors', [])
@@ -1414,6 +1478,16 @@ class GeneratePillarsView(APIView):
         think_harder = request.data.get('think_harder', False)
 
         from accounts.services.llm_service import get_llm_service
+
+        # Diamond Token pre-check
+        can_afford, cost, balance = pre_check(request.user, 'pillar_generation')
+        if not can_afford:
+            return Response({
+                'error': 'Insufficient Diamond Tokens',
+                'diamond_cost': cost,
+                'diamond_balance': balance,
+                'code': 'INSUFFICIENT_DIAMONDS',
+            }, status=402)
 
         dna = brand.brand_dna or {}
 
@@ -1558,6 +1632,8 @@ Existing pillars (DO NOT duplicate): {', '.join(existing_pillars) if existing_pi
 
             if not llm_result.success:
                 return Response({'error': llm_result.error}, status=status.HTTP_400_BAD_REQUEST)
+
+            deduct_diamonds(user=request.user, feature='pillar_generation', provider='claude', raw_tokens=llm_result.tokens_used if hasattr(llm_result, 'tokens_used') else 0)
 
             result = json.loads(llm_result.content)
             pillars_data = result.get('pillars', [])

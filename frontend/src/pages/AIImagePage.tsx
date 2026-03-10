@@ -11,14 +11,12 @@ import {
   TrashIcon,
   PlusIcon,
   XMarkIcon,
-  CheckIcon,
   EyeIcon,
   AdjustmentsHorizontalIcon,
   SunIcon,
   CameraIcon,
   SwatchIcon,
   ArrowsPointingOutIcon,
-  KeyIcon,
   CheckCircleIcon,
   CloudArrowUpIcon,
   StarIcon,
@@ -26,6 +24,7 @@ import {
 import { HeartIcon as HeartSolidIcon, StarIcon as StarSolidIcon } from '@heroicons/react/24/solid';
 import { formatDistanceToNow } from 'date-fns';
 import { Button, Card, Input, Textarea, Modal, Spinner } from '../components/ui';
+import { DiamondCostIndicator } from '../components/diamond';
 import type {
   ImageGeneration,
   SavedImage,
@@ -168,11 +167,6 @@ export function AIImagePage() {
   const [selectedCameraAngle, setSelectedCameraAngle] = useState<CameraAngle | undefined>(undefined);
 
   // Settings state
-  const [openaiKey, setOpenaiKey] = useState('');
-  const [geminiKey, setGeminiKey] = useState('');
-  const [showKeys, setShowKeys] = useState(false);
-  const [defaultProvider, setDefaultProvider] = useState<'openai' | 'gemini'>('openai');
-  const [settingsSaved, setSettingsSaved] = useState(false);
   const [totalImagesGenerated, setTotalImagesGenerated] = useState(0);
   const [openaiImagesGenerated, setOpenaiImagesGenerated] = useState(0);
   const [geminiImagesGenerated, setGeminiImagesGenerated] = useState(0);
@@ -294,9 +288,6 @@ export function AIImagePage() {
       });
       if (response.ok) {
         const data = await response.json();
-        setOpenaiKey(data.openai_api_key || '');
-        setGeminiKey(data.gemini_api_key || '');
-        setDefaultProvider(data.default_provider || 'openai');
         setTotalImagesGenerated(data.total_images_generated || 0);
         setOpenaiImagesGenerated(data.openai_images_generated || 0);
         setGeminiImagesGenerated(data.gemini_images_generated || 0);
@@ -428,29 +419,6 @@ export function AIImagePage() {
     }
   };
 
-  const saveSettings = async () => {
-    try {
-      await authFetch('/api/v1/ai-image/settings/', {
-        method: 'PATCH',
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('access_token')}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          openai_api_key: openaiKey,
-          gemini_api_key: geminiKey,
-          default_provider: defaultProvider,
-        }),
-      });
-      setSettingsSaved(true);
-      setOpenaiKey('');
-      setGeminiKey('');
-      fetchSettings();
-      setTimeout(() => setSettingsSaved(false), 3000);
-    } catch (error) {
-      console.error('Failed to save settings:', error);
-    }
-  };
 
   const downloadImage = (url: string, filename: string) => {
     const link = document.createElement('a');
@@ -979,7 +947,7 @@ export function AIImagePage() {
               leftIcon={<SparklesIcon className="w-5 h-5" />}
               className="bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600"
             >
-              Generate Image
+              Generate Image <DiamondCostIndicator cost={15} className="ml-2" />
             </Button>
           </div>
 
@@ -1333,82 +1301,20 @@ export function AIImagePage() {
       {/* Settings Tab */}
       {activeTab === 'settings' && (
         <div className="max-w-2xl space-y-6">
-          {settingsSaved && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="p-4 bg-success/10 border border-success/20 rounded-xl flex items-center gap-3"
-            >
-              <CheckCircleIcon className="w-5 h-5 text-success" />
-              <p className="text-success">Settings saved successfully!</p>
-            </motion.div>
-          )}
-
+          {/* Info: API keys managed by admin */}
           <Card>
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center">
-                <KeyIcon className="w-5 h-5 text-amber-400" />
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-green-500/20 flex items-center justify-center">
+                <CheckCircleIcon className="w-5 h-5 text-green-400" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-text-primary">API Configuration</h3>
-                <p className="text-sm text-text-secondary">Configure your AI provider API keys</p>
+                <h3 className="text-lg font-semibold text-text-primary">AI Service Active</h3>
+                <p className="text-sm text-text-secondary">API keys are managed by your administrator</p>
               </div>
             </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-text-secondary mb-2">
-                  Default Provider
-                </label>
-                <div className="grid grid-cols-2 gap-3">
-                  {(['openai', 'gemini'] as const).map((p) => (
-                    <button
-                      key={p}
-                      onClick={() => setDefaultProvider(p)}
-                      className={`p-4 rounded-xl border-2 text-center transition-all ${
-                        defaultProvider === p
-                          ? 'border-blue-500 bg-blue-500/10'
-                          : 'border-white/10 hover:border-white/20'
-                      }`}
-                    >
-                      <p className="font-medium text-text-primary capitalize">{p}</p>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <Input
-                label="OpenAI API Key"
-                type={showKeys ? 'text' : 'password'}
-                value={openaiKey}
-                onChange={(e) => setOpenaiKey(e.target.value)}
-                placeholder="sk-..."
-              />
-
-              <Input
-                label="Google Gemini API Key"
-                type={showKeys ? 'text' : 'password'}
-                value={geminiKey}
-                onChange={(e) => setGeminiKey(e.target.value)}
-                placeholder="AIza..."
-              />
-
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={showKeys}
-                  onChange={(e) => setShowKeys(e.target.checked)}
-                  className="w-4 h-4 rounded text-blue-500 bg-dark-600 border-white/20"
-                />
-                <span className="text-sm text-text-secondary">Show API keys</span>
-              </label>
-            </div>
-
-            <div className="mt-6 pt-6 border-t border-white/5">
-              <Button onClick={saveSettings} leftIcon={<CheckIcon className="w-5 h-5" />}>
-                Save Settings
-              </Button>
-            </div>
+            <p className="text-xs text-text-muted">
+              All AI features are powered by Diamond Tokens. Contact your admin for API configuration.
+            </p>
           </Card>
 
           {/* Usage Stats */}

@@ -10,12 +10,10 @@ import {
   ArrowDownTrayIcon,
   PlusIcon,
   XMarkIcon,
-  CheckIcon,
   PlayIcon,
   FilmIcon,
   AdjustmentsHorizontalIcon,
   StarIcon,
-  KeyIcon,
   CheckCircleIcon,
   CloudArrowUpIcon,
   TrashIcon,
@@ -41,6 +39,7 @@ import type {
 } from '../types';
 import { authFetch } from '../services/api';
 import { PromptInfoButton } from '../components/ui/PromptInfoButton';
+import { DiamondCostIndicator } from '../components/diamond';
 
 // Style options
 const styles: { id: VideoStyle; label: string }[] = [
@@ -171,11 +170,6 @@ export function AIVideoPage() {
   const [videoRegenerating, setVideoRegenerating] = useState(false);
 
   // Settings state
-  const [geminiKey, setGeminiKey] = useState('');
-  const [hasApiKey, setHasApiKey] = useState(false);
-  const [maskedApiKey, setMaskedApiKey] = useState('');
-  const [showKey, setShowKey] = useState(false);
-  const [settingsSaved, setSettingsSaved] = useState(false);
   const [totalVideosGenerated, setTotalVideosGenerated] = useState(0);
   const [totalDurationGenerated, setTotalDurationGenerated] = useState(0);
 
@@ -268,12 +262,8 @@ export function AIVideoPage() {
       });
       if (response.ok) {
         const data = await response.json();
-        setHasApiKey(data.has_api_key || false);
-        setMaskedApiKey(data.masked_api_key || '');
         setTotalVideosGenerated(data.total_videos_generated || 0);
         setTotalDurationGenerated(data.total_duration_generated || 0);
-        // gemini_api_key is write-only, don't try to read it
-        setGeminiKey('');
       }
     } catch (error) {
       console.error('Failed to fetch settings:', error);
@@ -388,26 +378,6 @@ export function AIVideoPage() {
     }
   };
 
-  const saveSettings = async () => {
-    try {
-      const response = await authFetch('/api/v1/ai-video/settings/', {
-        method: 'PATCH',
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('access_token')}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ gemini_api_key: geminiKey }),
-      });
-      if (response.ok) {
-        setSettingsSaved(true);
-        setGeminiKey('');
-        fetchSettings();
-        setTimeout(() => setSettingsSaved(false), 3000);
-      }
-    } catch (error) {
-      console.error('Failed to save settings:', error);
-    }
-  };
 
   const downloadVideo = (url: string, filename: string) => {
     const link = document.createElement('a');
@@ -848,7 +818,7 @@ export function AIVideoPage() {
               leftIcon={<SparklesIcon className="w-5 h-5" />}
               className="bg-gradient-to-r from-red-500 to-orange-500 hover:from-red-600 hover:to-orange-600"
             >
-              Generate Video
+              Generate Video <DiamondCostIndicator cost={500} className="ml-2" />
             </Button>
           </div>
 
@@ -1142,59 +1112,20 @@ export function AIVideoPage() {
       {/* Settings Tab */}
       {activeTab === 'settings' && (
         <div className="max-w-2xl space-y-6">
-          {settingsSaved && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="p-4 bg-success/10 border border-success/20 rounded-xl flex items-center gap-3"
-            >
-              <CheckCircleIcon className="w-5 h-5 text-success" />
-              <p className="text-success">Settings saved successfully!</p>
-            </motion.div>
-          )}
-
+          {/* Info: API keys managed by admin */}
           <Card>
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center">
-                <KeyIcon className="w-5 h-5 text-amber-400" />
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-green-500/20 flex items-center justify-center">
+                <CheckCircleIcon className="w-5 h-5 text-green-400" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-text-primary">API Configuration</h3>
-                <p className="text-sm text-text-secondary">Configure your Google Gemini API key</p>
+                <h3 className="text-lg font-semibold text-text-primary">AI Service Active</h3>
+                <p className="text-sm text-text-secondary">API keys are managed by your administrator</p>
               </div>
             </div>
-
-            <div className="space-y-4">
-              {hasApiKey && maskedApiKey && (
-                <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-xl">
-                  <p className="text-green-400 text-sm">Current key: {maskedApiKey}</p>
-                </div>
-              )}
-
-              <Input
-                label="Google Gemini API Key"
-                type={showKey ? 'text' : 'password'}
-                value={geminiKey}
-                onChange={(e) => setGeminiKey(e.target.value)}
-                placeholder={hasApiKey ? 'Enter new key to update...' : 'AIza...'}
-              />
-
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={showKey}
-                  onChange={(e) => setShowKey(e.target.checked)}
-                  className="w-4 h-4 rounded text-red-500 bg-dark-600 border-white/20"
-                />
-                <span className="text-sm text-text-secondary">Show API key</span>
-              </label>
-            </div>
-
-            <div className="mt-6 pt-6 border-t border-white/5">
-              <Button onClick={saveSettings} leftIcon={<CheckIcon className="w-5 h-5" />}>
-                Save Settings
-              </Button>
-            </div>
+            <p className="text-xs text-text-muted">
+              All AI features are powered by Diamond Tokens. Contact your admin for API configuration.
+            </p>
           </Card>
 
           <Card>

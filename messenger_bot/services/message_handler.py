@@ -19,6 +19,7 @@ from ..models import MessengerConnection, Conversation, Message, Notification
 from .rag_engine import RAGEngine
 from .openai_client import OpenAIClient
 from accounts.services.llm_service import get_llm_service
+from accounts.services.diamond_service import pre_check, deduct_diamonds
 
 logger = logging.getLogger(__name__)
 
@@ -230,19 +231,41 @@ class MessageHandler:
                 logger.info("[MH] Human takeover active for this conversation - skipping AI reply")
                 return True
 
-            # Generate response
-            logger.info("[MH] Generating AI response...")
-            start_time = time.time()
-            
-            if image_analysis_result and image_analysis_result.get('response'):
-                response_data = image_analysis_result
+            # Diamond Token pre-check (charge the page owner)
+            can_afford, cost, balance = pre_check(self.connection.user, 'messenger_reply')
+            if not can_afford:
+                logger.warning(f"[MH] Insufficient diamonds for messenger reply (cost={cost}, balance={balance})")
+                response_data = {
+                    'response': "Thanks for your message! Our AI assistant is temporarily unavailable. A team member will get back to you shortly.",
+                    'model': None,
+                    'tokens': 0,
+                    'context_used': '',
+                }
+                response_text = response_data['response']
+                processing_time = 0.0
             else:
-                response_data = self._generate_response(processed_content or message_text, conversation)
-            
-            processing_time = time.time() - start_time
-            logger.info(f"[MH] Response generated in {processing_time:.2f}s")
-            
-            response_text = response_data['response']
+                # Generate response
+                logger.info("[MH] Generating AI response...")
+                start_time = time.time()
+
+                if image_analysis_result and image_analysis_result.get('response'):
+                    response_data = image_analysis_result
+                else:
+                    response_data = self._generate_response(processed_content or message_text, conversation)
+
+                processing_time = time.time() - start_time
+                logger.info(f"[MH] Response generated in {processing_time:.2f}s")
+
+                response_text = response_data['response']
+
+                # Deduct Diamond Tokens after successful AI generation
+                deduct_diamonds(
+                    user=self.connection.user,
+                    feature='messenger_reply',
+                    provider='openai',
+                    raw_tokens=response_data.get('tokens', 0),
+                    model_used=response_data.get('model', ''),
+                )
             
             # Check if voice reply is enabled
             voice_reply_enabled = getattr(self.connection.ai_config, 'voice_reply_enabled', False)

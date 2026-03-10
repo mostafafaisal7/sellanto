@@ -297,10 +297,17 @@ class AdminUserListView(APIView):
 
         users = safe_query(query, params)
 
+        # Build diamond balance lookup
+        from accounts.models import DiamondWallet
+        wallet_map = {}
+        for w in DiamondWallet.objects.values('user_id', 'balance'):
+            wallet_map[w['user_id']] = w['balance']
+
         for user in users:
             tokens = to_float(user.get('caption_tokens', 0))
             user['total_tokens'] = int(tokens)
             user['estimated_cost'] = estimate_cost(tokens)
+            user['diamond_balance'] = wallet_map.get(user['id'], 0)
             if user.get('date_joined'):
                 user['date_joined'] = str(user['date_joined'])
             if user.get('last_login'):
@@ -360,6 +367,15 @@ class AdminUserDetailView(APIView):
             if hasattr(val, 'isoformat'):
                 profile[key] = str(val)
 
+        # Diamond wallet info
+        from accounts.models import DiamondWallet
+        wallet, _ = DiamondWallet.objects.get_or_create(user=user)
+        diamond = {
+            'balance': wallet.balance,
+            'total_recharged': wallet.total_recharged,
+            'total_spent': wallet.total_spent,
+        }
+
         return Response({
             'user': {
                 'id': user.id,
@@ -375,6 +391,7 @@ class AdminUserDetailView(APIView):
             'profile': profile,
             'stats': stats,
             'tokens': tokens,
+            'diamond': diamond,
         })
 
 
@@ -417,6 +434,10 @@ class AdminUpdatePlanView(APIView):
                     "UPDATE user_profiles SET subscription_plan = %s, max_posts_per_month = %s, max_social_accounts = %s WHERE user_id = %s",
                     [plan, max_posts, max_accounts, user_id]
                 )
+            # Auto-grant diamond tokens for the new plan
+            from accounts.services.diamond_service import grant_plan_diamonds
+            target_user = User.objects.get(id=user_id)
+            grant_plan_diamonds(target_user, plan)
             return Response({'success': True})
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

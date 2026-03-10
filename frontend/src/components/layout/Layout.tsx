@@ -6,6 +6,7 @@ import { Navbar } from './Navbar';
 import { Sidebar } from './Sidebar';
 import { Footer } from './Footer';
 import { SupportChatbot } from './SupportChatbot';
+import { InsufficientDiamondsModal } from '../diamond';
 import { useAdminStore } from '../../store';
 
 function ImpersonationBanner() {
@@ -91,6 +92,7 @@ export function Layout() {
 
       <Footer />
       <SupportChatbot isOpen={chatOpen} onClose={() => setChatOpen(false)} />
+      <InsufficientDiamondsModal />
     </div>
   );
 }

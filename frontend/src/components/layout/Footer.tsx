@@ -62,7 +62,7 @@ export function Footer() {
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75" />
               <span className="relative inline-flex rounded-full h-2 w-2 bg-success" />
             </span>
-            <span className="text-xs text-text-muted">All systems operational &middot; v1.2.3</span>
+            <span className="text-xs text-text-muted">All systems operational &middot; v1.2.4</span>
           </div>
         </div>
       </div>

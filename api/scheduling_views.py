@@ -6,6 +6,7 @@ from django.utils import timezone
 from datetime import timedelta
 
 from accounts.permissions import IsPublisherOrAbove, IsViewerOrAbove
+from accounts.services.diamond_service import pre_check, deduct_diamonds
 
 from posts.models import Post, PostCaption, ScheduledPostPlatform
 from brands.models import Brand, BestTimeSuggestion
@@ -226,6 +227,16 @@ class ComputeRecommendedTimesView(APIView):
         except Brand.DoesNotExist:
             return Response({'error': 'Brand not found'}, status=status.HTTP_404_NOT_FOUND)
 
+        # Diamond Token pre-check
+        can_afford, cost, balance = pre_check(request.user, 'compute_times')
+        if not can_afford:
+            return Response({
+                'error': 'Insufficient Diamond Tokens',
+                'diamond_cost': cost,
+                'diamond_balance': balance,
+                'code': 'INSUFFICIENT_DIAMONDS',
+            }, status=402)
+
         from accounts.services.llm_service import get_llm_service
         service = get_llm_service(request.user)
 
@@ -321,6 +332,8 @@ Region: {brand.target_region}
                     {'error': llm_result.error or 'No AI API key configured. Go to Settings to add your OpenAI or Gemini key.'},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+
+            deduct_diamonds(user=request.user, feature='compute_times', provider='claude', raw_tokens=llm_result.tokens_used if hasattr(llm_result, 'tokens_used') else 0)
 
             result = json.loads(llm_result.content)
             recs = result.get('recommendations', [])

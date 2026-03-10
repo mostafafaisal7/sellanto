@@ -16,6 +16,7 @@ import {
   Cog6ToothIcon,
 } from '@heroicons/react/24/outline';
 import { useAdminStore } from '../../store';
+import { DiamondRechargeForm } from '../../components/admin/DiamondRechargeForm';
 
 type TabType = 'overview' | 'posts' | 'accounts' | 'captions' | 'images' | 'videos' | 'messenger' | 'api';
 
@@ -288,6 +289,13 @@ export function AdminUserDetailPage() {
                 {savingPlan ? 'Saving...' : 'Update Plan'}
               </button>
             </div>
+
+            {/* Diamond Recharge */}
+            <DiamondRechargeForm
+              userId={userId}
+              username={userDetail?.user?.username || 'User'}
+              onRecharged={() => fetchUserDetail(userId)}
+            />
 
             {/* Token Usage */}
             <div>

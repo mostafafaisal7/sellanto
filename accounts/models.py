@@ -274,6 +274,104 @@ class APIUsageLog(models.Model):
         )
 
 
+# ============================================================
+# DIAMOND TOKEN SYSTEM
+# ============================================================
+
+class DiamondWallet(models.Model):
+    """Diamond Token wallet — one per user, stores current credit balance."""
+
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='diamond_wallet')
+    balance = models.IntegerField(default=0, help_text='Current Diamond Token balance')
+    total_recharged = models.IntegerField(default=0, help_text='Lifetime diamonds received')
+    total_spent = models.IntegerField(default=0, help_text='Lifetime diamonds consumed')
+    last_recharge_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'diamond_wallets'
+        verbose_name = 'Diamond Wallet'
+        verbose_name_plural = 'Diamond Wallets'
+
+    def __str__(self):
+        return f"{self.user.username} — {self.balance} diamonds"
+
+
+class DiamondTransaction(models.Model):
+    """Immutable ledger entry for every diamond movement."""
+
+    TRANSACTION_TYPES = [
+        ('recharge', 'Recharge'),
+        ('deduction', 'Deduction'),
+        ('refund', 'Refund'),
+        ('plan_grant', 'Plan Grant'),
+    ]
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='diamond_transactions')
+    amount = models.IntegerField(help_text='Positive for recharge, negative for deduction')
+    transaction_type = models.CharField(max_length=20, choices=TRANSACTION_TYPES)
+    balance_after = models.IntegerField(help_text='Wallet balance after this transaction')
+
+    # AI operation metadata
+    feature = models.CharField(max_length=50, blank=True, default='',
+                               help_text='e.g. caption, image, video, voice, messenger')
+    provider = models.CharField(max_length=20, blank=True, default='',
+                                help_text='e.g. claude, openai, gemini')
+    raw_tokens = models.IntegerField(default=0, help_text='Actual API tokens used')
+    model_used = models.CharField(max_length=100, blank=True, default='')
+    raw_cost_usd = models.DecimalField(max_digits=10, decimal_places=6, default=0)
+
+    # Admin recharge metadata
+    recharged_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='diamond_recharges_given'
+    )
+    note = models.TextField(blank=True, default='')
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'diamond_transactions'
+        verbose_name = 'Diamond Transaction'
+        verbose_name_plural = 'Diamond Transactions'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', 'created_at']),
+            models.Index(fields=['user', 'feature']),
+            models.Index(fields=['user', 'provider']),
+        ]
+
+    def __str__(self):
+        sign = '+' if self.amount > 0 else ''
+        return f"{self.user.username} {sign}{self.amount} ({self.transaction_type})"
+
+
+class GlobalAPIKey(models.Model):
+    """Admin-managed global API keys shared by all users."""
+
+    PROVIDER_CHOICES = [
+        ('openai', 'OpenAI'),
+        ('gemini', 'Google Gemini'),
+        ('claude', 'Anthropic Claude'),
+    ]
+
+    provider = models.CharField(max_length=20, choices=PROVIDER_CHOICES, unique=True)
+    api_key = models.TextField(help_text='API key (stored securely)')
+    is_active = models.BooleanField(default=True)
+    set_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'global_api_keys'
+        verbose_name = 'Global API Key'
+        verbose_name_plural = 'Global API Keys'
+
+    def __str__(self):
+        return f"{self.provider} — {'Active' if self.is_active else 'Inactive'}"
+
+
 class SupportDocument(models.Model):
     """PDF knowledge base documents for the AI support chatbot"""
 
@@ -453,6 +551,12 @@ class UserRole(models.Model):
 def create_user_profile(sender, instance, created, **kwargs):
     if created:
         UserProfile.objects.create(user=instance)
+        # Create Diamond Wallet with initial free-plan grant
+        wallet = DiamondWallet.objects.create(user=instance, balance=50, total_recharged=50)
+        DiamondTransaction.objects.create(
+            user=instance, amount=50, transaction_type='plan_grant',
+            balance_after=50, note='Initial free plan grant',
+        )
         # Create OnboardingProgress for new users
         from onboarding.models import OnboardingProgress
         OnboardingProgress.objects.get_or_create(user=instance)

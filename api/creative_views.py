@@ -12,6 +12,7 @@ from django.utils import timezone
 from accounts.permissions import IsCreatorOrAbove, IsViewerOrAbove
 from accounts.services.notification_service import notify_images_ready
 from accounts.services.llm_service import get_llm_service
+from accounts.services.diamond_service import pre_check, deduct_diamonds
 
 from ai_image.models import ImageGeneration, AssetPlatformVariant, CreativeVersionHistory
 from posts.models import Post, PostCaption, PostHashtag
@@ -34,7 +35,19 @@ class GenerateAltTextView(APIView):
         except ImageGeneration.DoesNotExist:
             return Response({'error': 'Asset not found'}, status=status.HTTP_404_NOT_FOUND)
 
+        # Diamond Token pre-check
+        can_afford, cost, balance = pre_check(request.user, 'alt_text')
+        if not can_afford:
+            return Response({
+                'error': 'Insufficient Diamond Tokens',
+                'diamond_cost': cost,
+                'diamond_balance': balance,
+                'code': 'INSUFFICIENT_DIAMONDS',
+            }, status=402)
+
         alt_text = generate_alt_text(asset, user=request.user)
+
+        deduct_diamonds(user=request.user, feature='alt_text', provider='claude', raw_tokens=0)
 
         return Response({
             'asset_id': asset.id,
@@ -655,6 +668,16 @@ class PromptEngineerGenerateView(APIView):
         if not brand.brand_dna:
             return Response({'error': 'Brand DNA not generated yet. Generate Brand DNA first.'}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Diamond Token pre-check
+        can_afford, cost, balance = pre_check(request.user, 'prompt_engineer_generate')
+        if not can_afford:
+            return Response({
+                'error': 'Insufficient Diamond Tokens',
+                'diamond_cost': cost,
+                'diamond_balance': balance,
+                'code': 'INSUFFICIENT_DIAMONDS',
+            }, status=402)
+
         think_harder = request.data.get('think_harder', False)
         pe_service = ImagePromptEngineerService()
         result = pe_service.generate_image_prompt(
@@ -673,6 +696,7 @@ class PromptEngineerGenerateView(APIView):
         )
 
         if result:
+            deduct_diamonds(user=request.user, feature='prompt_engineer_generate', provider='claude', raw_tokens=0)
             return Response(result)
         return Response({'error': 'Failed to generate prompt'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -689,6 +713,16 @@ class PromptEngineerDiagnoseView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
+        # Diamond Token pre-check
+        can_afford, cost, balance = pre_check(request.user, 'prompt_engineer_diagnose')
+        if not can_afford:
+            return Response({
+                'error': 'Insufficient Diamond Tokens',
+                'diamond_cost': cost,
+                'diamond_balance': balance,
+                'code': 'INSUFFICIENT_DIAMONDS',
+            }, status=402)
+
         think_harder = request.data.get('think_harder', False)
         pe_service = ImagePromptEngineerService()
         result = pe_service.diagnose_failure(
@@ -700,6 +734,7 @@ class PromptEngineerDiagnoseView(APIView):
         )
 
         if result:
+            deduct_diamonds(user=request.user, feature='prompt_engineer_diagnose', provider='claude', raw_tokens=0)
             return Response(result)
         return Response({'error': 'Failed to diagnose'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -722,6 +757,16 @@ class PromptEngineerRepromptView(APIView):
         except Brand.DoesNotExist:
             return Response({'error': 'Brand not found'}, status=status.HTTP_404_NOT_FOUND)
 
+        # Diamond Token pre-check
+        can_afford, cost, balance = pre_check(request.user, 'prompt_engineer_reprompt')
+        if not can_afford:
+            return Response({
+                'error': 'Insufficient Diamond Tokens',
+                'diamond_cost': cost,
+                'diamond_balance': balance,
+                'code': 'INSUFFICIENT_DIAMONDS',
+            }, status=402)
+
         think_harder = request.data.get('think_harder', False)
         pe_service = ImagePromptEngineerService()
         result = pe_service.reprompt_image(
@@ -734,6 +779,7 @@ class PromptEngineerRepromptView(APIView):
         )
 
         if result:
+            deduct_diamonds(user=request.user, feature='prompt_engineer_reprompt', provider='claude', raw_tokens=0)
             return Response(result)
         return Response({'error': 'Failed to generate corrected prompt'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -769,6 +815,16 @@ class GenerateCopyOverlayTextView(APIView):
             except Brand.DoesNotExist:
                 pass
 
+        # Diamond Token pre-check
+        can_afford, cost, balance = pre_check(request.user, 'copy_overlay_text')
+        if not can_afford:
+            return Response({
+                'error': 'Insufficient Diamond Tokens',
+                'diamond_cost': cost,
+                'diamond_balance': balance,
+                'code': 'INSUFFICIENT_DIAMONDS',
+            }, status=402)
+
         suggestions = generate_copy_suggestions(
             user=request.user,
             caption_text=data.get('caption_text', ''),
@@ -777,6 +833,8 @@ class GenerateCopyOverlayTextView(APIView):
             cta_text=data.get('cta_text', ''),
             count=data.get('count', 5),
         )
+
+        deduct_diamonds(user=request.user, feature='copy_overlay_text', provider='claude', raw_tokens=0)
 
         return Response({'suggestions': suggestions})
 
@@ -915,6 +973,16 @@ class GenerateAIStylesView(APIView):
         if not image_data:
             return Response({'error': 'No source image available'}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Diamond Token pre-check
+        can_afford, cost, balance = pre_check(request.user, 'ai_styles')
+        if not can_afford:
+            return Response({
+                'error': 'Insufficient Diamond Tokens',
+                'diamond_cost': cost,
+                'diamond_balance': balance,
+                'code': 'INSUFFICIENT_DIAMONDS',
+            }, status=402)
+
         # Step 2: AI generates 4 different style configs
         styles = generate_ai_styles(
             user=request.user,
@@ -922,6 +990,8 @@ class GenerateAIStylesView(APIView):
             brand_context=brand_context,
             count=4,
         )
+
+        deduct_diamonds(user=request.user, feature='ai_styles', provider='claude', raw_tokens=0)
 
         # Step 3: Render each style variant with Pillow
         variants = []

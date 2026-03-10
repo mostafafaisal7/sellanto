@@ -12,6 +12,7 @@ import strategyService from '../services/strategyService';
 import api from '../services/api';
 import type { TrendingTopic, BrandDNAHistoryEntry } from '../types';
 import { PromptInfoButton } from '../components/ui/PromptInfoButton';
+import { DiamondCostIndicator } from '../components/diamond';
 import { usePromptHistory } from '../hooks/usePromptHistory';
 
 interface Pillar {
@@ -1157,6 +1158,7 @@ export function StrategyHubPage() {
                   <SparklesIcon className="w-4 h-4" />
                 )}
                 {dnaLoading ? 'Generating...' : dnaData ? 'Reanalyze' : 'Generate DNA'}
+                {!dnaLoading && <DiamondCostIndicator cost={15} className="ml-1" />}
               </button>
               {dnaData && !dnaEditMode && (
                 <button

@@ -10,6 +10,7 @@ export { default as voiceService } from './voiceService';
 export { default as messengerService } from './messengerService';
 export { default as analyticsService } from './analyticsService';
 export { default as onboardingService } from './onboardingService';
+export { default as diamondService } from './diamondService';
 
 // Re-export types for convenience
 export type { ConnectAccountData } from './platformService';

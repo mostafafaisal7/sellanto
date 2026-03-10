@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
@@ -15,12 +15,20 @@ import {
   ClockIcon,
 } from '@heroicons/react/24/outline';
 import { useAdminStore } from '../../store';
+import { diamondService } from '../../services/diamondService';
 
 export function AdminDashboardPage() {
   const { dashboardStats, dashboardLoading, fetchDashboard, approveUser, rejectUser } = useAdminStore();
+  const [diamondOverview, setDiamondOverview] = useState<{
+    total_balance_in_circulation: number;
+    total_diamonds_recharged: number;
+    total_diamonds_spent: number;
+    total_wallets: number;
+  } | null>(null);
 
   useEffect(() => {
     fetchDashboard();
+    diamondService.getDiamondOverview().then(setDiamondOverview).catch(() => {});
   }, [fetchDashboard]);
 
   const handleApprove = async (userId: number) => {
@@ -84,6 +92,26 @@ export function AdminDashboardPage() {
           </motion.div>
         ))}
       </div>
+
+      {/* Diamond Token Stats */}
+      {diamondOverview && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[
+            { label: 'Diamonds in Circulation', value: diamondOverview.total_balance_in_circulation, color: 'text-cyan-400' },
+            { label: 'Total Recharged', value: diamondOverview.total_diamonds_recharged, color: 'text-green-400' },
+            { label: 'Total Spent', value: diamondOverview.total_diamonds_spent, color: 'text-amber-400' },
+            { label: 'Active Wallets', value: diamondOverview.total_wallets, color: 'text-blue-400' },
+          ].map((d) => (
+            <div key={d.label} className="p-4 rounded-xl border border-white/5 bg-white/[0.02]">
+              <div className="flex items-center gap-2 mb-2">
+                <span className={`text-lg ${d.color}`}>◆</span>
+              </div>
+              <p className={`text-2xl font-bold ${d.color}`}>{d.value.toLocaleString()}</p>
+              <p className="text-xs text-slate-400 mt-0.5">{d.label}</p>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Pending Approvals */}

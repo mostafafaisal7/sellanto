@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   Cog6ToothIcon,
@@ -15,10 +16,6 @@ import {
   CheckCircleIcon,
   ExclamationTriangleIcon,
   TrashIcon,
-  KeyIcon,
-  EyeIcon,
-  EyeSlashIcon,
-  InformationCircleIcon,
 } from '@heroicons/react/24/outline';
 import { useTheme, type ThemeMode } from '../contexts/ThemeContext';
 import { Button, Card, Input, Modal } from '../components/ui';
@@ -56,87 +53,26 @@ const themeOptions: { value: ThemeMode; label: string; icon: typeof MoonIcon }[]
 ];
 
 export function SettingsPage() {
-  const { logout, user } = useAuthStore();
+  const { logout } = useAuthStore();
   const { theme, setTheme } = useTheme();
   const [saved, setSaved] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
-  const [showOpenAIKey, setShowOpenAIKey] = useState(false);
-  const [showGeminiKey, setShowGeminiKey] = useState(false);
-  const [apiKeysSaved, setApiKeysSaved] = useState(false);
-  const [apiKeysSaving, setApiKeysSaving] = useState(false);
-  const [apiKeysError, setApiKeysError] = useState('');
+  // Diamond wallet state
+  const [diamondBalance, setDiamondBalance] = useState<number | null>(null);
 
-  // API key status from server
-  const [keyStatus, setKeyStatus] = useState({
-    has_openai_key: false,
-    masked_openai_key: '',
-    has_gemini_key: false,
-    masked_gemini_key: '',
-    claude_active: false,
-  });
-
-  // API Keys state (OpenAI/Gemini only — for image/video/voice generation)
-  const [apiSettings, setApiSettings] = useState({
-    api_mode: (user?.profile?.api_mode as 'admin' | 'user') || 'user',
-    openai_api_key: '',
-    gemini_api_key: '',
-    default_model: 'gpt-4o',
-    default_gemini_model: 'gemini-2.0-flash',
-  });
-
-  // Load API key status on mount
+  // Load diamond balance on mount
   useEffect(() => {
-    const loadKeyStatus = async () => {
+    const loadDiamondBalance = async () => {
       try {
-        const response = await api.get('/profile/api-keys/');
-        setKeyStatus(response.data);
-        // If keys exist, default to 'user' mode
-        if (response.data.has_openai_key || response.data.has_gemini_key) {
-          setApiSettings(prev => ({ ...prev, api_mode: 'user' }));
-        }
-        // Load image/video model preferences from server
-        if (response.data.default_gemini_model) {
-          setApiSettings(prev => ({ ...prev, default_gemini_model: response.data.default_gemini_model }));
-        }
-        if (response.data.default_model) {
-          setApiSettings(prev => ({ ...prev, default_model: response.data.default_model }));
-        }
+        const response = await api.get('/diamond/balance/');
+        setDiamondBalance(response.data.balance);
       } catch (err) {
-        console.error('Failed to load API key status:', err);
+        console.error('Failed to load diamond balance:', err);
       }
     };
-    loadKeyStatus();
+    loadDiamondBalance();
   }, []);
-
-  // Save API keys handler (OpenAI/Gemini for image/video/voice only)
-  const handleSaveApiKeys = async () => {
-    if (!apiSettings.openai_api_key && !apiSettings.gemini_api_key && !keyStatus.has_openai_key && !keyStatus.has_gemini_key) {
-      setApiKeysError('Please enter at least one API key for image/video generation');
-      return;
-    }
-
-    setApiKeysSaving(true);
-    setApiKeysError('');
-
-    try {
-      const payload: Record<string, string> = {};
-      if (apiSettings.openai_api_key) payload.openai_api_key = apiSettings.openai_api_key;
-      if (apiSettings.gemini_api_key) payload.gemini_api_key = apiSettings.gemini_api_key;
-      payload.default_gemini_model = apiSettings.default_gemini_model;
-      payload.default_model = apiSettings.default_model;
-
-      const response = await api.patch('/profile/api-keys/', payload);
-      setKeyStatus(response.data);
-      setApiSettings(prev => ({ ...prev, openai_api_key: '', gemini_api_key: '' }));
-      setApiKeysSaved(true);
-      setTimeout(() => setApiKeysSaved(false), 3000);
-    } catch (err: any) {
-      setApiKeysError(err.response?.data?.detail || 'Failed to save API keys');
-    } finally {
-      setApiKeysSaving(false);
-    }
-  };
 
   // Settings state
   const [settings, setSettings] = useState({
@@ -451,177 +387,51 @@ export function SettingsPage() {
           </div>
         </Card>
 
-        {/* API Keys Management */}
-        {user?.profile?.api_mode === 'admin' ? (
-          /* Admin-managed API keys - user cannot change */
-          <Card>
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-green-500/20 to-emerald-500/20 flex items-center justify-center">
-                <KeyIcon className="w-5 h-5 text-green-400" />
+        {/* Diamond Token Status */}
+        <Card>
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 to-blue-500/20 flex items-center justify-center">
+              <span className="text-lg">◆</span>
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-text-primary">AI Services</h3>
+              <p className="text-sm text-text-secondary">Powered by Diamond Tokens</p>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            {/* Balance Display */}
+            <div className="p-5 bg-gradient-to-br from-cyan-500/10 to-blue-500/10 border border-cyan-500/20 rounded-xl">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-text-secondary">Your Diamond Balance</span>
+                <Link to="/dashboard" className="text-xs text-cyan-400 hover:text-cyan-300">
+                  View usage →
+                </Link>
               </div>
-              <div>
-                <h3 className="text-lg font-semibold text-text-primary">API Keys</h3>
-                <p className="text-sm text-text-secondary">Managed by your administrator</p>
+              <div className="flex items-center gap-2">
+                <span className="text-cyan-400 text-2xl">◆</span>
+                <span className="text-3xl font-bold text-text-primary">
+                  {diamondBalance !== null ? diamondBalance.toLocaleString() : '...'}
+                </span>
               </div>
             </div>
-            <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-xl">
-              <div className="flex items-center gap-2 mb-2">
+
+            {/* Info */}
+            <div className="p-4 bg-dark-700/50 rounded-xl space-y-3">
+              <div className="flex items-center gap-2">
                 <ShieldCheckIcon className="w-5 h-5 text-green-400" />
-                <p className="text-sm text-green-400 font-medium">API Keys Managed by Admin</p>
+                <p className="text-sm text-green-400 font-medium">All AI Features Active</p>
               </div>
               <p className="text-xs text-text-secondary">
-                Your API keys are configured and managed by the platform administrator.
-                All AI features (Caption, Voice, Image, Video, Messenger) are ready to use.
-                Your usage is subject to your subscription plan limits.
+                All AI features — captions, images, videos, voice, strategy, and more — are powered by Diamond Tokens.
+                Each generation costs a specific number of diamonds shown next to every action button.
+              </p>
+              <p className="text-xs text-text-muted">
+                When your balance runs low, contact your administrator for a recharge.
               </p>
             </div>
-          </Card>
-        ) : (
-          /* User-managed API keys */
-          <Card>
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-green-500/20 to-emerald-500/20 flex items-center justify-center">
-                <KeyIcon className="w-5 h-5 text-green-400" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold text-text-primary">API Keys</h3>
-                <p className="text-sm text-text-secondary">Manage your AI service API keys</p>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              {/* OpenAI API Key */}
-              <div>
-                <label className="flex items-center gap-2 text-sm font-medium text-text-secondary mb-2">
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M22.282 9.821a5.985 5.985 0 0 0-.516-4.91 6.046 6.046 0 0 0-6.51-2.9A6.065 6.065 0 0 0 4.981 4.18a5.985 5.985 0 0 0-3.998 2.9 6.046 6.046 0 0 0 .743 7.097 5.98 5.98 0 0 0 .51 4.911 6.051 6.051 0 0 0 6.515 2.9A5.985 5.985 0 0 0 13.26 24a6.056 6.056 0 0 0 5.772-4.206 5.99 5.99 0 0 0 3.997-2.9 6.056 6.056 0 0 0-.747-7.073zM13.26 22.43a4.476 4.476 0 0 1-2.876-1.04l.141-.081 4.779-2.758a.795.795 0 0 0 .392-.681v-6.737l2.02 1.168a.071.071 0 0 1 .038.052v5.583a4.504 4.504 0 0 1-4.494 4.494z"/>
-                  </svg>
-                  OpenAI API Key
-                  {keyStatus.has_openai_key && (
-                    <span className="ml-auto flex items-center gap-1 text-xs text-green-400">
-                      <CheckCircleIcon className="w-3.5 h-3.5" />
-                      Configured
-                    </span>
-                  )}
-                </label>
-                <div className="relative">
-                  <input
-                    type={showOpenAIKey ? 'text' : 'password'}
-                    value={apiSettings.openai_api_key}
-                    onChange={(e) => setApiSettings({ ...apiSettings, openai_api_key: e.target.value })}
-                    placeholder={keyStatus.masked_openai_key || 'sk-...'}
-                    className="w-full px-4 py-3 pr-12 bg-dark-700 border border-white/10 rounded-xl text-text-primary focus:outline-none focus:border-primary"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowOpenAIKey(!showOpenAIKey)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary"
-                  >
-                    {showOpenAIKey ? (
-                      <EyeSlashIcon className="w-5 h-5" />
-                    ) : (
-                      <EyeIcon className="w-5 h-5" />
-                    )}
-                  </button>
-                </div>
-                <p className="mt-2 text-xs text-text-muted">
-                  Used for AI Image (DALL-E) and AI Voice generation
-                </p>
-              </div>
-
-              {/* Claude AI Status Banner */}
-              {keyStatus.claude_active && (
-                <div className="p-4 bg-purple-500/10 border border-purple-500/20 rounded-xl">
-                  <div className="flex items-center gap-2 mb-1">
-                    <div className="w-2 h-2 rounded-full bg-purple-400 animate-pulse" />
-                    <p className="text-sm text-purple-400 font-medium">Claude AI Active</p>
-                  </div>
-                  <p className="text-xs text-text-secondary">
-                    Claude AI powers all text features automatically — captions, strategy, content ideas, competitor analysis, trending topics, and more. No setup needed.
-                  </p>
-                </div>
-              )}
-
-              {/* Gemini API Key */}
-              <div>
-                <label className="flex items-center gap-2 text-sm font-medium text-text-secondary mb-2">
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 2L2 19.5h20L12 2zm0 4l6.9 12H5.1L12 6z"/>
-                  </svg>
-                  Google Gemini API Key
-                  {keyStatus.has_gemini_key && (
-                    <span className="ml-auto flex items-center gap-1 text-xs text-green-400">
-                      <CheckCircleIcon className="w-3.5 h-3.5" />
-                      Configured
-                    </span>
-                  )}
-                </label>
-                <div className="relative">
-                  <input
-                    type={showGeminiKey ? 'text' : 'password'}
-                    value={apiSettings.gemini_api_key}
-                    onChange={(e) => setApiSettings({ ...apiSettings, gemini_api_key: e.target.value })}
-                    placeholder={keyStatus.masked_gemini_key || 'AIza...'}
-                    className="w-full px-4 py-3 pr-12 bg-dark-700 border border-white/10 rounded-xl text-text-primary focus:outline-none focus:border-primary"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowGeminiKey(!showGeminiKey)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary"
-                  >
-                    {showGeminiKey ? (
-                      <EyeSlashIcon className="w-5 h-5" />
-                    ) : (
-                      <EyeIcon className="w-5 h-5" />
-                    )}
-                  </button>
-                </div>
-                <p className="mt-2 text-xs text-text-muted">
-                  Used for AI Image (Gemini/Imagen) and AI Video generation
-                </p>
-              </div>
-
-              {/* Error Message */}
-              {apiKeysError && (
-                <div className="p-3 bg-danger/10 border border-danger/20 rounded-xl">
-                  <p className="text-sm text-danger">{apiKeysError}</p>
-                </div>
-              )}
-
-              {/* Save API Keys Button */}
-              <div className="pt-2">
-                <Button
-                  onClick={handleSaveApiKeys}
-                  disabled={apiKeysSaved || apiKeysSaving}
-                >
-                  {apiKeysSaved ? (
-                    <>
-                      <CheckCircleIcon className="w-5 h-5 mr-2" />
-                      Keys Saved - Synced to All Features
-                    </>
-                  ) : apiKeysSaving ? (
-                    'Saving...'
-                  ) : (
-                    'Save API Keys'
-                  )}
-                </Button>
-              </div>
-
-              {/* Info Box */}
-              <div className="flex items-start gap-3 p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl">
-                <InformationCircleIcon className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-sm text-blue-400 font-medium">Enter once, works everywhere</p>
-                  <p className="text-xs text-text-secondary mt-1">
-                    Claude AI handles all text features (captions, strategy, analysis) automatically.
-                    Your OpenAI key is used for DALL-E image generation and voice.
-                    Your Gemini key is used for Imagen image and video generation.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </Card>
-        )}
+          </div>
+        </Card>
 
         {/* Privacy & Security */}
         <Card>

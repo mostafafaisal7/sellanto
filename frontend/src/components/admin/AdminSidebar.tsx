@@ -8,6 +8,7 @@ import {
   XMarkIcon,
   ArrowTopRightOnSquareIcon,
   UserGroupIcon,
+  KeyIcon,
 } from '@heroicons/react/24/outline';
 
 interface AdminSidebarProps {
@@ -27,6 +28,7 @@ const mainNavItems: NavItem[] = [
   { name: 'Dashboard', href: '/admin-panel', icon: HomeIcon },
   { name: 'Users', href: '/admin-panel/users', icon: UsersIcon },
   { name: 'Analytics', href: '/admin-panel/analytics', icon: ChartBarIcon },
+  { name: 'Global API Keys', href: '/admin-panel/api-keys', icon: KeyIcon },
 ];
 
 const toolNavItems: NavItem[] = [

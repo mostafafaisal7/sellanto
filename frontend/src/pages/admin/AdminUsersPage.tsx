@@ -155,6 +155,7 @@ export function AdminUsersPage() {
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase">Posts</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase">Tokens</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase">Cost</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase">◆ Diamonds</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-400 uppercase">API Mode</th>
                 <th className="px-4 py-3 text-right text-xs font-semibold text-slate-400 uppercase">Actions</th>
               </tr>
@@ -208,6 +209,11 @@ export function AdminUsersPage() {
                   <td className="px-4 py-3 text-sm text-slate-300">{user.post_count}</td>
                   <td className="px-4 py-3 text-sm text-slate-300">{user.total_tokens.toLocaleString()}</td>
                   <td className="px-4 py-3 text-sm text-slate-300">${user.estimated_cost}</td>
+                  <td className="px-4 py-3">
+                    <span className="text-sm text-cyan-400 font-medium">
+                      ◆ {((user as any).diamond_balance ?? '—').toLocaleString?.() ?? (user as any).diamond_balance ?? '—'}
+                    </span>
+                  </td>
                   <td className="px-4 py-3">
                     <span className={`inline-block px-2 py-0.5 text-[10px] font-medium rounded-full ${
                       user.api_mode === 'admin' ? 'bg-blue-500/10 text-blue-400' : 'bg-slate-500/10 text-slate-400'
