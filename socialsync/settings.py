@@ -10,7 +10,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # API Key Configuration (fallbacks - users should set keys via Settings page)
 OPENAI_API_KEY = config('OPENAI_API_KEY', default='')
 GEMINI_API_KEY = config('GEMINI_API_KEY', default='')
-ANTHROPIC_API_KEY = config('ANTHROPIC_API_KEY', default='')
+ANTHROPIC_API_KEY = config('test', default='')
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = config('DJANGO_SECRET_KEY', default='django-insecure-rf#m85xc6pefl#85gx(-g)%w)2_*_eg5*26ovyanr!7n%8vhm=')
