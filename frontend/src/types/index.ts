@@ -1505,3 +1505,54 @@ export interface IdeaHistoryItem {
   brand_name: string;
   created_at: string;
 }
+
+
+// ============================================
+// DIAMOND TOKEN TYPES
+// ============================================
+
+export interface DiamondWallet {
+  balance: number;
+  total_recharged: number;
+  total_spent: number;
+  last_recharge_at: string | null;
+}
+
+export interface DiamondTransaction {
+  id: number;
+  amount: number;
+  transaction_type: 'recharge' | 'deduction' | 'refund' | 'plan_grant';
+  balance_after: number;
+  feature: string;
+  provider: string;
+  raw_tokens: number;
+  model_used: string;
+  note: string;
+  created_at: string;
+}
+
+export interface DiamondUsageBreakdown {
+  balance: number;
+  by_feature: { feature: string; diamonds_spent: number; count: number }[];
+  by_provider: { provider: string; diamonds_spent: number; raw_tokens: number }[];
+  total_spent_today: number;
+  total_spent_this_month: number;
+}
+
+export interface DiamondCostPreview {
+  feature: string;
+  diamond_cost: number;
+  balance: number;
+  can_afford: boolean;
+}
+
+export interface DiamondCosts {
+  costs: Record<string, number>;
+  plan_grants: Record<string, number>;
+}
+
+export interface GlobalAPIKeysStatus {
+  openai: { is_set: boolean; is_active: boolean; masked_key: string; updated_at: string | null };
+  gemini: { is_set: boolean; is_active: boolean; masked_key: string; updated_at: string | null };
+  claude: { is_set: boolean; is_active: boolean; masked_key: string; updated_at: string | null };
+}

@@ -12,6 +12,7 @@ from . import analytics_views as v2_analytics_views
 from . import notification_views
 from . import creative_views
 from . import rbac_views
+from . import diamond_views
 
 # Create router for viewsets
 router = DefaultRouter()
@@ -303,6 +304,18 @@ urlpatterns = [
     path('admin/conversations/<int:conv_id>/messages/', admin_views.AdminConversationMessagesView.as_view(), name='api-admin-conv-messages'),
     path('admin/analytics/', admin_views.AdminAnalyticsView.as_view(), name='api-admin-analytics'),
     path('admin/bulk-approve/', admin_views.AdminBulkApproveView.as_view(), name='api-admin-bulk-approve'),
+
+    # Diamond Token endpoints
+    path('diamond/balance/', diamond_views.DiamondBalanceView.as_view(), name='api-diamond-balance'),
+    path('diamond/usage/', diamond_views.DiamondUsageView.as_view(), name='api-diamond-usage'),
+    path('diamond/transactions/', diamond_views.DiamondTransactionsView.as_view(), name='api-diamond-transactions'),
+    path('diamond/cost-preview/', diamond_views.DiamondCostPreviewView.as_view(), name='api-diamond-cost-preview'),
+    path('diamond/costs/', diamond_views.DiamondCostTableView.as_view(), name='api-diamond-costs'),
+
+    # Diamond Admin endpoints
+    path('admin/users/<int:user_id>/recharge/', diamond_views.AdminRechargeView.as_view(), name='api-admin-recharge'),
+    path('admin/global-api-keys/', diamond_views.AdminGlobalAPIKeysView.as_view(), name='api-admin-global-keys'),
+    path('admin/diamond-overview/', diamond_views.AdminDiamondOverviewView.as_view(), name='api-admin-diamond-overview'),
 
     # ViewSet routes
     path('', include(router.urls)),

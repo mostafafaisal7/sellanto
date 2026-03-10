@@ -7,6 +7,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { WelcomeSection, StatsCard, QuickActions, SubscriptionInfo } from '../components/dashboard';
 import { LoadingPlaceholder } from '../components/ui';
+import { DiamondBalanceWidget, DiamondUsageChart } from '../components/diamond';
 import { useAuthStore, useDashboardStore } from '../store';
 
 export function DashboardPage() {
@@ -76,14 +77,21 @@ export function DashboardPage() {
       {/* Quick Actions */}
       <QuickActions />
 
+      {/* Diamond Balance + Usage */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+        <DiamondBalanceWidget />
+        <div className="lg:col-span-2">
+          <DiamondUsageChart />
+        </div>
+      </div>
+
       {/* Subscription Info */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
-          {/* Recent Activity or other content can go here */}
+          {/* Recent Activity */}
           <div className="card p-6">
             <h2 className="text-lg font-semibold text-text-primary mb-4">Recent Activity</h2>
             <div className="space-y-4">
-              {/* Placeholder for recent posts */}
               <div className="flex items-center gap-4 p-4 bg-dark-700/50 rounded-xl">
                 <div className="w-10 h-10 rounded-lg bg-success/20 flex items-center justify-center">
                   <DocumentTextIcon className="w-5 h-5 text-success" />

@@ -109,7 +109,21 @@ from .serializers import (
     BrandDNAStatusSerializer,
 )
 
-from accounts.api_keys import sync_openai_key, sync_gemini_key, get_openai_key, get_gemini_key, get_claude_key, mask_key
+from accounts.api_keys import get_openai_key, get_gemini_key, get_claude_key, mask_key
+from accounts.services.diamond_service import pre_check, deduct_diamonds
+
+
+def diamond_gate(user, feature, **kwargs):
+    """Check diamond balance before AI call. Returns error Response or None."""
+    can_afford, cost, balance = pre_check(user, feature, **kwargs)
+    if not can_afford:
+        return Response({
+            'error': 'Insufficient Diamond Tokens',
+            'diamond_cost': cost,
+            'diamond_balance': balance,
+            'code': 'INSUFFICIENT_DIAMONDS',
+        }, status=402)
+    return None
 
 
 # ===================== AUTH VIEWS =====================
@@ -577,6 +591,11 @@ def generate_caption(request):
         from ai_caption.openai_service import CaptionGeneratorService
         from ai_caption.models import CaptionGeneration as CaptionGen, UserAPISettings as CaptionAPISettings
 
+        # Diamond Token check
+        gate = diamond_gate(request.user, 'caption')
+        if gate:
+            return gate
+
         # Check if AI service is available (Claude key from env)
         claude_key = get_claude_key()
         if not claude_key:
@@ -691,6 +710,14 @@ def generate_caption(request):
             api_settings.total_tokens_used += result.get('tokens_used', 0)
             api_settings.total_generations += 1
             api_settings.save()
+
+            # Deduct Diamond Tokens
+            deduct_diamonds(
+                user=request.user, feature='caption',
+                provider=result.get('provider', 'claude'),
+                raw_tokens=result.get('tokens_used', 0),
+                model_used=result.get('model_used', ''),
+            )
         else:
             caption_gen.status = 'failed'
             caption_gen.error_message = result.get('error', 'Unknown error')
@@ -723,6 +750,11 @@ def regenerate_caption(request, pk):
     try:
         from ai_caption.openai_service import CaptionGeneratorService
         from ai_caption.models import CaptionGeneration
+
+        # Diamond Token check
+        gate = diamond_gate(request.user, 'caption_regenerate')
+        if gate:
+            return gate
 
         caption_gen = CaptionGeneration.objects.filter(pk=pk, user=request.user).first()
         if not caption_gen:
@@ -758,6 +790,14 @@ def regenerate_caption(request, pk):
             caption_gen.generated_hashtags = result.get('hashtags', '')
             caption_gen.tokens_used += result.get('tokens_used', 0)
             caption_gen.save()
+
+            # Deduct Diamond Tokens
+            deduct_diamonds(
+                user=request.user, feature='caption_regenerate',
+                provider=result.get('provider', 'openai'),
+                raw_tokens=result.get('tokens_used', 0),
+                model_used=result.get('model_used', ''),
+            )
 
             return Response({
                 'success': True,
@@ -808,21 +848,15 @@ class UserProfileView(generics.RetrieveUpdateAPIView):
             profile.phone = data['phone']
         if 'company' in data:
             profile.company = data['company']
-        if 'api_mode' in data:
-            profile.api_mode = data['api_mode']
-        if 'openai_api_key' in data:
-            profile.admin_openai_key = data['openai_api_key']
-        if 'gemini_api_key' in data:
-            profile.admin_gemini_key = data['gemini_api_key']
         profile.save()
 
         return Response(UserDetailSerializer(user).data)
 
 
 class GlobalAPIKeysView(APIView):
-    """Centralized API key management - enter once, works everywhere.
-    Claude is the fixed admin provider for text AI (key from env).
-    OpenAI/Gemini keys are user-managed for image/video/voice generation."""
+    """API key status and Diamond Token balance for users.
+    API keys are now admin-managed globally — users cannot set keys.
+    Users see their Diamond Token balance and AI service status."""
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
@@ -830,74 +864,17 @@ class GlobalAPIKeysView(APIView):
         gemini_key = get_gemini_key(request.user)
         claude_key = get_claude_key(request.user)
 
-        # Image/video model preferences
-        default_model = 'gpt-4o'
-        gemini_model = 'gemini-2.0-flash'
-        try:
-            s = request.user.api_settings
-            default_model = s.default_model or 'gpt-4o'
-            gemini_model = getattr(s, 'default_gemini_model', 'gemini-2.0-flash')
-        except Exception:
-            pass
+        # Diamond wallet balance
+        from accounts.models import DiamondWallet
+        wallet, _ = DiamondWallet.objects.get_or_create(user=request.user)
 
         return Response({
             'has_openai_key': bool(openai_key),
-            'masked_openai_key': mask_key(openai_key) if openai_key else '',
             'has_gemini_key': bool(gemini_key),
-            'masked_gemini_key': mask_key(gemini_key) if gemini_key else '',
             'claude_active': bool(claude_key),
-            'default_model': default_model,
-            'default_gemini_model': gemini_model,
-        })
-
-    def patch(self, request):
-        serializer = GlobalAPIKeysSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        data = serializer.validated_data
-
-        openai_key = data.get('openai_api_key', '')
-        gemini_key = data.get('gemini_api_key', '')
-
-        if openai_key:
-            sync_openai_key(request.user, openai_key)
-        if gemini_key:
-            sync_gemini_key(request.user, gemini_key)
-
-        # Save image/video model preferences
-        default_model = data.get('default_model', '')
-        gemini_model = data.get('default_gemini_model', '')
-        if default_model or gemini_model:
-            from ai_caption.models import UserAPISettings
-            settings, _ = UserAPISettings.objects.get_or_create(user=request.user)
-            if default_model:
-                settings.default_model = default_model
-            if gemini_model:
-                settings.default_gemini_model = gemini_model
-            settings.save()
-
-        # Return updated status
-        new_openai = get_openai_key(request.user)
-        new_gemini = get_gemini_key(request.user)
-        claude_key = get_claude_key(request.user)
-
-        ret_model = 'gpt-4o'
-        ret_gemini = 'gemini-2.0-flash'
-        try:
-            s = request.user.api_settings
-            ret_model = s.default_model
-            ret_gemini = s.default_gemini_model
-        except Exception:
-            pass
-
-        return Response({
-            'success': True,
-            'has_openai_key': bool(new_openai),
-            'masked_openai_key': mask_key(new_openai) if new_openai else '',
-            'has_gemini_key': bool(new_gemini),
-            'masked_gemini_key': mask_key(new_gemini) if new_gemini else '',
-            'claude_active': bool(claude_key),
-            'default_model': ret_model,
-            'default_gemini_model': ret_gemini,
+            'diamond_balance': wallet.balance,
+            'diamond_total_recharged': wallet.total_recharged,
+            'diamond_total_spent': wallet.total_spent,
         })
 
 
@@ -1183,6 +1160,11 @@ class ImagePromptTemplateViewSet(viewsets.ModelViewSet):
 def refine_image_prompt(request):
     """Use LLM to refine raw context into a focused image generation prompt."""
     try:
+        # Diamond Token check
+        gate = diamond_gate(request.user, 'refine_prompt')
+        if gate:
+            return gate
+
         service = get_llm_service(request.user)
 
         brand_name = request.data.get('brand_name', '')
@@ -1261,6 +1243,14 @@ def refine_image_prompt(request):
             return Response({'error': result.error}, status=status.HTTP_400_BAD_REQUEST)
         refined_prompt = result.content.strip()
 
+        # Deduct Diamond Tokens
+        deduct_diamonds(
+            user=request.user, feature='refine_prompt',
+            provider=getattr(result, 'provider', 'openai'),
+            raw_tokens=getattr(result, 'tokens_used', 0),
+            model_used=getattr(result, 'model_used', ''),
+        )
+
         return Response({'refined_prompt': refined_prompt, 'used_prompt': f"SYSTEM:\n{system_message}\n\nUSER:\n{user_message}"})
 
     except Exception as e:
@@ -1280,6 +1270,11 @@ def generate_image(request):
     from ai_image.image_service import ImageService
 
     try:
+        # Diamond Token check
+        gate = diamond_gate(request.user, 'image', quality=request.data.get('quality', 'standard'))
+        if gate:
+            return gate
+
         img_settings, _ = UserImageSettings.objects.get_or_create(user=request.user)
 
         # Centralized key lookup
@@ -1514,6 +1509,14 @@ def generate_image(request):
                 img_settings.gemini_images_generated += 1
             img_settings.save()
 
+            # Deduct Diamond Tokens
+            deduct_diamonds(
+                user=request.user, feature='image',
+                provider=result.get('provider', 'openai'),
+                raw_tokens=result.get('tokens_used', 0),
+                model_used=result.get('model_used', ''),
+            )
+
             return Response(ImageGenerationSerializer(generation, context={'request': request}).data)
         else:
             generation.status = 'failed'
@@ -1603,6 +1606,11 @@ def generate_video(request):
     from ai_video.gemini_service import GeminiVideoService
 
     try:
+        # Diamond Token check
+        gate = diamond_gate(request.user, 'video', duration=int(request.data.get('duration', 5)))
+        if gate:
+            return gate
+
         # Get user settings
         video_settings, _ = UserVideoSettings.objects.get_or_create(user=request.user)
 
@@ -1758,6 +1766,14 @@ def generate_video(request):
             video_settings.total_api_calls += 1
             video_settings.total_duration_generated += duration
             video_settings.save()
+
+            # Deduct Diamond Tokens
+            deduct_diamonds(
+                user=request.user, feature='video',
+                provider=result.get('provider', 'openai'),
+                raw_tokens=result.get('tokens_used', 0),
+                model_used=result.get('model_used', ''),
+            )
 
             return Response(VideoGenerationSerializer(generation).data)
         else:
@@ -2817,6 +2833,11 @@ def generate_voice(request):
     from django.core.files.base import ContentFile
     from datetime import datetime
 
+    # Diamond Token check
+    gate = diamond_gate(request.user, 'voice', characters=len(request.data.get('text', '')))
+    if gate:
+        return gate
+
     serializer = GenerateVoiceSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     data = serializer.validated_data
@@ -2877,6 +2898,14 @@ def generate_voice(request):
         user_settings.total_generations += 1
         user_settings.save()
 
+        # Deduct Diamond Tokens
+        deduct_diamonds(
+            user=request.user, feature='voice',
+            provider='openai',
+            raw_tokens=0,
+            model_used=model,
+        )
+
         return Response(VoiceGenerationSerializer(generation).data)
 
     except Exception as e:
@@ -2893,6 +2922,11 @@ def generate_voice(request):
 def preview_voice(request):
     """Preview voice without saving - limited to 100 characters"""
     import base64
+
+    # Diamond Token check
+    gate = diamond_gate(request.user, 'voice_preview')
+    if gate:
+        return gate
 
     text = (request.data.get('text', '') or '')[:100]
     voice = request.data.get('voice', 'alloy')
@@ -2918,6 +2952,15 @@ def preview_voice(request):
         )
 
         audio_base64 = base64.b64encode(response.content).decode('utf-8')
+
+        # Deduct Diamond Tokens
+        deduct_diamonds(
+            user=request.user, feature='voice_preview',
+            provider='openai',
+            raw_tokens=0,
+            model_used='tts-1',
+        )
+
         return Response({
             'success': True,
             'audio_base64': audio_base64,
@@ -3012,6 +3055,11 @@ class GenerateBrandDNAView(APIView):
             )
         except Brand.DoesNotExist:
             return Response({'error': 'Brand not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Diamond Token check
+        gate = diamond_gate(request.user, 'brand_dna')
+        if gate:
+            return gate
 
         # Accept website_url from POST body
         website_url = request.data.get('website_url', '').strip()
@@ -3161,6 +3209,14 @@ Return ONLY a single JSON object with all 15 fields as keys.
             # Save prompt to history
             from brands.models import PromptHistory
             PromptHistory.save_prompt(brand, 'brand_dna', prompt)
+
+            # Deduct Diamond Tokens
+            deduct_diamonds(
+                user=request.user, feature='brand_dna',
+                provider=getattr(result, 'provider', 'openai'),
+                raw_tokens=getattr(result, 'tokens_used', 0),
+                model_used=getattr(result, 'model_used', ''),
+            )
 
             return Response({
                 'success': True,
@@ -3567,6 +3623,11 @@ class SupportChatView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        # Diamond Token check
+        gate = diamond_gate(request.user, 'support_chat')
+        if gate:
+            return gate
+
         # Get LLM service: admin site config key first, then user's configured provider
         site_key = SiteConfiguration.get('support_chat_api_key', '')
         if site_key:
@@ -3607,6 +3668,14 @@ class SupportChatView(APIView):
 
             if not result.success:
                 return Response({'error': result.error}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Deduct Diamond Tokens
+            deduct_diamonds(
+                user=request.user, feature='support_chat',
+                provider=getattr(result, 'provider', 'openai'),
+                raw_tokens=getattr(result, 'tokens_used', 0),
+                model_used=getattr(result, 'model_used', ''),
+            )
 
             return Response({
                 'reply': result.content,

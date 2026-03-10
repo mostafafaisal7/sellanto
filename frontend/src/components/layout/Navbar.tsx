@@ -8,6 +8,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { useAuthStore } from '../../store';
 import { NotificationCenter } from '../NotificationCenter';
+import { DiamondBadge } from '../diamond';
 
 interface NavbarProps {
   onMenuClick: () => void;
@@ -67,6 +68,11 @@ export function Navbar({ onMenuClick, onChatToggle, isChatOpen, isImpersonating 
 
         {/* Right section */}
         <div className="flex items-center gap-2">
+          {/* Diamond Balance */}
+          <Link to="/dashboard" title="Diamond Token Balance">
+            <DiamondBadge />
+          </Link>
+
           {/* Notifications */}
           <NotificationCenter />
 

@@ -85,6 +85,16 @@ api.interceptors.response.use(
       }
     }
 
+    // 402 — Insufficient Diamond Tokens
+    if (error.response?.status === 402 && error.response?.data?.code === 'INSUFFICIENT_DIAMONDS') {
+      const { diamond_cost, diamond_balance, feature } = error.response.data;
+      window.dispatchEvent(
+        new CustomEvent('insufficient-diamonds', {
+          detail: { cost: diamond_cost, balance: diamond_balance, feature },
+        })
+      );
+    }
+
     return Promise.reject(error);
   }
 );

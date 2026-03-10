@@ -26,16 +26,16 @@ import {
   AcademicCapIcon,
   UserIcon,
   DocumentDuplicateIcon,
-  KeyIcon,
   CheckCircleIcon,
   PaperAirplaneIcon,
 } from '@heroicons/react/24/outline';
 import { HeartIcon as HeartSolidIcon, StarIcon as StarSolidIcon } from '@heroicons/react/24/solid';
 import { format, formatDistanceToNow } from 'date-fns';
-import { Button, Card, Input, Textarea, Modal, Spinner, PlatformIcon } from '../components/ui';
+import { Button, Card, Textarea, Modal, Spinner, PlatformIcon } from '../components/ui';
 import type { CaptionGeneration, CaptionTemplate, SavedCaption, CaptionTone, CaptionLength, CaptionPlatform, TemplateCategory, GenerationStatus } from '../types';
 import { authFetch } from '../services/api';
 import { PromptInfoButton } from '../components/ui/PromptInfoButton';
+import { DiamondCostIndicator } from '../components/diamond';
 
 // Tone options with icons
 const tones: { id: CaptionTone; label: string; Icon: typeof BriefcaseIcon; description: string }[] = [
@@ -113,10 +113,6 @@ export function AICaptionPage() {
   const [customInstructions, setCustomInstructions] = useState('');
 
   // Settings state
-  const [apiKey, setApiKey] = useState('');
-  const [defaultModel, setDefaultModel] = useState<'gpt-4o' | 'gpt-4o-mini' | 'gpt-4-turbo'>('gpt-4o');
-  const [showApiKey, setShowApiKey] = useState(false);
-  const [settingsSaved, setSettingsSaved] = useState(false);
   const [totalTokensUsed, setTotalTokensUsed] = useState(0);
   const [totalGenerations, setTotalGenerations] = useState(0);
 
@@ -186,8 +182,6 @@ export function AICaptionPage() {
       });
       if (response.ok) {
         const data = await response.json();
-        setApiKey(data.openai_api_key || '');
-        setDefaultModel(data.default_model || 'gpt-4o');
         setTotalTokensUsed(data.total_tokens_used || 0);
         setTotalGenerations(data.total_generations || 0);
       }
@@ -335,24 +329,6 @@ export function AICaptionPage() {
     }
   };
 
-  const saveSettings = async () => {
-    try {
-      await authFetch('/api/v1/ai-caption/settings/', {
-        method: 'PATCH',
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('access_token')}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ openai_api_key: apiKey, default_model: defaultModel }),
-      });
-      setSettingsSaved(true);
-      setApiKey('');
-      fetchSettings();
-      setTimeout(() => setSettingsSaved(false), 3000);
-    } catch (error) {
-      console.error('Failed to save settings:', error);
-    }
-  };
 
   const getStatusBadge = (status: GenerationStatus) => {
     const config = {
@@ -654,7 +630,7 @@ export function AICaptionPage() {
               leftIcon={<SparklesIcon className="w-5 h-5" />}
               className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
             >
-              Generate Caption
+              Generate Caption <DiamondCostIndicator cost={5} className="ml-2" />
             </Button>
           </div>
 
@@ -978,84 +954,20 @@ export function AICaptionPage() {
       {/* Settings Tab */}
       {activeTab === 'settings' && (
         <div className="max-w-2xl space-y-6">
-          {settingsSaved && (
-            <motion.div
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="p-4 bg-success/10 border border-success/20 rounded-xl flex items-center gap-3"
-            >
-              <CheckCircleIcon className="w-5 h-5 text-success" />
-              <p className="text-success">Settings saved successfully!</p>
-            </motion.div>
-          )}
-
+          {/* Info: API keys managed by admin */}
           <Card>
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center">
-                <KeyIcon className="w-5 h-5 text-amber-400" />
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-green-500/20 flex items-center justify-center">
+                <CheckCircleIcon className="w-5 h-5 text-green-400" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-text-primary">API Configuration</h3>
-                <p className="text-sm text-text-secondary">Configure your OpenAI API settings</p>
+                <h3 className="text-lg font-semibold text-text-primary">AI Service Active</h3>
+                <p className="text-sm text-text-secondary">API keys are managed by your administrator</p>
               </div>
             </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-text-secondary mb-2">
-                  OpenAI API Key
-                </label>
-                <div className="relative">
-                  <Input
-                    type={showApiKey ? 'text' : 'password'}
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    placeholder="sk-..."
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowApiKey(!showApiKey)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary"
-                  >
-                    {showApiKey ? (
-                      <EyeIcon className="w-5 h-5" />
-                    ) : (
-                      <EyeIcon className="w-5 h-5" />
-                    )}
-                  </button>
-                </div>
-                <p className="mt-2 text-xs text-text-muted">
-                  Your API key is encrypted and stored securely
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-text-secondary mb-2">
-                  Default Model
-                </label>
-                <div className="grid grid-cols-3 gap-3">
-                  {(['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo'] as const).map((model) => (
-                    <button
-                      key={model}
-                      onClick={() => setDefaultModel(model)}
-                      className={`p-3 rounded-xl border-2 text-center transition-all ${
-                        defaultModel === model
-                          ? 'border-purple-500 bg-purple-500/10'
-                          : 'border-white/10 hover:border-white/20'
-                      }`}
-                    >
-                      <p className="font-medium text-text-primary text-sm">{model}</p>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-6 pt-6 border-t border-white/5">
-              <Button onClick={saveSettings} leftIcon={<CheckIcon className="w-5 h-5" />}>
-                Save Settings
-              </Button>
-            </div>
+            <p className="text-xs text-text-muted">
+              All AI features are powered by Diamond Tokens. Contact your admin for API configuration.
+            </p>
           </Card>
 
           {/* Usage Stats */}

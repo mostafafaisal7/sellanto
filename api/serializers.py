@@ -546,52 +546,26 @@ class SavedCaptionSerializer(serializers.ModelSerializer):
 
 
 class UserAPISettingsSerializer(serializers.ModelSerializer):
-    """Serializer for UserAPISettings model"""
-    # Custom field for the API key (property on model)
-    openai_api_key = serializers.CharField(write_only=True, required=False, allow_blank=True)
-    has_api_key = serializers.BooleanField(read_only=True)
-    masked_api_key = serializers.CharField(read_only=True)
+    """Serializer for UserAPISettings model.
+    API keys are now admin-managed globally — no per-user keys."""
 
     class Meta:
         model = UserAPISettings
-        fields = ['id', 'openai_api_key', 'has_api_key', 'masked_api_key',
-                  'default_model', 'total_tokens_used', 'total_generations',
+        fields = ['id', 'default_model', 'total_tokens_used', 'total_generations',
                   'created_at', 'updated_at']
         read_only_fields = ['id', 'total_tokens_used', 'total_generations',
                            'created_at', 'updated_at']
-
-    def update(self, instance, validated_data):
-        # Handle the API key separately since it's a property
-        api_key = validated_data.pop('openai_api_key', None)
-        if api_key is not None:
-            instance.openai_api_key = api_key
-
-        # Update other fields
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-
-        instance.save()
-        return instance
 
 
 # ===================== AI IMAGE SERIALIZERS =====================
 
 class UserImageSettingsSerializer(serializers.ModelSerializer):
-    """Serializer for UserImageSettings model"""
-    # Custom fields for API keys (properties on model)
-    gemini_api_key = serializers.CharField(write_only=True, required=False, allow_blank=True)
-    openai_api_key = serializers.CharField(write_only=True, required=False, allow_blank=True)
-    has_gemini_key = serializers.BooleanField(read_only=True)
-    has_openai_key = serializers.BooleanField(read_only=True)
-    masked_gemini_key = serializers.CharField(read_only=True)
-    masked_openai_key = serializers.CharField(read_only=True)
+    """Serializer for UserImageSettings model.
+    API keys are now admin-managed globally — no per-user keys."""
 
     class Meta:
         model = UserImageSettings
-        fields = ['id', 'gemini_api_key', 'openai_api_key',
-                  'has_gemini_key', 'has_openai_key',
-                  'masked_gemini_key', 'masked_openai_key',
-                  'default_provider', 'default_style', 'default_size',
+        fields = ['id', 'default_provider', 'default_style', 'default_size',
                   'openai_model', 'openai_quality',
                   'total_images_generated', 'total_api_calls',
                   'openai_images_generated', 'gemini_images_generated',
@@ -599,23 +573,6 @@ class UserImageSettingsSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'total_images_generated', 'total_api_calls',
                            'openai_images_generated', 'gemini_images_generated',
                            'created_at', 'updated_at']
-
-    def update(self, instance, validated_data):
-        # Handle API keys separately since they're properties
-        gemini_key = validated_data.pop('gemini_api_key', None)
-        openai_key = validated_data.pop('openai_api_key', None)
-
-        if gemini_key is not None:
-            instance.gemini_api_key = gemini_key
-        if openai_key is not None:
-            instance.openai_api_key = openai_key
-
-        # Update other fields
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-
-        instance.save()
-        return instance
 
 
 class UserLogoSerializer(serializers.ModelSerializer):
@@ -690,33 +647,16 @@ class GenerateImageSerializer(serializers.Serializer):
 # ===================== AI VIDEO SERIALIZERS =====================
 
 class UserVideoSettingsSerializer(serializers.ModelSerializer):
-    """Serializer for UserVideoSettings model"""
-    # Custom field for API key (property on model)
-    gemini_api_key = serializers.CharField(write_only=True, required=False, allow_blank=True)
-    has_api_key = serializers.BooleanField(read_only=True)
-    masked_api_key = serializers.CharField(read_only=True)
+    """Serializer for UserVideoSettings model.
+    API keys are now admin-managed globally — no per-user keys."""
 
     class Meta:
         model = UserVideoSettings
-        fields = ['id', 'gemini_api_key', 'has_api_key', 'masked_api_key',
-                  'default_style', 'default_duration', 'default_resolution',
+        fields = ['id', 'default_style', 'default_duration', 'default_resolution',
                   'total_videos_generated', 'total_api_calls', 'total_duration_generated',
                   'created_at', 'updated_at']
         read_only_fields = ['id', 'total_videos_generated', 'total_api_calls',
                            'total_duration_generated', 'created_at', 'updated_at']
-
-    def update(self, instance, validated_data):
-        # Handle the API key separately since it's a property
-        api_key = validated_data.pop('gemini_api_key', None)
-        if api_key is not None:
-            instance.gemini_api_key = api_key
-
-        # Update other fields
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-
-        instance.save()
-        return instance
 
 
 class VideoLogoSerializer(serializers.ModelSerializer):
@@ -1123,36 +1063,16 @@ class GenerationUsageSerializer(serializers.ModelSerializer):
 # ===================== AI VOICE SERIALIZERS =====================
 
 class UserVoiceSettingsSerializer(serializers.ModelSerializer):
-    """Serializer for UserVoiceSettings model"""
-    openai_api_key = serializers.CharField(write_only=True, required=False, allow_blank=True)
-    has_api_key = serializers.SerializerMethodField()
-    masked_api_key = serializers.SerializerMethodField()
+    """Serializer for UserVoiceSettings model.
+    API keys are now admin-managed globally — no per-user keys."""
 
     class Meta:
         model = UserVoiceSettings
-        fields = ['id', 'openai_api_key', 'has_api_key', 'masked_api_key',
-                  'default_voice', 'default_speed', 'default_model',
+        fields = ['id', 'default_voice', 'default_speed', 'default_model',
                   'total_characters_used', 'total_generations',
                   'created_at', 'updated_at']
         read_only_fields = ['id', 'total_characters_used', 'total_generations',
                            'created_at', 'updated_at']
-
-    def get_has_api_key(self, obj):
-        return bool(obj.openai_api_key)
-
-    def get_masked_api_key(self, obj):
-        if obj.openai_api_key and len(obj.openai_api_key) > 8:
-            return obj.openai_api_key[:4] + '*' * (len(obj.openai_api_key) - 8) + obj.openai_api_key[-4:]
-        return '****' if obj.openai_api_key else ''
-
-    def update(self, instance, validated_data):
-        api_key = validated_data.pop('openai_api_key', None)
-        if api_key is not None:
-            instance.openai_api_key = api_key
-        for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-        instance.save()
-        return instance
 
 
 class VoiceGenerationSerializer(serializers.ModelSerializer):

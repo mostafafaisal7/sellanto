@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from accounts.permissions import IsCreatorOrAbove, IsWorkspaceAdmin, IsViewerOrAbove
+from accounts.services.diamond_service import pre_check, deduct_diamonds
 
 from posts.models import Post, PostHashtag, HashtagGroup, BannedHashtag
 from brands.models import Brand
@@ -62,6 +63,16 @@ class GenerateHashtagsView(APIView):
                     status=status.HTTP_429_TOO_MANY_REQUESTS,
                 )
 
+        # Diamond Token pre-check
+        can_afford, cost, balance = pre_check(request.user, 'hashtag_generation')
+        if not can_afford:
+            return Response({
+                'error': 'Insufficient Diamond Tokens',
+                'diamond_cost': cost,
+                'diamond_balance': balance,
+                'code': 'INSUFFICIENT_DIAMONDS',
+            }, status=402)
+
         # Generate using Claude (primary) via user config
         override_prompt = request.data.get('override_prompt', '')
         created, used_prompt = generate_hashtags(
@@ -72,6 +83,8 @@ class GenerateHashtagsView(APIView):
             topic=topic,
             override_prompt=override_prompt or None,
         )
+
+        deduct_diamonds(user=request.user, feature='hashtag_generation', provider='claude', raw_tokens=0)
 
         # V1.2.1 — Increment generation count
         if post.brand and post.brand.workspace:
