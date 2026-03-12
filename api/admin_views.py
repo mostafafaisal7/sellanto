@@ -12,6 +12,8 @@ from django.utils import timezone
 from datetime import timedelta
 import json
 
+from accounts.models import SiteConfiguration
+
 
 # ==================== Helpers ====================
 
@@ -744,3 +746,589 @@ class AdminAnalyticsView(APIView):
             'top_users': top_users,
             'platform_stats': platform_stats[0] if platform_stats else {},
         })
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Facebook OAuth Settings (Admin only)
+# ══════════════════════════════════════════════════════════════════════════════
+
+class FacebookSettingsView(APIView):
+    """
+    GET  /api/v1/admin/facebook-settings/  → read current FB OAuth config
+    POST /api/v1/admin/facebook-settings/  → save FB OAuth config to SiteConfiguration
+
+    Values are stored in the SiteConfiguration DB table so the admin can
+    update them at any time without touching server files or restarting.
+
+    The App Secret is masked in GET responses (last 6 chars shown only).
+    """
+    permission_classes = [IsAdminUser]
+
+    # Keys stored in SiteConfiguration
+    KEYS = {
+        'facebook_app_id':       'Facebook App ID (from Meta Developer Console → Settings → Basic)',
+        'facebook_app_secret':   'Facebook App Secret (keep this private)',
+        'facebook_redirect_uri': 'OAuth Redirect URI (must match Meta Dashboard exactly)',
+        'frontend_url':          'Frontend URL (your React app URL, used for popup security)',
+    }
+
+    def get(self, request):
+        """Return current Facebook OAuth settings. App Secret is masked."""
+        data = {}
+        for key, description in self.KEYS.items():
+            raw = SiteConfiguration.get(key, '')
+            if key == 'facebook_app_secret' and raw:
+                # Mask secret — show only last 6 characters
+                display = '•' * (len(raw) - 6) + raw[-6:] if len(raw) > 6 else '••••••'
+            else:
+                display = raw
+            data[key] = {
+                'value':       display,
+                'is_set':      bool(raw),
+                'description': description,
+            }
+
+        # Overall status
+        app_id       = SiteConfiguration.get('facebook_app_id', '')
+        app_secret   = SiteConfiguration.get('facebook_app_secret', '')
+        redirect_uri = SiteConfiguration.get('facebook_redirect_uri', '')
+        frontend_url = SiteConfiguration.get('frontend_url', '')
+
+        is_configured = bool(app_id and app_secret and redirect_uri)
+        missing = []
+        if not app_id:
+            missing.append('App ID')
+        if not app_secret:
+            missing.append('App Secret')
+        if not redirect_uri:
+            missing.append('Redirect URI')
+        if not frontend_url:
+            missing.append('Frontend URL (optional but recommended)')
+
+        return Response({
+            'settings':      data,
+            'is_configured': is_configured,
+            'missing':       missing,
+            'help': {
+                'where_to_find': 'https://developers.facebook.com → Your App → Settings → Basic',
+                'redirect_uri_note': (
+                    'The Redirect URI here MUST match exactly what you add in Meta Dashboard → '
+                    'Facebook Login → Settings → Valid OAuth Redirect URIs'
+                ),
+                'frontend_url_note': (
+                    'Used to validate postMessage origin in the popup. '
+                    'Set to your React app domain, e.g. https://abedintechllc.com'
+                ),
+            },
+        })
+
+    def post(self, request):
+        """
+        Save Facebook OAuth settings.
+        Only updates keys that are provided and non-empty.
+        Pass empty string "" to a key to clear it.
+        """
+        updated = []
+        errors  = []
+
+        for key in self.KEYS:
+            if key not in request.data:
+                continue  # Not provided — skip, keep existing value
+
+            value = str(request.data[key]).strip()
+
+            # Validate redirect URI format
+            if key == 'facebook_redirect_uri' and value:
+                if not (value.startswith('http://') or value.startswith('https://')):
+                    errors.append(f'facebook_redirect_uri must start with http:// or https://')
+                    continue
+
+            # Validate frontend URL format
+            if key == 'frontend_url' and value:
+                if not (value.startswith('http://') or value.startswith('https://')):
+                    errors.append(f'frontend_url must start with http:// or https://')
+                    continue
+
+            try:
+                SiteConfiguration.set(key, value, self.KEYS[key])
+                updated.append(key)
+            except Exception as e:
+                errors.append(f'Could not save {key}: {str(e)}')
+
+        if errors and not updated:
+            return Response(
+                {'error': 'Failed to save settings.', 'details': errors},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Re-check if now fully configured
+        app_id       = SiteConfiguration.get('facebook_app_id', '')
+        app_secret   = SiteConfiguration.get('facebook_app_secret', '')
+        redirect_uri = SiteConfiguration.get('facebook_redirect_uri', '')
+        is_configured = bool(app_id and app_secret and redirect_uri)
+
+        response = {
+            'success':       True,
+            'updated_keys':  updated,
+            'is_configured': is_configured,
+            'message':       (
+                'Facebook OAuth is now fully configured. Users can connect their Facebook Pages.'
+                if is_configured else
+                'Settings saved. Some required fields are still missing — see is_configured=false.'
+            ),
+        }
+        if errors:
+            response['warnings'] = errors
+
+        return Response(response)
+
+
+class AdminMessengerWebhooksView(APIView):
+    """
+    GET /api/v1/admin/messenger-webhooks/
+    Returns all MessengerConnection records so the admin can copy
+    webhook URLs and verify tokens to paste into Meta Developer Console.
+    """
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        from messenger_bot.models import MessengerConnection
+        from accounts.models import SiteConfiguration
+
+        frontend_url = (
+            SiteConfiguration.get('frontend_url', '')
+            or request.build_absolute_uri('/').rstrip('/')
+        )
+        # Derive backend base from request
+        backend_base = request.build_absolute_uri('/').rstrip('/')
+
+        connections = MessengerConnection.objects.select_related('user').order_by('-connected_at')
+        data = []
+        for c in connections:
+            webhook_url = f"{backend_base}/messenger/webhook/{c.page_id}/"
+            data.append({
+                'id':                  c.id,
+                'username':            c.user.username,
+                'page_id':             c.page_id,
+                'page_name':           c.page_name,
+                'verify_token':        c.verify_token,
+                'webhook_url':         webhook_url,
+                'is_webhook_verified': c.is_webhook_verified,
+                'is_active':           c.is_active,
+                'auto_reply_enabled':  c.auto_reply_enabled,
+                'connected_at':        str(c.connected_at) if c.connected_at else None,
+            })
+
+        return Response({'connections': data, 'total': len(data)})
+
+
+class AdminFacebookAccountsView(APIView):
+    """
+    GET /api/v1/admin/facebook-accounts/
+    Returns all users' Facebook SocialAccounts so admin can see
+    who connected and trigger Messenger setup manually.
+    Add ?refresh=1 to force live re-validation of all tokens.
+    """
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        from platforms.models import SocialAccount
+        from messenger_bot.models import MessengerConnection
+        from platforms.services.facebook import FacebookService
+        from django.utils import timezone
+        from datetime import timedelta
+        import logging
+        logger = logging.getLogger(__name__)
+
+        force_refresh = request.GET.get('refresh') == '1'
+        stale_cutoff  = timezone.now() - timedelta(hours=6)
+
+        accounts = SocialAccount.objects.filter(
+            platform='facebook'
+        ).select_related('user').order_by('user__username', '-connected_at')
+
+        # Re-validate stale tokens so admin sees accurate status
+        for a in accounts:
+            needs_check = (
+                force_refresh
+                or a.last_validated_at is None
+                or a.last_validated_at < stale_cutoff
+            )
+            if needs_check and a.facebook_page_id and a.facebook_access_token:
+                try:
+                    valid, result = FacebookService.validate_credentials(
+                        a.facebook_page_id, a.facebook_access_token
+                    )
+                    if valid:
+                        a.mark_as_active()
+                    else:
+                        a.mark_as_invalid(result)
+                except Exception as e:
+                    logger.warning(f'[Admin FB] Re-validation failed for {a.account_name}: {e}')
+
+        # Refresh from DB after potential updates
+        accounts = SocialAccount.objects.filter(
+            platform='facebook'
+        ).select_related('user').order_by('user__username', '-connected_at')
+
+        # All users who have a messenger connection (for quick lookup)
+        existing_mc = set(
+            MessengerConnection.objects.values_list('user_id', flat=True)
+        )
+
+        data = []
+        for a in accounts:
+            data.append({
+                'account_id':          a.id,
+                'user_id':             a.user.id,
+                'username':            a.user.username,
+                'page_id':             a.facebook_page_id,
+                'page_name':           a.account_name,
+                'status':              a.status,
+                'has_token':           bool(a.facebook_access_token),
+                'has_messenger':       a.user.id in existing_mc,
+                'connected_at':        str(a.connected_at) if a.connected_at else None,
+                'last_validated_at':   str(a.last_validated_at) if a.last_validated_at else None,
+            })
+
+        return Response({'accounts': data, 'total': len(data)})
+
+
+class AdminSetupMessengerView(APIView):
+    """
+    POST /api/v1/admin/setup-messenger/
+    Admin force-creates or updates a MessengerConnection for any
+    Facebook SocialAccount — bypasses the OAuth flow and status check.
+
+    Body: { "account_id": <SocialAccount.id> }
+    """
+    permission_classes = [IsAdminUser]
+
+    def post(self, request):
+        from platforms.models import SocialAccount
+        from messenger_bot.models import MessengerConnection
+        from platforms.oauth_views import FB_GRAPH
+        import requests as http_requests
+
+        account_id = request.data.get('account_id')
+        if not account_id:
+            return Response({'error': 'account_id is required.'}, status=400)
+
+        try:
+            account = SocialAccount.objects.select_related('user').get(
+                id=account_id, platform='facebook'
+            )
+        except SocialAccount.DoesNotExist:
+            return Response({'error': 'Facebook account not found.'}, status=404)
+
+        page_id    = account.facebook_page_id
+        page_token = account.facebook_access_token
+        page_name  = account.account_name
+        user       = account.user
+
+        if not page_token:
+            return Response({'error': 'This account has no access token. Ask the user to reconnect Facebook.'}, status=400)
+
+        # Try webhook subscription (best-effort)
+        webhook_subscribed = False
+        webhook_warning    = None
+        try:
+            resp = http_requests.post(
+                f'{FB_GRAPH}/{page_id}/subscribed_apps',
+                params={
+                    'subscribed_fields': 'messages,messaging_postbacks,messaging_optins',
+                    'access_token':      page_token,
+                },
+                timeout=15
+            )
+            result = resp.json()
+            if result.get('success'):
+                webhook_subscribed = True
+            else:
+                err = result.get('error', {})
+                webhook_warning = f"Webhook subscription failed: {err.get('message', 'Unknown error')} (code {err.get('code')}). Set it up manually below."
+        except Exception as e:
+            webhook_warning = f'Could not reach Facebook for webhook subscription: {str(e)}'
+
+        # Save MessengerConnection regardless of webhook subscription result.
+        # is_webhook_verified is ONLY set True by Meta's GET verification request.
+        # We never force it True here — preserve existing value for updates.
+        try:
+            connection = MessengerConnection.objects.get(user=user)
+            connection.page_id           = page_id
+            connection.page_name         = page_name
+            connection.page_access_token = page_token
+            connection.is_active         = True
+            connection.save(update_fields=['page_id', 'page_name', 'page_access_token', 'is_active'])
+            created = False
+        except MessengerConnection.DoesNotExist:
+            connection = MessengerConnection.objects.create(
+                user=user,
+                page_id=page_id,
+                page_name=page_name,
+                page_access_token=page_token,
+                is_webhook_verified=False,
+                is_active=True,
+            )
+            created = True
+
+        response = {
+            'success':          True,
+            'page_name':        page_name,
+            'webhook_verified': webhook_subscribed,
+            'is_new':           created,
+            'verify_token':     connection.verify_token,
+            'webhook_url':      f"{request.build_absolute_uri('/').rstrip('/')}/messenger/webhook/{page_id}/",
+        }
+        if webhook_warning:
+            response['warning'] = webhook_warning
+        return Response(response)
+
+
+class AdminTestWebhookView(APIView):
+    """
+    POST /api/v1/admin/test-webhook/
+    Sends a simulated Messenger webhook POST to verify the full pipeline works:
+    webhook receives → MessengerConnection found → Conversation created.
+
+    Body: { "connection_id": <MessengerConnection.id> }
+    Returns diagnostic info: connection details, conversation count, test result.
+    """
+    permission_classes = [IsAdminUser]
+
+    def post(self, request):
+        import json
+        import time
+        from messenger_bot.models import MessengerConnection, Conversation
+        from django.test import RequestFactory
+        from django.views.decorators.csrf import csrf_exempt
+
+        connection_id = request.data.get('connection_id')
+        if not connection_id:
+            return Response({'error': 'connection_id is required.'}, status=400)
+
+        try:
+            connection = MessengerConnection.objects.select_related('user').get(id=connection_id)
+        except MessengerConnection.DoesNotExist:
+            return Response({'error': 'Connection not found.'}, status=404)
+
+        page_id      = connection.page_id
+        backend_base = request.build_absolute_uri('/').rstrip('/')
+        webhook_url  = f"{backend_base}/messenger/webhook/{page_id}/"
+
+        # Snapshot conversation count before test
+        before_count = Conversation.objects.filter(connection=connection).count()
+
+        # Build a fake Messenger webhook payload
+        test_sender_id  = 'admin_test_user_000'
+        test_message_id = f'test_mid_{int(time.time())}'
+        payload = {
+            'object': 'page',
+            'entry': [{
+                'id': page_id,
+                'time': int(time.time() * 1000),
+                'messaging': [{
+                    'sender':    {'id': test_sender_id},
+                    'recipient': {'id': page_id},
+                    'timestamp': int(time.time() * 1000),
+                    'message': {
+                        'mid':  test_message_id,
+                        'text': 'Admin connection test — please ignore.'
+                    }
+                }]
+            }]
+        }
+
+        # Call the webhook view directly (bypasses network, no HTTP needed)
+        webhook_result = None
+        webhook_error  = None
+        try:
+            from messenger_bot.views import webhook as webhook_view
+            factory = RequestFactory()
+            fake_req = factory.post(
+                f'/messenger/webhook/{page_id}/',
+                data=json.dumps(payload),
+                content_type='application/json'
+            )
+            fake_req.user = connection.user  # attach user for any user checks
+            response_obj  = webhook_view(fake_req, page_id=page_id)
+            webhook_result = {
+                'status_code': response_obj.status_code,
+                'ok': response_obj.status_code == 200,
+            }
+        except Exception as e:
+            webhook_error = str(e)
+
+        # Check if a new conversation was created
+        after_count        = Conversation.objects.filter(connection=connection).count()
+        conversation_added = after_count > before_count
+
+        # Get recent conversations
+        recent_convs = Conversation.objects.filter(
+            connection=connection
+        ).order_by('-last_message_at').values('id', 'sender_id', 'sender_name', 'message_count', 'last_message_at')[:5]
+
+        return Response({
+            'connection': {
+                'id':                   connection.id,
+                'page_id':              page_id,
+                'page_name':            connection.page_name,
+                'user':                 connection.user.username,
+                'is_active':            connection.is_active,
+                'is_webhook_verified':  connection.is_webhook_verified,
+                'has_ai_config':        hasattr(connection, 'ai_config') and connection.ai_config is not None,
+            },
+            'webhook_call': webhook_result or {'error': webhook_error},
+            'conversations': {
+                'before_test':          before_count,
+                'after_test':           after_count,
+                'new_conversation':     conversation_added,
+                'recent':               list(recent_convs),
+            },
+            'diagnosis': (
+                'OK — webhook pipeline works and conversations are being created.'
+                if conversation_added else
+                'WARNING — test message sent but no new conversation was created. '
+                'Check Django logs for errors inside MessageHandler.process_message.'
+            ),
+        })
+
+
+class AdminCheckSubscriptionView(APIView):
+    """
+    POST /api/v1/admin/check-subscription/
+    Checks Facebook subscription status for a MessengerConnection:
+    1. Is the page subscribed to webhook events? (GET /{page_id}/subscribed_apps)
+    2. What fields are subscribed? (messages, messaging_postbacks, etc.)
+    3. Is the App in Development mode? (causes real users' messages to be dropped)
+    4. Re-subscribes the page if missing any required fields.
+
+    Body: { "connection_id": <MessengerConnection.id>, "resubscribe": true/false }
+    """
+    permission_classes = [IsAdminUser]
+
+    def post(self, request):
+        import requests as http_req
+        from messenger_bot.models import MessengerConnection
+
+        connection_id = request.data.get('connection_id')
+        resubscribe   = request.data.get('resubscribe', False)
+
+        if not connection_id:
+            return Response({'error': 'connection_id is required.'}, status=400)
+
+        try:
+            connection = MessengerConnection.objects.select_related('user').get(id=connection_id)
+        except MessengerConnection.DoesNotExist:
+            return Response({'error': 'Connection not found.'}, status=404)
+
+        page_id    = connection.page_id
+        page_token = connection.page_access_token
+        results    = {}
+
+        # ── 1. Check current subscriptions ──────────────────────────────────────
+        try:
+            r = http_req.get(
+                f'https://graph.facebook.com/v18.0/{page_id}/subscribed_apps',
+                params={'access_token': page_token},
+                timeout=15,
+            )
+            sub_data = r.json()
+            results['current_subscriptions'] = sub_data
+            subscribed_fields = []
+            if r.status_code == 200 and sub_data.get('data'):
+                for app_entry in sub_data['data']:
+                    subscribed_fields = app_entry.get('subscribed_fields', [])
+            results['subscribed_fields'] = subscribed_fields
+            required = {'messages', 'messaging_postbacks', 'messaging_optins'}
+            missing_fields = list(required - set(subscribed_fields))
+            results['missing_fields'] = missing_fields
+            results['is_subscribed'] = len(missing_fields) == 0 and bool(subscribed_fields)
+        except Exception as e:
+            results['subscription_check_error'] = str(e)
+            missing_fields = ['messages', 'messaging_postbacks', 'messaging_optins']
+            results['is_subscribed'] = False
+
+        # ── 2. Check App mode (Development vs Live) ─────────────────────────────
+        try:
+            from accounts.models import SiteConfiguration
+            from django.conf import settings as dj_settings
+            app_id     = SiteConfiguration.get('facebook_app_id', getattr(dj_settings, 'FACEBOOK_APP_ID', ''))
+            app_secret = SiteConfiguration.get('facebook_app_secret', getattr(dj_settings, 'FACEBOOK_APP_SECRET', ''))
+            if app_id and app_secret:
+                app_token_resp = http_req.get(
+                    'https://graph.facebook.com/v18.0/oauth/access_token',
+                    params={
+                        'client_id':     app_id,
+                        'client_secret': app_secret,
+                        'grant_type':    'client_credentials',
+                    },
+                    timeout=15,
+                )
+                if app_token_resp.status_code == 200:
+                    app_token = app_token_resp.json().get('access_token', '')
+                    app_info_resp = http_req.get(
+                        f'https://graph.facebook.com/v18.0/{app_id}',
+                        params={'fields': 'name,link,status', 'access_token': app_token},
+                        timeout=15,
+                    )
+                    if app_info_resp.status_code == 200:
+                        app_info = app_info_resp.json()
+                        results['app_mode'] = {
+                            'name':        app_info.get('name', ''),
+                            'status':      app_info.get('status', 'unknown'),
+                            'is_live':     app_info.get('status') == 'LIVE',
+                            'note': (
+                                'App is LIVE — all users\' messages will be received.' if app_info.get('status') == 'LIVE'
+                                else 'App is in DEVELOPMENT mode. Only app admins/developers/testers can trigger webhooks. '
+                                     'Real users\' messages are silently dropped by Facebook. '
+                                     'To receive messages from everyone, go to Meta Console → App Review → Make app Live.'
+                            )
+                        }
+        except Exception as e:
+            results['app_mode_check_error'] = str(e)
+
+        # ── 3. Re-subscribe if requested or fields are missing ───────────────────
+        resubscribe_result = None
+        if resubscribe or (results.get('missing_fields') and not results.get('is_subscribed')):
+            try:
+                r2 = http_req.post(
+                    f'https://graph.facebook.com/v18.0/{page_id}/subscribed_apps',
+                    params={
+                        'subscribed_fields': 'messages,messaging_postbacks,messaging_optins',
+                        'access_token':      page_token,
+                    },
+                    timeout=15,
+                )
+                resubscribe_data = r2.json()
+                resubscribe_result = {
+                    'attempted': True,
+                    'success':   resubscribe_data.get('success', False),
+                    'response':  resubscribe_data,
+                }
+                if resubscribe_data.get('success'):
+                    results['is_subscribed'] = True
+                    results['missing_fields'] = []
+            except Exception as e:
+                resubscribe_result = {'attempted': True, 'error': str(e)}
+
+        results['resubscribe_result'] = resubscribe_result
+
+        # ── 4. Build diagnosis ───────────────────────────────────────────────────
+        diagnosis_parts = []
+        if not results.get('is_subscribed'):
+            diagnosis_parts.append(
+                'Page is NOT subscribed to webhook fields. '
+                'Click "Fix Subscription" to subscribe now.'
+            )
+        app_mode = results.get('app_mode', {})
+        if app_mode and not app_mode.get('is_live', True):
+            diagnosis_parts.append(
+                'App is in DEVELOPMENT mode — this is the most common reason real messages '
+                'don\'t appear. Go to Meta Console → Your App → toggle "Live" at the top.'
+            )
+        if not diagnosis_parts:
+            diagnosis_parts.append('Subscription looks correct. If messages still don\'t arrive, check Meta Console webhook logs.')
+
+        results['diagnosis'] = ' | '.join(diagnosis_parts)
+        return Response(results)

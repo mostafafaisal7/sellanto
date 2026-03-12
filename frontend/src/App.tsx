@@ -40,6 +40,7 @@ import {
   AdminUserDetailPage,
   AdminAnalyticsPage,
   AdminAPIKeysPage,
+  AdminFacebookSettingsPage,
 } from './pages/admin';
 import { LoadingScreen } from './components/ui';
 import { useAuthStore } from './store';
@@ -202,6 +203,7 @@ function App() {
           <Route path="/admin-panel/users/:id" element={<AdminUserDetailPage />} />
           <Route path="/admin-panel/analytics" element={<AdminAnalyticsPage />} />
           <Route path="/admin-panel/api-keys" element={<AdminAPIKeysPage />} />
+          <Route path="/admin-panel/facebook-settings" element={<AdminFacebookSettingsPage />} />
         </Route>
 
         {/* Catch all - redirect to dashboard */}

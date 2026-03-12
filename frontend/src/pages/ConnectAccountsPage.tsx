@@ -16,6 +16,7 @@ import {
 import { Button, Modal, ConfirmModal, Spinner, PlatformIcon, platformColors, platformNames } from '../components/ui';
 import type { SocialAccount, PlatformType } from '../types';
 import { authFetch } from '../services/api';
+import { FacebookConnect } from '../components/platforms/FacebookConnect';
 
 // PLATFORM CONSTANTS MAPPED FROM DJANGO TEMPLATE
 const platformFeatures: Record<string, string[]> = {
@@ -303,6 +304,29 @@ export default function ConnectAccountsPage() {
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-4">
           {postingPlatforms.map(p => {
             const isConnected = connectedPlatforms.includes(p);
+
+            // Facebook uses OAuth flow — dedicated component handles everything
+            if (p === 'facebook') {
+              return (
+                <motion.div
+                  key={p}
+                  className="group relative overflow-hidden rounded-2xl p-5 border border-white/10 bg-dark-800/60 flex flex-col"
+                >
+                  {/* Platform header */}
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className={clsx("w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0", platformColors[p]?.bg)}>
+                      <PlatformIcon platform={p} className="text-white" size="md" />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-bold text-text-primary">{platformNames[p]}</h3>
+                      <p className="text-[10px] text-text-muted">Pages · Instagram · Messenger</p>
+                    </div>
+                  </div>
+                  <FacebookConnect onConnected={fetchData} />
+                </motion.div>
+              );
+            }
+
             return (
               <motion.div
                 key={p}
