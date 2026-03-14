@@ -2,6 +2,12 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenRefreshView
 from . import views
+from platforms.oauth_views import (
+    facebook_oauth_initiate,
+    facebook_oauth_callback,
+    facebook_setup_messenger,
+    facebook_connection_status,
+)
 from . import admin_views
 from . import strategy_views
 from . import caption_views
@@ -55,6 +61,12 @@ router.register(r'hashtag-groups', hashtag_views.HashtagGroupViewSet, basename='
 router.register(r'banned-hashtags', hashtag_views.BannedHashtagViewSet, basename='banned-hashtag')
 
 urlpatterns = [
+    # ── Facebook OAuth & Connection Status ───────────────────────────────────
+    path('platforms/facebook/initiate/',        facebook_oauth_initiate,    name='fb-oauth-initiate'),
+    path('platforms/facebook/callback/',        facebook_oauth_callback,    name='fb-oauth-callback'),
+    path('platforms/facebook/setup-messenger/', facebook_setup_messenger,   name='fb-setup-messenger'),
+    path('platforms/facebook/status/',          facebook_connection_status, name='fb-conn-status'),
+
     # Auth endpoints
     path('auth/register/', views.RegisterView.as_view(), name='api-register'),
     path('auth/register-with-brand/', views.RegisterWithBrandView.as_view(), name='api-register-with-brand'),
@@ -288,6 +300,12 @@ urlpatterns = [
     path('my-roles/', rbac_views.MyRolesView.as_view(), name='api-my-roles'),
 
     # Admin Panel API
+    path('admin/facebook-settings/',    admin_views.FacebookSettingsView.as_view(),        name='api-admin-fb-settings'),
+    path('admin/messenger-webhooks/',   admin_views.AdminMessengerWebhooksView.as_view(),  name='api-admin-messenger-webhooks'),
+    path('admin/facebook-accounts/',    admin_views.AdminFacebookAccountsView.as_view(),   name='api-admin-facebook-accounts'),
+    path('admin/setup-messenger/',      admin_views.AdminSetupMessengerView.as_view(),     name='api-admin-setup-messenger'),
+    path('admin/test-webhook/',         admin_views.AdminTestWebhookView.as_view(),        name='api-admin-test-webhook'),
+    path('admin/check-subscription/',   admin_views.AdminCheckSubscriptionView.as_view(),  name='api-admin-check-subscription'),
     path('admin/dashboard/', admin_views.AdminDashboardView.as_view(), name='api-admin-dashboard'),
     path('admin/users/', admin_views.AdminUserListView.as_view(), name='api-admin-users'),
     path('admin/users/<int:user_id>/', admin_views.AdminUserDetailView.as_view(), name='api-admin-user-detail'),

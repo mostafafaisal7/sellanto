@@ -4,6 +4,7 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
 import json
+import uuid
 
 class SocialAccount(models.Model):
     """Stores social media account credentials - Platform specific fields"""
@@ -213,3 +214,24 @@ class SocialAccount(models.Model):
         self.validation_error = None
         self.last_validated_at = timezone.now()
         self.save()
+
+
+class OAuthState(models.Model):
+    """
+    One-time CSRF token for OAuth flows.
+    Created when user clicks Connect, validated when provider redirects back.
+    Automatically expires after 10 minutes. Marked used on first validation
+    to prevent replay attacks.
+    """
+    state      = models.UUIDField(default=uuid.uuid4, unique=True, primary_key=True)
+    user       = models.ForeignKey(User, on_delete=models.CASCADE, related_name='oauth_states')
+    platform   = models.CharField(max_length=32, default='facebook')
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    used       = models.BooleanField(default=False)
+
+    class Meta:
+        db_table = 'oauth_states'
+
+    def __str__(self):
+        return f"{self.user.username} – {self.platform} – {'used' if self.used else 'pending'}"

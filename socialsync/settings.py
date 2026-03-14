@@ -12,6 +12,18 @@ OPENAI_API_KEY = config('OPENAI_API_KEY', default='')
 GEMINI_API_KEY = config('GEMINI_API_KEY', default='')
 ANTHROPIC_API_KEY = config('test', default='')
 
+# ─── Facebook OAuth ───────────────────────────────────────────────────────────
+# Get these from: https://developers.facebook.com → Your App → Settings → Basic
+FACEBOOK_APP_ID      = config('FACEBOOK_APP_ID', default='')
+FACEBOOK_APP_SECRET  = config('FACEBOOK_APP_SECRET', default='')
+# Must match EXACTLY what you set in Meta Dashboard → Facebook Login → Valid OAuth Redirect URIs
+FACEBOOK_REDIRECT_URI = config(
+    'FACEBOOK_REDIRECT_URI',
+    default='http://localhost:8000/api/v1/platforms/facebook/callback/'
+)
+# Your React frontend URL (used for postMessage security check in popup)
+FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:3000')
+
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = config('DJANGO_SECRET_KEY', default='django-insecure-rf#m85xc6pefl#85gx(-g)%w)2_*_eg5*26ovyanr!7n%8vhm=')
 
@@ -24,12 +36,15 @@ ALLOWED_HOSTS = [
     'abedintechllc.com',
     'www.abedintechllc.com',
     'lorilee-neediest-zina.ngrok-free.dev',
+    'frances-vegetative-vincent.ngrok-free.dev',
+     
 ]
 
 CSRF_TRUSTED_ORIGINS = [
     'https://abedintechllc.com',
     'https://www.abedintechllc.com',
     'https://lorilee-neediest-zina.ngrok-free.dev',
+    'https://frances-vegetative-vincent.ngrok-free.dev'
 ]
 
 # Application definition

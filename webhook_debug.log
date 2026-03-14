@@ -394,3 +394,101 @@
 [2026-03-10 01:11:57.217130] MessageHandler imported successfully
 [2026-03-10 01:11:57.217130] MessageHandler initialized OK
 [2026-03-10 01:11:57.221738] Webhook handled OK, returning 200
+[2026-03-12 09:06:54.081360] ==================================================
+[2026-03-12 09:06:54.081360] WEBHOOK POST received for page: 877455748776936
+[2026-03-12 09:06:54.082522] Data: {
+  "object": "page",
+  "entry": [
+    {
+      "id": "877455748776936",
+      "messaging": [
+        {
+          "sender": {
+            "id": "123456789"
+          },
+          "recipient": {
+            "id": "877455748776936"
+          },
+          "timestamp": 1700000000,
+          "message": {
+            "mid": "test_mid_001",
+            "text": "Hello, this is a test message"
+          }
+        }
+      ]
+    }
+  ]
+}
+[2026-03-12 09:06:54.089327] Connection found: Customoo (auto_reply=True)
+[2026-03-12 09:06:54.089327] Processing 1 entries...
+[2026-03-12 09:06:54.112374] MessageHandler imported successfully
+[2026-03-12 09:06:54.118742] MessageHandler initialized OK
+[2026-03-12 09:06:54.119772] Message from 123456789: 'Hello, this is a test message' (attachments: 0)
+[2026-03-12 09:07:01.614889] process_message result: False
+[2026-03-12 09:07:01.614889] Webhook handled OK, returning 200
+[2026-03-12 10:50:54.613476] ==================================================
+[2026-03-12 10:50:54.614460] WEBHOOK POST received for page: 877455748776936
+[2026-03-12 10:50:54.614460] Data: {
+  "object": "page",
+  "entry": [
+    {
+      "id": "877455748776936",
+      "time": 1773291054612,
+      "messaging": [
+        {
+          "sender": {
+            "id": "admin_test_user_000"
+          },
+          "recipient": {
+            "id": "877455748776936"
+          },
+          "timestamp": 1773291054612,
+          "message": {
+            "mid": "test_mid_1773291054",
+            "text": "Admin connection test \u2014 please ignore."
+          }
+        }
+      ]
+    }
+  ]
+}
+[2026-03-12 10:50:54.616599] Connection found: Customoo (auto_reply=True)
+[2026-03-12 10:50:54.617577] Processing 1 entries...
+[2026-03-12 10:50:54.634803] MessageHandler imported successfully
+[2026-03-12 10:50:54.638838] MessageHandler initialized OK
+[2026-03-12 10:50:54.638838] Message from admin_test_user_000: 'Admin connection test — please ignore.' (attachments: 0)
+[2026-03-12 10:51:02.600925] process_message result: False
+[2026-03-12 10:51:02.601926] Webhook handled OK, returning 200
+[2026-03-12 11:03:25.733226] ==================================================
+[2026-03-12 11:03:25.734225] WEBHOOK POST received for page: 877455748776936
+[2026-03-12 11:03:25.734225] Data: {
+  "object": "page",
+  "entry": [
+    {
+      "id": "877455748776936",
+      "time": 1773291805733,
+      "messaging": [
+        {
+          "sender": {
+            "id": "admin_test_user_000"
+          },
+          "recipient": {
+            "id": "877455748776936"
+          },
+          "timestamp": 1773291805733,
+          "message": {
+            "mid": "test_mid_1773291805",
+            "text": "Admin connection test \u2014 please ignore."
+          }
+        }
+      ]
+    }
+  ]
+}
+[2026-03-12 11:03:25.735364] Connection found: Customoo (auto_reply=True)
+[2026-03-12 11:03:25.735364] Processing 1 entries...
+[2026-03-12 11:03:25.739853] MessageHandler imported successfully
+[2026-03-12 11:03:25.740857] MessageHandler initialized OK
+[2026-03-12 11:03:25.741854] Message from admin_test_user_000: 'Admin connection test — please ignore.' (attachments: 0)
+[2026-03-12 11:03:31.479701] process_message result: False
+[2026-03-12 11:03:31.479701] Webhook handled OK, returning 200
