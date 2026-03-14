@@ -16,11 +16,11 @@ import {
 import { Button, Modal, ConfirmModal, Spinner, PlatformIcon, platformColors, platformNames } from '../components/ui';
 import type { SocialAccount, PlatformType } from '../types';
 import { authFetch } from '../services/api';
-<<<<<<< HEAD
+// <<<<<<< HEAD
 import { toast as showToast } from '../store/toastStore';
-=======
+
 import { FacebookConnect } from '../components/platforms/FacebookConnect';
->>>>>>> chat-fay-v-1.0
+// >>>>>>> chat-fay-v-1.0
 
 // PLATFORM CONSTANTS MAPPED FROM DJANGO TEMPLATE
 const platformFeatures: Record<string, string[]> = {
