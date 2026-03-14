@@ -40,6 +40,7 @@ import type {
 import { authFetch } from '../services/api';
 import { PromptInfoButton } from '../components/ui/PromptInfoButton';
 import { DiamondCostIndicator } from '../components/diamond';
+import { toast } from '../store/toastStore';
 
 // Style options
 const styles: { id: VideoStyle; label: string }[] = [
@@ -312,6 +313,7 @@ export function AIVideoPage() {
         setGeneratedVideo(data);
         const usedP = data.used_prompt || data.enhanced_prompt || '';
         if (usedP) setVideoUsedPrompt(usedP);
+        toast.success('Video generated successfully!');
       } else {
         setError(data.error || 'Failed to generate video');
       }

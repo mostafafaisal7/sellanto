@@ -84,6 +84,7 @@ interface OverflowState {
   complete: () => void;
   skip: () => void;
   reset: () => void;
+  initFromIdeasHub: (params: { brandId: number; idea: IdeaData }) => void;
   loadFromServer: () => Promise<void>;
   saveToServer: () => Promise<void>;
 }
@@ -198,6 +199,18 @@ export const useOverflowStore = create<OverflowState>()(
         competitorsCompleted: false, trendingCompleted: false,
         selectedTrendingTopics: [], brandContext: null,
         ideasData: [], selectedIdeaIds: [], ideaMediaPreferences: {}, ideasUsedPrompt: '', trendingUsedPrompt: '',
+        selectedCaptionIds: [], generatedMediaIds: [], generatedMediaUrl: null,
+        createdPostId: null, selectedCaptions: [], captionMediaMap: {},
+        isCompleted: false, isSkipped: false,
+      }),
+
+      initFromIdeasHub: ({ brandId, idea }) => set({
+        currentStep: 3, subStep: 1, brandId,
+        dnaCompleted: true, pillarsCompleted: true,
+        competitorsCompleted: true, trendingCompleted: true,
+        selectedTrendingTopics: [], brandContext: null,
+        ideasData: [idea], selectedIdeaIds: [idea.id],
+        ideaMediaPreferences: {}, ideasUsedPrompt: '', trendingUsedPrompt: '',
         selectedCaptionIds: [], generatedMediaIds: [], generatedMediaUrl: null,
         createdPostId: null, selectedCaptions: [], captionMediaMap: {},
         isCompleted: false, isSkipped: false,

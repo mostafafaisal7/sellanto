@@ -19,6 +19,7 @@ import {
 import { Button, Card, Input, Avatar } from '../components/ui';
 import { useAuthStore } from '../store';
 import { authFetch } from '../services/api';
+import { toast } from '../store/toastStore';
 
 const profileSchema = z.object({
   first_name: z.string().min(1, 'First name is required'),
@@ -88,6 +89,7 @@ export function ProfilePage() {
       if (response.ok) {
         setProfileSaved(true);
         setIsEditingProfile(false);
+        toast.success('Profile updated!');
         setTimeout(() => setProfileSaved(false), 3000);
       }
     } catch (error) {
@@ -112,6 +114,7 @@ export function ProfilePage() {
         setPasswordChanged(true);
         setIsChangingPassword(false);
         passwordForm.reset();
+        toast.success('Password changed successfully!');
         setTimeout(() => setPasswordChanged(false), 3000);
       }
     } catch (error) {

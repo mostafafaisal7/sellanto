@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   PlusIcon, TrashIcon, PencilIcon,
@@ -6,14 +7,16 @@ import {
   MagnifyingGlassIcon, LightBulbIcon,
   ArrowTopRightOnSquareIcon, BeakerIcon,
   CheckCircleIcon, FireIcon, ClockIcon,
-  ArrowPathIcon,
+  ArrowPathIcon, CloudArrowUpIcon, PhotoIcon,
 } from '@heroicons/react/24/outline';
 import strategyService from '../services/strategyService';
 import api from '../services/api';
+import { authFetch } from '../services/api';
 import type { TrendingTopic, BrandDNAHistoryEntry } from '../types';
 import { PromptInfoButton } from '../components/ui/PromptInfoButton';
 import { DiamondCostIndicator } from '../components/diamond';
 import { usePromptHistory } from '../hooks/usePromptHistory';
+import { toast } from '../store/toastStore';
 
 interface Pillar {
   id: number;
@@ -65,11 +68,26 @@ interface CompetitorInsight {
 }
 
 export function StrategyHubPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab') as 'pillars' | 'competitors' | 'dna' | 'trending' | null;
+
   const [pillars, setPillars] = useState<Pillar[]>([]);
   const [competitors, setCompetitors] = useState<Competitor[]>([]);
   const [compliance, setCompliance] = useState<ComplianceData | null>(null);
   const [insights, setInsights] = useState<CompetitorInsight[]>([]);
-  const [activeTab, setActiveTab] = useState<'pillars' | 'competitors' | 'dna' | 'trending'>('pillars');
+  const [activeTab, setActiveTab] = useState<'pillars' | 'competitors' | 'dna' | 'trending'>(tabParam || 'pillars');
+
+  // Sync tab from URL query param
+  useEffect(() => {
+    if (tabParam && tabParam !== activeTab) setActiveTab(tabParam);
+  }, [tabParam]);
+
+  // Sync activeTab to URL so sidebar can track it
+  const handleTabChange = (tab: 'pillars' | 'competitors' | 'dna' | 'trending') => {
+    setActiveTab(tab);
+    setSearchParams({ tab }, { replace: true });
+  };
+
   const [loading, setLoading] = useState(true);
   const [brandId, setBrandId] = useState<number | null>(null);
 
@@ -84,6 +102,7 @@ export function StrategyHubPage() {
   const [dnaError, setDnaError] = useState<string | null>(null);
   const [dnaData, setDnaData] = useState<Record<string, any> | null>(null);
   const [dnaGeneratedAt, setDnaGeneratedAt] = useState<string | null>(null);
+  const [dnaSource, setDnaSource] = useState<string | null>(null);
 
   // Trending
   const [trendingTopics, setTrendingTopics] = useState<TrendingTopic[]>([]);
@@ -106,6 +125,17 @@ export function StrategyHubPage() {
     social_platforms: [] as string[], keywords: [] as string[],
     competitor_positioning: '', website_url: '',
   });
+
+  // Brand Logo (primary — Brand model field)
+  const [brandLogo, setBrandLogo] = useState<string | null>(null);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+
+  // Brand Asset Logos (multi-logo via BrandAsset)
+  const [brandAssetLogos, setBrandAssetLogos] = useState<Array<{ id: number; file: string; name: string }>>([]);
+  const [assetLogoUploading, setAssetLogoUploading] = useState(false);
+  const [assetLogoName, setAssetLogoName] = useState('');
 
   // Custom DNA fields
   const [customFields, setCustomFields] = useState<Array<{ key: string; value: string; type: 'text' | 'list' }>>([]);
@@ -163,6 +193,12 @@ export function StrategyHubPage() {
         if (brands.length > 0) {
           const primary = brands.find((b: { is_primary: boolean }) => b.is_primary) || brands[0];
           setBrandId(primary.id);
+          if (primary.logo) setBrandLogo(primary.logo);
+          // Fetch brand asset logos
+          try {
+            const logos = await strategyService.getBrandLogos(primary.id);
+            setBrandAssetLogos(logos);
+          } catch { /* silent */ }
         } else {
           setLoading(false);
         }
@@ -203,6 +239,7 @@ export function StrategyHubPage() {
         if (dnaStatus.brand_dna && Object.keys(dnaStatus.brand_dna).length > 0) {
           setDnaData(dnaStatus.brand_dna);
           setDnaGeneratedAt(dnaStatus.brand_dna_generated_at);
+          if (dnaStatus.brand_dna_source) setDnaSource(dnaStatus.brand_dna_source);
           if (dnaStatus.website_url) setDnaUrl(dnaStatus.website_url);
         }
       } catch { /* no DNA yet */ }
@@ -244,6 +281,16 @@ export function StrategyHubPage() {
     setLoading(false);
   };
 
+  // Auto-generate Brand DNA when website URL exists from registration but DNA is only structured (not AI-generated)
+  const autoGenTriggered = useRef(false);
+  useEffect(() => {
+    if (autoGenTriggered.current) return;
+    if (brandId && dnaUrl && dnaSource === 'structured' && !dnaLoading && activeTab === 'dna') {
+      autoGenTriggered.current = true;
+      handleGenerateDNA();
+    }
+  }, [brandId, dnaUrl, dnaSource, dnaLoading, activeTab]);
+
   const handleCreatePillar = async () => {
     try {
       if (editingPillar) {
@@ -257,6 +304,7 @@ export function StrategyHubPage() {
       setShowPillarForm(false);
       setPillarForm({ name: '', description: '', target_percentage: 25, color_code: '#6366F1' });
       setEditingPillar(null);
+      toast.success(editingPillar ? 'Pillar updated!' : 'Pillar created!');
       loadData();
     } catch (err) {
       console.error('Failed to save pillar:', err);
@@ -278,6 +326,7 @@ export function StrategyHubPage() {
       await strategyService.addCompetitor({ ...(brandId ? { brand: brandId } : {}), ...compForm });
       setShowCompForm(false);
       setCompForm({ platform: 'twitter', handle_or_url: '' });
+      toast.success('Competitor added!');
       loadData();
     } catch (err) {
       console.error('Failed to add competitor:', err);
@@ -322,6 +371,102 @@ export function StrategyHubPage() {
     setAnalyzingAll(false);
   };
 
+  // Logo upload handlers
+  const handleLogoFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.type !== 'image/png') {
+      alert('Please select a PNG file');
+      return;
+    }
+    setLogoFile(file);
+    setLogoPreview(URL.createObjectURL(file));
+  };
+
+  const handleLogoUpload = async () => {
+    if (!brandId || !logoFile) return;
+    setLogoUploading(true);
+    try {
+      // Upload to Brand model
+      const formData = new FormData();
+      formData.append('logo', logoFile);
+      const res = await api.patch(`/brands/${brandId}/`, formData);
+      setBrandLogo(res.data.logo);
+
+      // Also create UserLogo for AI Image page (legacy)
+      const logoFormData = new FormData();
+      logoFormData.append('name', dnaData?.brand_name || 'Brand Logo');
+      logoFormData.append('logo_file', logoFile);
+      await authFetch('/api/v1/ai-image/logos/', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${localStorage.getItem('access_token')}` },
+        body: logoFormData,
+      });
+
+      // Also save as BrandAsset for AI Image Generation logo picker
+      try {
+        await strategyService.uploadBrandLogo(brandId, logoFile, dnaData?.brand_name || 'Brand Logo');
+        await fetchBrandAssetLogos();
+      } catch { /* silent — primary logo saved */ }
+
+      setLogoFile(null);
+      setLogoPreview(null);
+    } catch (err) {
+      console.error('Failed to upload logo:', err);
+    } finally {
+      setLogoUploading(false);
+    }
+  };
+
+  const handleRemoveLogo = () => {
+    setLogoFile(null);
+    if (logoPreview) {
+      URL.revokeObjectURL(logoPreview);
+      setLogoPreview(null);
+    }
+  };
+
+  // Brand Asset Logos — fetch, upload, delete
+  const fetchBrandAssetLogos = async () => {
+    if (!brandId) return;
+    try {
+      const logos = await strategyService.getBrandLogos(brandId);
+      setBrandAssetLogos(logos);
+    } catch {
+      // silent
+    }
+  };
+
+  const handleAssetLogoUpload = async (file: File) => {
+    if (!brandId) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file');
+      return;
+    }
+    setAssetLogoUploading(true);
+    try {
+      const name = assetLogoName.trim() || file.name.replace(/\.[^.]+$/, '');
+      await strategyService.uploadBrandLogo(brandId, file, name);
+      setAssetLogoName('');
+      await fetchBrandAssetLogos();
+      toast.success('Logo uploaded!');
+    } catch {
+      toast.error('Failed to upload logo');
+    } finally {
+      setAssetLogoUploading(false);
+    }
+  };
+
+  const handleAssetLogoDelete = async (assetId: number) => {
+    try {
+      await strategyService.deleteBrandLogo(assetId);
+      setBrandAssetLogos((prev) => prev.filter((l) => l.id !== assetId));
+      toast.success('Logo removed');
+    } catch {
+      toast.error('Failed to delete logo');
+    }
+  };
+
   const handleGenerateDNA = async () => {
     if (!brandId || !dnaUrl.trim()) return;
     setDnaLoading(true);
@@ -331,6 +476,8 @@ export function StrategyHubPage() {
       if (result.brand_dna) {
         setDnaData(result.brand_dna);
         setDnaGeneratedAt(result.generated_at);
+        setDnaSource('website');
+        toast.success('Brand DNA generated!');
       }
       if (result.used_prompt) setDnaUsedPrompt(result.used_prompt);
     } catch (err: any) {
@@ -348,6 +495,7 @@ export function StrategyHubPage() {
       if (result.brand_dna) {
         setDnaData(result.brand_dna);
         setDnaGeneratedAt(result.generated_at);
+        setDnaSource('website');
       }
       if (result.used_prompt) setDnaUsedPrompt(result.used_prompt);
     } catch { /* keep existing */ }
@@ -589,7 +737,7 @@ export function StrategyHubPage() {
         {(['pillars', 'competitors', 'dna', 'trending'] as const).map((tab) => (
           <button
             key={tab}
-            onClick={() => setActiveTab(tab)}
+            onClick={() => handleTabChange(tab)}
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
               activeTab === tab
                 ? 'border-primary-500 text-primary-400'
@@ -1139,6 +1287,7 @@ export function StrategyHubPage() {
             <p className="text-sm text-text-secondary mb-4">
               Enter your website URL and we'll analyze it to extract your brand's identity, tone, products, values, and more.
             </p>
+
             <div className="flex gap-3">
               <input
                 type="url"
@@ -1197,6 +1346,99 @@ export function StrategyHubPage() {
               {/* Brand Identity Inputs */}
               <div className="card p-6">
                 <h3 className="text-lg font-semibold mb-4">Brand Identity</h3>
+
+                {/* Logo Upload in Edit Mode */}
+                <div className="mb-5 p-4 bg-dark-700/30 border border-white/10 rounded-xl">
+                  <label className="text-xs font-medium text-text-secondary uppercase tracking-wide flex items-center gap-1.5 mb-3">
+                    <PhotoIcon className="w-4 h-4" />
+                    Brand Logo (PNG)
+                  </label>
+                  <div className="flex items-center gap-4">
+                    {(logoPreview || brandLogo) && (
+                      <div className="relative w-16 h-16 rounded-xl border-2 border-primary-500/30 bg-dark-800 flex items-center justify-center overflow-hidden">
+                        <img src={logoPreview || brandLogo || ''} alt="Brand Logo" className="w-full h-full object-contain p-1.5" />
+                        {logoPreview && (
+                          <button onClick={handleRemoveLogo} className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-white text-xs hover:bg-red-600">&times;</button>
+                        )}
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <label className="btn-secondary px-3 py-2 text-sm cursor-pointer inline-flex items-center gap-1.5">
+                        <CloudArrowUpIcon className="w-4 h-4" />
+                        {brandLogo ? 'Replace' : 'Upload'} Logo
+                        <input type="file" accept="image/png" className="hidden" onChange={handleLogoFileSelect} />
+                      </label>
+                      {logoPreview && (
+                        <button onClick={handleLogoUpload} disabled={logoUploading} className="btn-primary px-3 py-2 text-sm flex items-center gap-1.5">
+                          {logoUploading ? <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white" /> : <CheckCircleIcon className="w-4 h-4" />}
+                          {logoUploading ? 'Saving...' : 'Save'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Multi-Logo Upload (BrandAsset) for AI Image Generation */}
+                <div className="mb-5 p-4 bg-dark-700/30 border border-white/10 rounded-xl">
+                  <label className="text-xs font-medium text-text-secondary uppercase tracking-wide flex items-center gap-1.5 mb-3">
+                    <PhotoIcon className="w-4 h-4" />
+                    Brand Logos for AI Image Generation
+                  </label>
+                  <p className="text-xs text-text-muted mb-3">
+                    Upload multiple logos to use in AI Image Generation. These will appear as options when generating images.
+                  </p>
+
+                  {/* Existing logos grid */}
+                  {brandAssetLogos.length > 0 && (
+                    <div className="flex flex-wrap gap-3 mb-3">
+                      {brandAssetLogos.map((logo) => (
+                        <div key={logo.id} className="relative group">
+                          <div className="w-16 h-16 rounded-lg border-2 border-white/10 bg-dark-800 flex items-center justify-center overflow-hidden">
+                            <img src={logo.file} alt={logo.name} className="w-full h-full object-contain p-1.5" />
+                          </div>
+                          <p className="text-[10px] text-text-muted text-center mt-1 max-w-[64px] truncate">{logo.name}</p>
+                          <button
+                            onClick={() => handleAssetLogoDelete(logo.id)}
+                            className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 rounded-full items-center justify-center text-white text-xs hover:bg-red-600 hidden group-hover:flex"
+                          >
+                            &times;
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Upload new logo */}
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      className="input flex-1 text-sm"
+                      placeholder="Logo name (optional)"
+                      value={assetLogoName}
+                      onChange={(e) => setAssetLogoName(e.target.value)}
+                    />
+                    <label className="btn-secondary px-3 py-2 text-sm cursor-pointer inline-flex items-center gap-1.5 flex-shrink-0">
+                      {assetLogoUploading ? (
+                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white" />
+                      ) : (
+                        <CloudArrowUpIcon className="w-4 h-4" />
+                      )}
+                      {assetLogoUploading ? 'Uploading...' : 'Add Logo'}
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                        className="hidden"
+                        disabled={assetLogoUploading}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleAssetLogoUpload(file);
+                          e.target.value = '';
+                        }}
+                      />
+                    </label>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="text-xs font-medium text-text-secondary uppercase tracking-wide">Brand Name</label>
@@ -1642,6 +1884,131 @@ export function StrategyHubPage() {
                   </div>
                 );
               })()}
+
+              {/* Brand Logo */}
+              <div className="card p-6 transition-all">
+                <h3 className="text-sm font-semibold mb-4 uppercase tracking-wide text-text-secondary flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    <PhotoIcon className="w-4 h-4 text-amber-400" />
+                    Brand Logo
+                  </span>
+                </h3>
+                <div className="flex items-center gap-5">
+                  {/* Logo preview / placeholder */}
+                  {(logoPreview || brandLogo) ? (
+                    <div className="relative w-24 h-24 rounded-xl border-2 border-primary-500/30 bg-dark-800 flex items-center justify-center overflow-hidden flex-shrink-0">
+                      <img
+                        src={logoPreview || brandLogo || ''}
+                        alt="Brand Logo"
+                        className="w-full h-full object-contain p-2"
+                      />
+                      {logoPreview && (
+                        <button
+                          onClick={handleRemoveLogo}
+                          className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-white text-xs hover:bg-red-600"
+                        >
+                          &times;
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="w-24 h-24 rounded-xl border-2 border-dashed border-white/20 bg-dark-800 flex items-center justify-center flex-shrink-0">
+                      <PhotoIcon className="w-10 h-10 text-text-muted" />
+                    </div>
+                  )}
+
+                  <div className="flex-1">
+                    {brandLogo && !logoPreview && (
+                      <p className="text-xs text-green-400 mb-2 flex items-center gap-1">
+                        <CheckCircleIcon className="w-3.5 h-3.5" />
+                        Uploaded — available in AI Image Generation
+                      </p>
+                    )}
+                    {!brandLogo && !logoPreview && (
+                      <p className="text-xs text-text-muted mb-2">Upload your brand logo (PNG) to use in AI Image Generation</p>
+                    )}
+                    <div className="flex items-center gap-2">
+                      {!logoPreview && (
+                        <label className="btn-secondary px-4 py-2 text-sm cursor-pointer inline-flex items-center gap-2">
+                          <CloudArrowUpIcon className="w-4 h-4" />
+                          {brandLogo ? 'Replace Logo' : 'Upload PNG'}
+                          <input type="file" accept="image/png" className="hidden" onChange={handleLogoFileSelect} />
+                        </label>
+                      )}
+                      {logoPreview && (
+                        <button
+                          onClick={handleLogoUpload}
+                          disabled={logoUploading}
+                          className="btn-primary px-4 py-2 text-sm flex items-center gap-2"
+                        >
+                          {logoUploading ? (
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+                          ) : (
+                            <CloudArrowUpIcon className="w-4 h-4" />
+                          )}
+                          {logoUploading ? 'Uploading...' : 'Upload Logo'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Brand Asset Logos (multi-logo for AI Image) */}
+              {brandAssetLogos.length > 0 && (
+                <div className="card p-6 transition-all">
+                  <h3 className="text-sm font-semibold mb-4 uppercase tracking-wide text-text-secondary flex items-center gap-2">
+                    <PhotoIcon className="w-4 h-4 text-primary-400" />
+                    Logos for AI Image Generation
+                    <span className="text-xs font-normal text-text-muted">({brandAssetLogos.length})</span>
+                  </h3>
+                  <div className="flex flex-wrap gap-4">
+                    {brandAssetLogos.map((logo) => (
+                      <div key={logo.id} className="relative group text-center">
+                        <div className="w-20 h-20 rounded-xl border-2 border-white/10 bg-dark-800 flex items-center justify-center overflow-hidden">
+                          <img src={logo.file} alt={logo.name} className="w-full h-full object-contain p-2" />
+                        </div>
+                        <p className="text-[10px] text-text-muted mt-1 max-w-[80px] truncate mx-auto">{logo.name}</p>
+                        <button
+                          onClick={() => handleAssetLogoDelete(logo.id)}
+                          className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 rounded-full items-center justify-center text-white text-xs hover:bg-red-600 hidden group-hover:flex"
+                        >
+                          &times;
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Quick upload in view mode */}
+                  <div className="mt-4 flex items-center gap-2">
+                    <input
+                      type="text"
+                      className="input flex-1 text-sm"
+                      placeholder="Logo name (optional)"
+                      value={assetLogoName}
+                      onChange={(e) => setAssetLogoName(e.target.value)}
+                    />
+                    <label className="btn-secondary px-3 py-2 text-sm cursor-pointer inline-flex items-center gap-1.5 flex-shrink-0">
+                      {assetLogoUploading ? (
+                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white" />
+                      ) : (
+                        <CloudArrowUpIcon className="w-4 h-4" />
+                      )}
+                      {assetLogoUploading ? 'Uploading...' : 'Add Logo'}
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                        className="hidden"
+                        disabled={assetLogoUploading}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleAssetLogoUpload(file);
+                          e.target.value = '';
+                        }}
+                      />
+                    </label>
+                  </div>
+                </div>
+              )}
 
               {/* Website Link */}
               {dnaData.website_url && (

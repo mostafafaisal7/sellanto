@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   CheckCircleIcon,
@@ -25,13 +25,14 @@ import {
   ArrowTopRightOnSquareIcon,
   EyeIcon,
   XMarkIcon,
+  CloudArrowUpIcon,
 } from '@heroicons/react/24/outline';
 import { useOverflowStore } from '../store';
 import strategyService from '../services/strategyService';
 import captionService from '../services/captionService';
 import { imageService } from '../services/imageService';
 import postService from '../services/postService';
-import api from '../services/api';
+import api, { authFetch } from '../services/api';
 import type { ContentIdea, TrendingTopic, PlatformType } from '../types';
 import { PromptInfoButton } from '../components/ui/PromptInfoButton';
 import { usePromptHistory } from '../hooks/usePromptHistory';
@@ -65,17 +66,24 @@ interface CaptionVariant {
 // ─── Main Component ──────────────────────────────────────
 export function OverflowPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const overflow = useOverflowStore();
 
   const [brandId, setBrandIdLocal] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Fresh start on every visit — reset store, then load brand
+  // Fresh start on normal visit; skip reset if coming from Ideas Hub
   useEffect(() => {
-    overflow.reset();
-    localStorage.removeItem('overflow_selected_caption');
-    localStorage.removeItem('overflow_caption_groups');
-    localStorage.removeItem('overflow_has_upload');
+    const fromIdeas = (location.state as any)?.fromIdeas === true;
+
+    if (!fromIdeas) {
+      // Normal entry — full reset and fresh start
+      overflow.reset();
+      localStorage.removeItem('overflow_selected_caption');
+      localStorage.removeItem('overflow_caption_groups');
+      localStorage.removeItem('overflow_has_upload');
+    }
+
     const init = async () => {
       try {
         const res = await api.get('/brands/');
@@ -83,7 +91,9 @@ export function OverflowPage() {
         if (brands.length > 0) {
           const primary = brands.find((b: any) => b.is_primary) || brands[0];
           setBrandIdLocal(primary.id);
-          overflow.setBrandId(primary.id);
+          if (!fromIdeas) {
+            overflow.setBrandId(primary.id);
+          }
         }
       } catch { /* no brands */ }
       setLoading(false);
@@ -296,6 +306,12 @@ function DNASubStep({ brandId }: { brandId: number | null }) {
   const [dnaRegenerating, setDnaRegenerating] = useState(false);
   const dnaHistory = usePromptHistory(brandId, 'brand_dna');
 
+  // Brand Logo
+  const [brandLogo, setBrandLogo] = useState<string | null>(null);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+
   const BUILTIN_KEYS = new Set([
     'brand_name', 'tagline', 'industry', 'description', 'products_services',
     'target_audience', 'unique_selling_points', 'brand_voice', 'brand_values',
@@ -303,6 +319,7 @@ function DNASubStep({ brandId }: { brandId: number | null }) {
     'competitor_positioning', 'website_url',
   ]);
 
+  const autoGenTriggered = useRef(false);
   useEffect(() => {
     if (!brandId) return;
     strategyService.getDNAStatus(brandId).then((res) => {
@@ -310,7 +327,23 @@ function DNASubStep({ brandId }: { brandId: number | null }) {
         setDnaData(res.brand_dna);
         if (res.website_url) setUrl(res.website_url);
         overflow.markDNAComplete();
+        // Auto-generate if only structured DNA exists and website URL is available
+        if (res.brand_dna_source === 'structured' && res.website_url && !autoGenTriggered.current) {
+          autoGenTriggered.current = true;
+          setLoading(true);
+          strategyService.generateDNA(brandId, res.website_url).then((result) => {
+            if (result.brand_dna) {
+              setDnaData(result.brand_dna);
+              overflow.markDNAComplete();
+              if (result.used_prompt) setDnaUsedPrompt(result.used_prompt);
+            }
+          }).catch(() => {}).finally(() => setLoading(false));
+        }
       }
+    }).catch(() => {});
+    // Fetch brand logo
+    api.get(`/brands/${brandId}/`).then((res) => {
+      if (res.data.logo) setBrandLogo(res.data.logo);
     }).catch(() => {});
   }, [brandId]);
 
@@ -398,6 +431,42 @@ function DNASubStep({ brandId }: { brandId: number | null }) {
   const setField = (f: string, v: string) => setDnaInputs((p) => ({ ...p, [f]: v }));
   const addChip = (f: string, v: string) => { if (!v.trim()) return; setDnaInputs((p) => ({ ...p, [f]: [...(p[f] || []), v.trim()] })); };
   const removeChip = (f: string, idx: number) => setDnaInputs((p) => ({ ...p, [f]: (p[f] || []).filter((_: string, i: number) => i !== idx) }));
+
+  const handleLogoFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.type !== 'image/png') { alert('Please select a PNG file'); return; }
+    setLogoFile(file);
+    setLogoPreview(URL.createObjectURL(file));
+  };
+
+  const handleLogoUpload = async () => {
+    if (!brandId || !logoFile) return;
+    setLogoUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('logo', logoFile);
+      const res = await api.patch(`/brands/${brandId}/`, formData);
+      setBrandLogo(res.data.logo);
+      // Also create UserLogo for AI Image page
+      const logoFormData = new FormData();
+      logoFormData.append('name', dnaData?.brand_name || 'Brand Logo');
+      logoFormData.append('logo_file', logoFile);
+      await authFetch('/api/v1/ai-image/logos/', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${localStorage.getItem('access_token')}` },
+        body: logoFormData,
+      });
+      setLogoFile(null);
+      setLogoPreview(null);
+    } catch (err) { console.error('Failed to upload logo:', err); }
+    finally { setLogoUploading(false); }
+  };
+
+  const handleRemoveLogo = () => {
+    setLogoFile(null);
+    if (logoPreview) { URL.revokeObjectURL(logoPreview); setLogoPreview(null); }
+  };
 
   return (
     <div className="space-y-4">
@@ -649,6 +718,54 @@ function DNASubStep({ brandId }: { brandId: number | null }) {
               </div>
             );
           })()}
+
+          {/* Brand Logo */}
+          <div className="card p-6 transition-all">
+            <h3 className="text-sm font-semibold mb-4 uppercase tracking-wide text-text-secondary flex items-center gap-2">
+              <PhotoIcon className="w-4 h-4 text-amber-400" />
+              Brand Logo
+            </h3>
+            <div className="flex items-center gap-5">
+              {(logoPreview || brandLogo) ? (
+                <div className="relative w-24 h-24 rounded-xl border-2 border-primary-500/30 bg-dark-800 flex items-center justify-center overflow-hidden flex-shrink-0">
+                  <img src={logoPreview || brandLogo || ''} alt="Brand Logo" className="w-full h-full object-contain p-2" />
+                  {logoPreview && (
+                    <button onClick={handleRemoveLogo} className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-white text-xs hover:bg-red-600">&times;</button>
+                  )}
+                </div>
+              ) : (
+                <div className="w-24 h-24 rounded-xl border-2 border-dashed border-white/20 bg-dark-800 flex items-center justify-center flex-shrink-0">
+                  <PhotoIcon className="w-10 h-10 text-text-muted" />
+                </div>
+              )}
+              <div className="flex-1">
+                {brandLogo && !logoPreview && (
+                  <p className="text-xs text-green-400 mb-2 flex items-center gap-1">
+                    <CheckCircleIcon className="w-3.5 h-3.5" />
+                    Uploaded — available in AI Image Generation
+                  </p>
+                )}
+                {!brandLogo && !logoPreview && (
+                  <p className="text-xs text-text-muted mb-2">Upload your brand logo (PNG) to use in AI Image Generation</p>
+                )}
+                <div className="flex items-center gap-2">
+                  {!logoPreview && (
+                    <label className="btn-secondary px-4 py-2 text-sm cursor-pointer inline-flex items-center gap-2">
+                      <CloudArrowUpIcon className="w-4 h-4" />
+                      {brandLogo ? 'Replace Logo' : 'Upload PNG'}
+                      <input type="file" accept="image/png" className="hidden" onChange={handleLogoFileSelect} />
+                    </label>
+                  )}
+                  {logoPreview && (
+                    <button onClick={handleLogoUpload} disabled={logoUploading} className="btn-primary px-4 py-2 text-sm flex items-center gap-2">
+                      {logoUploading ? <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" /> : <CloudArrowUpIcon className="w-4 h-4" />}
+                      {logoUploading ? 'Uploading...' : 'Upload Logo'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
 
           {dnaData.website_url && (
             <div className="text-center">
@@ -2019,7 +2136,45 @@ function MediaStep() {
   const [copyOverlayOpen, setCopyOverlayOpen] = useState<string | null>(null);
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
+  // Brand logo state (mandatory)
+  const [brandLogos, setBrandLogos] = useState<{ id: number; file: string; name: string }[]>([]);
+  const [selectedBrandLogos, setSelectedBrandLogos] = useState<Record<string, number | null>>({});
+  const [brandLogoPositions, setBrandLogoPositions] = useState<Record<string, string>>({});
+
+  // With Copy state (per caption)
+  const [withCopyMap, setWithCopyMap] = useState<Record<string, boolean>>({});
+  const [copySuggestionsMap, setCopySuggestionsMap] = useState<Record<string, { text: string; style?: string }[]>>({});
+  const [selectedCopyIdxMap, setSelectedCopyIdxMap] = useState<Record<string, number | null>>({});
+  const [customCopyMap, setCustomCopyMap] = useState<Record<string, string>>({});
+  const [useCustomCopyMap, setUseCustomCopyMap] = useState<Record<string, boolean>>({});
+  const [loadingCopyMap, setLoadingCopyMap] = useState<Record<string, boolean>>({});
+  const [dualResultsMap, setDualResultsMap] = useState<Record<string, { generation_id: number; image_url: string }[]>>({});
+
   const captions = overflow.selectedCaptions;
+
+  // Load brand logos
+  useEffect(() => {
+    if (overflow.brandId) {
+      imageService.getBrandLogos(overflow.brandId).then((logos) => {
+        setBrandLogos(logos.map((l) => ({ id: l.id, file: l.file, name: l.name })));
+      }).catch(() => {});
+    }
+  }, [overflow.brandId]);
+
+  const fetchCopySuggestionsFor = async (captionId: string, captionText: string) => {
+    setLoadingCopyMap((p) => ({ ...p, [captionId]: true }));
+    try {
+      const res = await imageService.generateCopySuggestions({
+        brand_id: overflow.brandId || undefined,
+        caption_text: captionText || 'marketing image',
+        count: 5,
+      });
+      const suggestions = res.suggestions || [];
+      setCopySuggestionsMap((p) => ({ ...p, [captionId]: suggestions }));
+      if (suggestions.length > 0) setSelectedCopyIdxMap((p) => ({ ...p, [captionId]: 0 }));
+    } catch { /* ignore */ }
+    setLoadingCopyMap((p) => ({ ...p, [captionId]: false }));
+  };
 
   const toMediaUrl = (url: string | null | undefined): string | null => {
     if (!url) return null;
@@ -2155,6 +2310,20 @@ function MediaStep() {
         req.product_position = 'center';
         req.product_scale = 50;
       }
+      // Brand logo (mandatory)
+      const blId = selectedBrandLogos[captionId] || (brandLogos.length > 0 ? brandLogos[0].id : null);
+      if (blId) {
+        req.brand_logo_id = blId;
+        req.logo_position = brandLogoPositions[captionId] || 'bottom_right';
+      }
+      // With Copy
+      if (withCopyMap[captionId]) {
+        req.with_copy = true;
+        const activeCopy = useCustomCopyMap[captionId]
+          ? customCopyMap[captionId]
+          : (selectedCopyIdxMap[captionId] != null ? copySuggestionsMap[captionId]?.[selectedCopyIdxMap[captionId]!]?.text : '');
+        if (activeCopy) req.copy_text = activeCopy;
+      }
       return req;
     };
 
@@ -2181,10 +2350,17 @@ function MediaStep() {
         }
       } else {
         const result = await imageService.generate(buildRequest(provider));
-        const rawUrl = result.composited_image || result.generated_image || result.generated_image_with_logo || null;
-        const imageUrl = toMediaUrl(rawUrl);
-        overflow.setCaptionMedia(captionId, imageUrl, result.id || null);
-        if (result.id) overflow.addMedia(result.id);
+
+        // Handle dual images for with_copy
+        if (result.images && result.images.length > 1) {
+          setDualResultsMap((p) => ({ ...p, [captionId]: result.images! }));
+          // Don't auto-select — let user choose
+        } else {
+          const rawUrl = result.generated_image_with_logo || result.composited_image || result.generated_image || null;
+          const imageUrl = toMediaUrl(rawUrl);
+          overflow.setCaptionMedia(captionId, imageUrl, result.id || null);
+          if (result.id) overflow.addMedia(result.id);
+        }
         const genPrompt = result.enhanced_prompt || result.revised_prompt || '';
         if (genPrompt) setImageUsedPrompts((p) => ({ ...p, [captionId]: genPrompt }));
       }
@@ -2490,6 +2666,126 @@ function MediaStep() {
                     </div>
                   </div>
 
+                  {/* Brand Logo (Mandatory) */}
+                  <div>
+                    <p className="text-[10px] text-text-muted font-medium uppercase mb-1.5">Brand Logo *</p>
+                    {brandLogos.length > 0 ? (
+                      <>
+                        <div className="flex gap-1.5 flex-wrap mb-2">
+                          {brandLogos.map((bl) => (
+                            <button
+                              key={bl.id}
+                              onClick={() => setSelectedBrandLogos((p) => ({ ...p, [cap.id]: bl.id }))}
+                              className={`p-1.5 rounded-lg border-2 transition-all ${
+                                (selectedBrandLogos[cap.id] || brandLogos[0]?.id) === bl.id
+                                  ? 'border-amber-500 bg-amber-500/10'
+                                  : 'border-white/10 hover:border-white/20'
+                              }`}
+                            >
+                              <img src={bl.file} alt={bl.name} className="w-8 h-8 object-contain" />
+                            </button>
+                          ))}
+                        </div>
+                        <div className="flex gap-1">
+                          {(['top_left', 'top_right', 'bottom_left', 'bottom_right'] as const).map((pos) => (
+                            <button
+                              key={pos}
+                              onClick={() => setBrandLogoPositions((p) => ({ ...p, [cap.id]: pos }))}
+                              className={`text-[10px] px-2 py-1 rounded-lg transition-colors flex-1 ${
+                                (brandLogoPositions[cap.id] || 'bottom_right') === pos
+                                  ? 'bg-amber-500/20 text-amber-400 ring-1 ring-amber-500/50'
+                                  : 'bg-white/5 text-text-muted hover:bg-white/10'
+                              }`}
+                            >
+                              {pos.replace('_', ' ')}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    ) : (
+                      <p className="text-[10px] text-yellow-400 bg-yellow-500/10 border border-yellow-500/20 rounded-lg px-2 py-1.5">
+                        No logos found. Upload logos in Strategy Hub → Brand DNA first.
+                      </p>
+                    )}
+                  </div>
+
+                  {/* With Copy Toggle */}
+                  <div className="border-t border-white/5 pt-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-[10px] text-text-muted font-medium uppercase flex items-center gap-1">
+                        <PencilSquareIcon className="w-3 h-3" /> With Copy
+                      </p>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={withCopyMap[cap.id] || false}
+                          onChange={(e) => setWithCopyMap((p) => ({ ...p, [cap.id]: e.target.checked }))}
+                          className="sr-only peer"
+                        />
+                        <div className="w-9 h-5 bg-dark-600 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-500"></div>
+                      </label>
+                    </div>
+                    <AnimatePresence>
+                      {withCopyMap[cap.id] && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          transition={{ duration: 0.25 }}
+                          className="space-y-2 overflow-hidden"
+                        >
+                          <div className="flex gap-1 bg-dark-700 rounded-lg p-0.5">
+                            <button
+                              onClick={() => setUseCustomCopyMap((p) => ({ ...p, [cap.id]: false }))}
+                              className={`flex-1 text-[10px] py-1.5 rounded-md transition-colors ${!useCustomCopyMap[cap.id] ? 'bg-purple-500/20 text-purple-400' : 'text-text-muted'}`}
+                            >
+                              AI Suggestions
+                            </button>
+                            <button
+                              onClick={() => setUseCustomCopyMap((p) => ({ ...p, [cap.id]: true }))}
+                              className={`flex-1 text-[10px] py-1.5 rounded-md transition-colors ${useCustomCopyMap[cap.id] ? 'bg-purple-500/20 text-purple-400' : 'text-text-muted'}`}
+                            >
+                              Custom
+                            </button>
+                          </div>
+                          {!useCustomCopyMap[cap.id] ? (
+                            <div className="space-y-1.5">
+                              <button
+                                onClick={() => fetchCopySuggestionsFor(cap.id, cap.text)}
+                                disabled={loadingCopyMap[cap.id]}
+                                className="w-full py-1.5 px-3 bg-purple-500/10 border border-purple-500/30 rounded-lg text-[10px] text-purple-400 hover:bg-purple-500/20 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
+                              >
+                                {loadingCopyMap[cap.id] ? 'Generating...' : (copySuggestionsMap[cap.id]?.length ? 'Regenerate' : 'Generate Copy')}
+                              </button>
+                              {(copySuggestionsMap[cap.id] || []).map((s, idx) => (
+                                <button
+                                  key={idx}
+                                  onClick={() => setSelectedCopyIdxMap((p) => ({ ...p, [cap.id]: idx }))}
+                                  className={`w-full text-left p-2 rounded-lg border text-[11px] transition-all ${
+                                    selectedCopyIdxMap[cap.id] === idx
+                                      ? 'border-purple-500/50 bg-purple-500/10 text-purple-300'
+                                      : 'border-white/5 bg-dark-700 text-text-secondary hover:border-white/15'
+                                  }`}
+                                >
+                                  {s.text}
+                                </button>
+                              ))}
+                            </div>
+                          ) : (
+                            <textarea
+                              placeholder="Type your copy text..."
+                              rows={2}
+                              value={customCopyMap[cap.id] || ''}
+                              onChange={(e) => setCustomCopyMap((p) => ({ ...p, [cap.id]: e.target.value }))}
+                              className="input w-full text-[11px]"
+                            />
+                          )}
+                          <p className="text-[9px] text-purple-400/60 text-center">2 variations will be generated (2x cost)</p>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+
                   {/* "Generate Prompt" button */}
                   <button
                     onClick={() => handleRefinePrompt(cap.id)}
@@ -2559,6 +2855,35 @@ function MediaStep() {
                         <button onClick={() => handleRemoveMedia(cap.id)} className="text-xs text-red-400 hover:text-red-300 flex items-center gap-1">
                           <TrashIcon className="w-3 h-3" /> Remove
                         </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Dual with_copy variations */}
+                  {dualResultsMap[cap.id]?.length > 1 && !media?.mediaId && (
+                    <div className="space-y-2 pt-2 border-t border-white/5">
+                      <p className="text-[10px] font-medium text-purple-400 uppercase flex items-center gap-1">
+                        <CheckCircleIcon className="w-3 h-3" /> Choose Variation
+                      </p>
+                      <div className="grid grid-cols-2 gap-3">
+                        {dualResultsMap[cap.id].map((img, i) => (
+                          <div key={img.generation_id} className="rounded-lg border border-white/10 overflow-hidden">
+                            <img src={img.image_url} alt={`Variation ${i + 1}`} className="w-full h-auto" />
+                            <div className="p-2 bg-dark-700/80 flex items-center justify-between">
+                              <span className="text-[10px] text-text-muted">Variation {i + 1}</span>
+                              <button
+                                onClick={() => {
+                                  overflow.setCaptionMedia(cap.id, img.image_url, img.generation_id);
+                                  overflow.addMedia(img.generation_id);
+                                  setDualResultsMap((p) => ({ ...p, [cap.id]: [] }));
+                                }}
+                                className="text-[10px] px-2.5 py-1 bg-primary-500/20 text-primary-400 rounded-md hover:bg-primary-500/30 transition-colors"
+                              >
+                                Use this
+                              </button>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   )}

@@ -16,6 +16,7 @@ import {
 import { Button, Modal, ConfirmModal, Spinner, PlatformIcon, platformColors, platformNames } from '../components/ui';
 import type { SocialAccount, PlatformType } from '../types';
 import { authFetch } from '../services/api';
+import { toast as showToast } from '../store/toastStore';
 
 // PLATFORM CONSTANTS MAPPED FROM DJANGO TEMPLATE
 const platformFeatures: Record<string, string[]> = {
@@ -183,6 +184,7 @@ export default function ConnectAccountsPage() {
       if (response.ok) {
         setShowManualForm(false);
         await fetchData();
+        showToast.success('Platform connected!');
       } else {
         const err = await response.json();
         setManualError(Object.values(err).flat().join(', ') || 'Connection failed. Please check your credentials.');
@@ -205,6 +207,7 @@ export default function ConnectAccountsPage() {
       if (resp.ok) {
         setDisconnectAccount(null);
         await fetchData();
+        showToast.success('Platform disconnected.');
       }
     } catch (error) {
       console.error('Disconnect failed');

@@ -484,6 +484,7 @@ export interface ImageGeneration {
   quality: ImageQuality;
   // Logo options
   logo?: number;
+  brand_logo?: number | null;
   logo_position: LogoPosition;
   logo_size: number;
   logo_opacity: number;
@@ -512,6 +513,21 @@ export interface ImageGeneration {
   prompt_engineering_used?: boolean;
   failure_codes?: string[] | null;
   reprompt_attempt?: number;
+  // With Copy feature
+  with_copy?: boolean;
+  copy_text_in_image?: string;
+  sibling_generation?: number | null;
+  images?: Array<{ generation_id: number; image_url: string }>;
+}
+
+export interface BrandAsset {
+  id: number;
+  brand: number;
+  file: string;
+  asset_type: string;
+  name: string;
+  description?: string;
+  created_at: string;
 }
 
 export interface SavedImage {

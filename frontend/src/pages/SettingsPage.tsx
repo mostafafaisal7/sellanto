@@ -21,6 +21,7 @@ import { useTheme, type ThemeMode } from '../contexts/ThemeContext';
 import { Button, Card, Input, Modal } from '../components/ui';
 import { useAuthStore } from '../store';
 import api from '../services/api';
+import { toast } from '../store/toastStore';
 
 const timezones = [
   { value: 'America/New_York', label: 'Eastern Time (ET)' },
@@ -65,7 +66,8 @@ export function SettingsPage() {
   useEffect(() => {
     const loadDiamondBalance = async () => {
       try {
-        const response = await api.get('/diamond/balance/');
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const response = await api.get('/diamond/balance/', { _silentError: true } as any);
         setDiamondBalance(response.data.balance);
       } catch (err) {
         console.error('Failed to load diamond balance:', err);
@@ -115,6 +117,7 @@ export function SettingsPage() {
     try {
       // API call to save settings
       setSaved(true);
+      toast.success('Settings saved!');
       setTimeout(() => setSaved(false), 3000);
     } catch (error) {
       console.error('Failed to save settings:', error);

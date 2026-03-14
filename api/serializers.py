@@ -591,17 +591,19 @@ class ImageGenerationSerializer(serializers.ModelSerializer):
         model = ImageGeneration
         fields = [
             'id', 'provider', 'model_used', 'title', 'prompt', 'negative_prompt',
-            'style', 'size', 'quality', 'logo', 'logo_position', 'logo_size', 'logo_opacity',
+            'style', 'size', 'quality', 'logo', 'brand_logo', 'logo_position', 'logo_size', 'logo_opacity',
             'product_image', 'product_position', 'product_scale', 'composited_image',
             'seed', 'enhance_prompt', 'add_lighting', 'camera_angle',
             'brand_style_anchor', 'prompt_engineering_used', 'failure_codes', 'reprompt_attempt',
             'generated_image', 'generated_image_with_logo', 'enhanced_prompt', 'revised_prompt',
+            'with_copy', 'copy_text_in_image', 'sibling_generation',
             'processing_time', 'status', 'error_message',
             'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'generated_image', 'generated_image_with_logo',
                            'enhanced_prompt', 'revised_prompt', 'processing_time',
                            'brand_style_anchor', 'prompt_engineering_used', 'failure_codes', 'reprompt_attempt',
+                           'with_copy', 'copy_text_in_image', 'sibling_generation',
                            'status', 'error_message', 'created_at', 'updated_at']
 
 

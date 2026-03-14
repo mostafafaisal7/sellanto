@@ -117,11 +117,13 @@ export const strategyService = {
     return res.data;
   },
   async updateOverflowProgress(data: Record<string, unknown>) {
-    const res = await api.put('/overflow/progress/', data);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const res = await api.put('/overflow/progress/', data, { _silentError: true } as any);
     return res.data;
   },
   async skipOverflow() {
-    const res = await api.post('/overflow/skip/');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const res = await api.post('/overflow/skip/', {}, { _silentError: true } as any);
     return res.data;
   },
 
@@ -175,6 +177,24 @@ export const strategyService = {
     const params = feature ? { feature } : {};
     const res = await api.get(`/brands/${brandId}/prompt-history/`, { params });
     return res.data;
+  },
+
+  // Brand Assets (logos)
+  async getBrandLogos(brandId: number) {
+    const res = await api.get('/brand-assets/', { params: { brand: brandId } });
+    return (res.data || []).filter((a: { asset_type: string }) => a.asset_type === 'logo');
+  },
+  async uploadBrandLogo(brandId: number, file: File, name: string) {
+    const formData = new FormData();
+    formData.append('brand', String(brandId));
+    formData.append('file', file);
+    formData.append('asset_type', 'logo');
+    formData.append('name', name);
+    const res = await api.post('/brand-assets/', formData);
+    return res.data;
+  },
+  async deleteBrandLogo(assetId: number) {
+    await api.delete(`/brand-assets/${assetId}/`);
   },
 };
 

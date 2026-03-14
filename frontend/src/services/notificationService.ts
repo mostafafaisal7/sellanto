@@ -2,11 +2,13 @@ import api from './api';
 
 export const notificationService = {
   async getNotifications(params?: { event_type?: string; is_read?: string; limit?: number }) {
-    const res = await api.get('/notifications/', { params });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const res = await api.get('/notifications/', { params, _silentError: true } as any);
     return res.data;
   },
   async getUnreadCount() {
-    const res = await api.get('/notifications/unread-count/');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const res = await api.get('/notifications/unread-count/', { _silentError: true } as any);
     return res.data;
   },
   async markRead(notificationId: number) {

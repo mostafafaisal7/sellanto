@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { NavLink, Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   HomeIcon,
@@ -19,7 +19,6 @@ import {
   MapIcon,
   LightBulbIcon,
   CalendarDaysIcon,
-  ShieldCheckIcon,
   ChevronDownIcon,
   ClockIcon,
 } from '@heroicons/react/24/outline';
@@ -41,7 +40,15 @@ interface NavItem {
 
 const mainNavItems: NavItem[] = [
   { name: 'Dashboard', href: '/', icon: HomeIcon },
-  { name: 'Strategy Hub', href: '/strategy', icon: MapIcon, badge: 'New' },
+  {
+    name: 'Strategy Hub', href: '/strategy', icon: MapIcon, badge: 'New',
+    children: [
+      { name: 'Brand DNA', href: '/strategy?tab=dna', icon: SparklesIcon },
+      { name: 'Content Pillars', href: '/strategy?tab=pillars', icon: ChartBarIcon },
+      { name: 'Competitors Analysis', href: '/strategy?tab=competitors', icon: MapIcon },
+      { name: 'Trending Topics', href: '/strategy?tab=trending', icon: LightBulbIcon },
+    ],
+  },
   {
     name: 'Ideas Hub', href: '/ideas', icon: LightBulbIcon, badge: 'New',
     children: [
@@ -55,7 +62,6 @@ const mainNavItems: NavItem[] = [
     ],
   },
   { name: 'Calendar', href: '/calendar', icon: CalendarDaysIcon, badge: 'New' },
-  { name: 'Approvals', href: '/approvals', icon: ShieldCheckIcon },
   { name: 'Connect Account', href: '/platforms', icon: LinkIcon },
   { name: 'Analytics', href: '/analytics', icon: ChartBarIcon },
 ];
@@ -87,8 +93,15 @@ function GemIconCustom({ className }: { className?: string }) {
 
 function NavItemWithChildren({ item, onClose }: { item: NavItem; onClose: () => void }) {
   const location = useLocation();
-  const isChildActive = item.children?.some((c) => location.pathname === c.href) || false;
-  const [expanded, setExpanded] = useState(isChildActive);
+  const currentPath = location.pathname + location.search;
+  const isOnParentPath = location.pathname === item.href;
+  const isChildActive = item.children?.some((c) => currentPath === c.href) || false;
+  const [expanded, setExpanded] = useState(isOnParentPath || isChildActive);
+
+  // Auto-expand when navigating to this section
+  useEffect(() => {
+    if (isOnParentPath || isChildActive) setExpanded(true);
+  }, [currentPath]);
 
   return (
     <div>
@@ -96,9 +109,7 @@ function NavItemWithChildren({ item, onClose }: { item: NavItem; onClose: () => 
         <NavLink
           to={item.href}
           onClick={onClose}
-          className={({ isActive }) =>
-            `sidebar-link flex-1 ${isActive ? 'active' : ''}`
-          }
+          className={`sidebar-link flex-1 ${isOnParentPath ? 'active' : ''}`}
         >
           <item.icon className="w-5 h-5" />
           <span className="flex-1">{item.name}</span>
@@ -124,19 +135,20 @@ function NavItemWithChildren({ item, onClose }: { item: NavItem; onClose: () => 
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            {item.children?.map((child) => (
-              <NavLink
-                key={child.name}
-                to={child.href}
-                onClick={onClose}
-                className={({ isActive }) =>
-                  `sidebar-link pl-11 text-sm ${isActive ? 'active' : ''}`
-                }
-              >
-                <child.icon className="w-4 h-4" />
-                <span className="flex-1">{child.name}</span>
-              </NavLink>
-            ))}
+            {item.children?.map((child) => {
+              const isActive = currentPath === child.href || location.pathname === child.href;
+              return (
+                <Link
+                  key={child.name}
+                  to={child.href}
+                  onClick={onClose}
+                  className={`sidebar-link pl-11 text-sm ${isActive ? 'active' : ''}`}
+                >
+                  <child.icon className="w-4 h-4" />
+                  <span className="flex-1">{child.name}</span>
+                </Link>
+              );
+            })}
           </motion.div>
         )}
       </AnimatePresence>
@@ -234,7 +246,7 @@ export function Sidebar({ isOpen, onClose, isImpersonating }: SidebarProps) {
       </AnimatePresence>
 
       {/* Desktop sidebar */}
-      <aside className={`hidden lg:flex lg:flex-col fixed left-0 ${isImpersonating ? 'top-[110px]' : 'top-[70px]'} bottom-[60px] w-[280px] bg-dark-800/95 backdrop-blur-xl border-r border-white/5 z-30`}>
+      <aside className={`hidden lg:flex lg:flex-col fixed left-0 ${isImpersonating ? 'top-[110px]' : 'top-[70px]'} bottom-[60px] w-[300px] bg-dark-800/95 backdrop-blur-xl border-r border-white/5 z-30`}>
         {sidebarContent}
       </aside>
 
@@ -242,11 +254,11 @@ export function Sidebar({ isOpen, onClose, isImpersonating }: SidebarProps) {
       <AnimatePresence>
         {isOpen && (
           <motion.aside
-            initial={{ x: -280 }}
+            initial={{ x: -300 }}
             animate={{ x: 0 }}
-            exit={{ x: -280 }}
+            exit={{ x: -300 }}
             transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-            className="lg:hidden fixed left-0 top-0 bottom-0 w-[280px] bg-dark-800 z-50"
+            className="lg:hidden fixed left-0 top-0 bottom-0 w-[300px] bg-dark-800 z-50"
           >
             {sidebarContent}
           </motion.aside>

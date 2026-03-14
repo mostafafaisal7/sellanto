@@ -4,10 +4,11 @@ import { motion } from 'framer-motion';
 import {
   LightBulbIcon, ArrowPathIcon, CalendarDaysIcon,
   FunnelIcon, SparklesIcon, FireIcon, CheckCircleIcon,
-  TrashIcon, PencilSquareIcon,
+  TrashIcon, PencilSquareIcon, DocumentTextIcon,
 } from '@heroicons/react/24/outline';
 import strategyService from '../services/strategyService';
 import api from '../services/api';
+import { useOverflowStore } from '../store';
 
 interface Idea {
   id: number;
@@ -33,6 +34,7 @@ interface TrendingTopic {
 
 export function IdeasHubPage() {
   const navigate = useNavigate();
+  const initFromIdeasHub = useOverflowStore((s) => s.initFromIdeasHub);
   const [ideas, setIdeas] = useState<Idea[]>([]);
   const [trending, setTrending] = useState<TrendingTopic[]>([]);
   const [loading, setLoading] = useState(false);
@@ -181,6 +183,30 @@ export function IdeasHubPage() {
     }
   };
 
+  const handleCreatePost = (idea: Idea) => {
+    if (!brandId) {
+      setError('No brand found. Please set up your brand first.');
+      return;
+    }
+    // Clear stale localStorage from previous overflow sessions
+    localStorage.removeItem('overflow_selected_caption');
+    localStorage.removeItem('overflow_caption_groups');
+    localStorage.removeItem('overflow_has_upload');
+    // Populate overflow store with idea data and jump to Captions step
+    initFromIdeasHub({
+      brandId,
+      idea: {
+        id: idea.id,
+        title: idea.title,
+        hook: idea.hook,
+        angle: idea.angle,
+        platform: idea.platform,
+        content_format: idea.content_format,
+      },
+    });
+    navigate('/overflow', { state: { fromIdeas: true } });
+  };
+
   const tierColors: Record<string, string> = {
     high: 'text-green-400 bg-green-400/10',
     mid: 'text-yellow-400 bg-yellow-400/10',
@@ -297,6 +323,9 @@ export function IdeasHubPage() {
                     <div className="flex gap-1 ml-3">
                       {idea.status !== 'used' && (
                         <>
+                          <button onClick={() => handleCreatePost(idea)} className="btn-icon p-1.5 hover:text-purple-400" title="Create Post">
+                            <DocumentTextIcon className="w-4 h-4" />
+                          </button>
                           <button onClick={() => handleAddToCalendar(idea.id, true)} className="btn-icon p-1.5 hover:text-green-400" title="Add to Calendar & Edit">
                             <PencilSquareIcon className="w-4 h-4" />
                           </button>

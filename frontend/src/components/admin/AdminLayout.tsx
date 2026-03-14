@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { AdminNavbar } from './AdminNavbar';
 import { AdminSidebar } from './AdminSidebar';
 import { UserSelectModal } from './UserSelectModal';
+import { ToastContainer } from '../ui/ToastContainer';
 
 export function AdminLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -38,6 +39,7 @@ export function AdminLayout() {
         isOpen={showUserSelect}
         onClose={() => setShowUserSelect(false)}
       />
+      <ToastContainer />
     </div>
   );
 }

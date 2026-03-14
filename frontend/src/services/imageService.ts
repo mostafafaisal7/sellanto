@@ -1,6 +1,7 @@
 import api from './api';
 import type {
   ImageGeneration,
+  BrandAsset,
   SavedImage,
   UserLogo,
   PromptTemplate,
@@ -32,6 +33,7 @@ export interface GenerateImageRequest {
   size?: string;
   quality?: string;
   logo_id?: number | null;
+  brand_logo_id?: number | null;
   logo_position?: string;
   logo_size?: number;
   logo_opacity?: number;
@@ -41,6 +43,8 @@ export interface GenerateImageRequest {
   product_image?: File;
   product_position?: string;
   product_scale?: number;
+  with_copy?: boolean;
+  copy_text?: string;
 }
 
 export interface RefinePromptRequest {
@@ -70,29 +74,31 @@ export const imageService = {
 
   // Generation
   async generate(data: GenerateImageRequest): Promise<ImageGeneration> {
+    // Always use FormData to ensure consistency (supports product_image File + all fields)
+    const formData = new FormData();
+    formData.append('prompt', data.prompt);
+    if (data.title) formData.append('title', data.title);
+    if (data.negative_prompt) formData.append('negative_prompt', data.negative_prompt);
+    if (data.provider) formData.append('provider', data.provider);
+    if (data.style) formData.append('style', data.style);
+    if (data.size) formData.append('size', data.size);
+    if (data.quality) formData.append('quality', data.quality);
+    if (data.logo_id != null) formData.append('logo_id', String(data.logo_id));
+    if (data.brand_logo_id != null) formData.append('brand_logo_id', String(data.brand_logo_id));
+    if (data.logo_position) formData.append('logo_position', data.logo_position);
+    if (data.logo_size != null) formData.append('logo_size', String(data.logo_size));
+    if (data.logo_opacity != null) formData.append('logo_opacity', String(data.logo_opacity));
+    if (data.enhance_prompt != null) formData.append('enhance_prompt', String(data.enhance_prompt));
+    if (data.add_lighting) formData.append('add_lighting', data.add_lighting);
+    if (data.camera_angle) formData.append('camera_angle', data.camera_angle);
     if (data.product_image) {
-      const formData = new FormData();
-      formData.append('prompt', data.prompt);
-      if (data.title) formData.append('title', data.title);
-      if (data.negative_prompt) formData.append('negative_prompt', data.negative_prompt);
-      if (data.provider) formData.append('provider', data.provider);
-      if (data.style) formData.append('style', data.style);
-      if (data.size) formData.append('size', data.size);
-      if (data.quality) formData.append('quality', data.quality);
-      if (data.logo_id != null) formData.append('logo_id', String(data.logo_id));
-      if (data.logo_position) formData.append('logo_position', data.logo_position);
-      if (data.logo_size != null) formData.append('logo_size', String(data.logo_size));
-      if (data.logo_opacity != null) formData.append('logo_opacity', String(data.logo_opacity));
-      if (data.enhance_prompt != null) formData.append('enhance_prompt', String(data.enhance_prompt));
-      if (data.add_lighting) formData.append('add_lighting', data.add_lighting);
-      if (data.camera_angle) formData.append('camera_angle', data.camera_angle);
       formData.append('product_image', data.product_image);
       if (data.product_position) formData.append('product_position', data.product_position);
       if (data.product_scale != null) formData.append('product_scale', String(data.product_scale));
-      const response = await api.post<ImageGeneration>('/ai-image/generate/', formData);
-      return response.data;
     }
-    const response = await api.post<ImageGeneration>('/ai-image/generate/', data);
+    if (data.with_copy != null) formData.append('with_copy', String(data.with_copy));
+    if (data.copy_text) formData.append('copy_text', data.copy_text);
+    const response = await api.post<ImageGeneration>('/ai-image/generate/', formData);
     return response.data;
   },
 
@@ -173,6 +179,30 @@ export const imageService = {
 
   async deleteTemplate(id: number): Promise<void> {
     await api.delete(`/ai-image/templates/${id}/`);
+  },
+
+  // Brand Logos (from BrandAsset, with Brand.logo fallback)
+  async getBrandLogos(brandId: number): Promise<BrandAsset[]> {
+    const response = await api.get<BrandAsset[]>('/brand-assets/', { params: { brand: brandId } });
+    const assetLogos = (response.data || []).filter((a) => a.asset_type === 'logo');
+
+    // Fallback: if no BrandAsset logos, include brand's primary logo
+    if (assetLogos.length === 0) {
+      try {
+        const brandRes = await api.get(`/brands/${brandId}/`);
+        if (brandRes.data?.logo) {
+          assetLogos.push({
+            id: -1,
+            brand: brandId,
+            file: brandRes.data.logo,
+            asset_type: 'logo',
+            name: brandRes.data.brand_name || 'Brand Logo',
+            created_at: '',
+          });
+        }
+      } catch { /* silent */ }
+    }
+    return assetLogos;
   },
 
   // Prompt Engineering

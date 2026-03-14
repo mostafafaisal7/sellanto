@@ -18,12 +18,14 @@ interface PaginatedTransactions {
 export const diamondService = {
   // ── User endpoints ──────────────────────────────────────────────
   async getBalance(): Promise<DiamondWallet> {
-    const { data } = await api.get<DiamondWallet>('/diamond/balance/');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data } = await api.get<DiamondWallet>('/diamond/balance/', { _silentError: true } as any);
     return data;
   },
 
   async getUsage(days = 30): Promise<DiamondUsageBreakdown> {
-    const { data } = await api.get<DiamondUsageBreakdown>('/diamond/usage/', { params: { days } });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data } = await api.get<DiamondUsageBreakdown>('/diamond/usage/', { params: { days }, _silentError: true } as any);
     return data;
   },
 
@@ -49,7 +51,8 @@ export const diamondService = {
   },
 
   async getCosts(): Promise<DiamondCosts> {
-    const { data } = await api.get<DiamondCosts>('/diamond/costs/');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data } = await api.get<DiamondCosts>('/diamond/costs/', { _silentError: true } as any);
     return data;
   },
 

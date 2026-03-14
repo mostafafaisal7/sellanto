@@ -1316,11 +1316,16 @@ def generate_image(request):
             else:
                 return Response({'error': 'Gemini API key not configured.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Logo settings
+        # Logo settings (new: brand_logo_id from BrandAsset; legacy: logo_id from UserLogo)
+        brand_logo_id = request.data.get('brand_logo_id')
         logo_id = request.data.get('logo_id')
-        logo_position = request.data.get('logo_position', 'none')
+        logo_position = request.data.get('logo_position', 'bottom_right')
         logo_size = int(request.data.get('logo_size', 10))
         logo_opacity = int(request.data.get('logo_opacity', 100))
+
+        # With Copy feature
+        with_copy = _parse_bool(request.data.get('with_copy', 'false'))
+        copy_text = (request.data.get('copy_text', '') or '').strip()
 
         # Product settings
         product_file = request.FILES.get('product_image')
@@ -1332,9 +1337,25 @@ def generate_image(request):
         lighting = request.data.get('add_lighting', '') or request.data.get('lighting', '')
         camera_angle = request.data.get('camera_angle', '')
 
-        # Get logo if specified
+        # Resolve brand logo (BrandAsset) — preferred over legacy UserLogo
+        from brands.models import BrandAsset, Brand as BrandModel
+        brand_logo_obj = None
+        brand_primary_logo_path = None  # fallback from Brand.logo field
+        if brand_logo_id:
+            if str(brand_logo_id) == '-1':
+                # Sentinel: use brand's primary logo field
+                brand = BrandModel.objects.filter(user=request.user).first()
+                if brand and brand.logo:
+                    brand_primary_logo_path = brand.logo.path
+            else:
+                try:
+                    brand_logo_obj = BrandAsset.objects.get(pk=brand_logo_id, asset_type='logo')
+                except BrandAsset.DoesNotExist:
+                    pass
+
+        # Legacy UserLogo fallback
         logo = None
-        if logo_id and logo_position != 'none':
+        if not brand_logo_obj and not brand_primary_logo_path and logo_id and logo_position != 'none':
             try:
                 logo = UserLogo.objects.get(pk=logo_id, user=request.user)
             except UserLogo.DoesNotExist:
@@ -1361,6 +1382,7 @@ def generate_image(request):
             size=size,
             quality=quality,
             logo=logo,
+            brand_logo=brand_logo_obj,
             logo_position=logo_position,
             logo_size=logo_size,
             logo_opacity=logo_opacity,
@@ -1369,6 +1391,8 @@ def generate_image(request):
             camera_angle=camera_angle,
             product_position=product_position,
             product_scale=product_scale,
+            with_copy=with_copy,
+            copy_text_in_image=copy_text if with_copy else '',
             status='processing'
         )
 
@@ -1431,6 +1455,26 @@ def generate_image(request):
                 import logging
                 logging.getLogger(__name__).warning(f"Prompt engineering skipped: {pe_err}")
 
+        # Modify prompt based on with_copy flag
+        if with_copy and copy_text:
+            gen_prompt += (
+                f'\n\nIMPORTANT: This image MUST prominently feature the following marketing copy '
+                f'text rendered artistically as part of the composition: "{copy_text}". '
+                f'The text should be professionally designed, clearly readable, and integrated '
+                f'into the visual layout like a graphic designer would create. '
+                f'Think of this as a social media marketing graphic with text baked into the design.'
+            )
+        else:
+            gen_prompt += (
+                '\n\nCRITICAL REQUIREMENT: Do NOT include any text, typography, words, letters, '
+                'numbers, watermarks, or any written characters in this image. '
+                'The image must be purely visual with absolutely zero text elements.'
+            )
+            if gen_negative:
+                gen_negative += ', text, typography, words, letters, watermark'
+            else:
+                gen_negative = 'text, typography, words, letters, watermark'
+
         # Get image service with centralized API keys
         service = ImageService(
             provider=provider,
@@ -1438,24 +1482,37 @@ def generate_image(request):
             gemini_key=gemini_key
         )
 
-        # Generate image
-        result = service.generate_image(
-            prompt=gen_prompt,
-            style=style,
-            size=size,
-            quality=quality,
-            negative_prompt=gen_negative,
-            lighting=lighting if lighting else None,
-            camera_angle=camera_angle if camera_angle else None,
-            enhance=enhance,
-            model=model if model else None
-        )
+        # Determine logo path for compositing
+        active_logo_path = None
+        if brand_logo_obj and brand_logo_obj.file:
+            active_logo_path = brand_logo_obj.file.path
+        elif brand_primary_logo_path:
+            active_logo_path = brand_primary_logo_path
+        elif logo and logo.logo_file:
+            active_logo_path = logo.logo_file.path
 
-        if result.get('success'):
-            # Save generated image
+        def _generate_and_process(gen_record, prompt_text, variation_label=''):
+            """Generate a single image, composite product & logo, update record."""
+            result = service.generate_image(
+                prompt=prompt_text,
+                style=style,
+                size=size,
+                quality=quality,
+                negative_prompt=gen_negative,
+                lighting=lighting if lighting else None,
+                camera_angle=camera_angle if camera_angle else None,
+                enhance=enhance,
+                model=model if model else None
+            )
+            if not result.get('success'):
+                gen_record.status = 'failed'
+                gen_record.error_message = result.get('error', 'Unknown error')
+                gen_record.save()
+                return result
+
             image_data = result['image_data']
             filename = f"{uuid.uuid4().hex}.png"
-            generation.generated_image.save(filename, ContentFile(image_data))
+            gen_record.generated_image.save(filename, ContentFile(image_data))
 
             # Product compositing
             final_image_data = image_data
@@ -1471,61 +1528,148 @@ def generate_image(request):
                         add_shadow=True
                     )
                     comp_filename = f"{uuid.uuid4().hex}_composited.png"
-                    generation.composited_image.save(comp_filename, ContentFile(composited_data))
+                    gen_record.composited_image.save(comp_filename, ContentFile(composited_data))
                     final_image_data = composited_data
                 except Exception:
-                    pass  # Continue without compositing
+                    pass
 
-            # Add logo if specified
-            if logo and logo_position != 'none':
-                image_with_logo = service.add_logo_to_image(
-                    image_data=final_image_data,
-                    logo_path=logo.logo_file.path,
-                    position=logo_position,
-                    size_percent=logo_size,
-                    opacity=logo_opacity
-                )
-                logo_filename = f"{uuid.uuid4().hex}_logo.png"
-                generation.generated_image_with_logo.save(logo_filename, ContentFile(image_with_logo))
+            # Mandatory logo compositing
+            if active_logo_path:
+                try:
+                    image_with_logo = service.add_logo_to_image(
+                        image_data=final_image_data,
+                        logo_path=active_logo_path,
+                        position=logo_position,
+                        size_percent=logo_size,
+                        opacity=logo_opacity
+                    )
+                    logo_filename = f"{uuid.uuid4().hex}_logo.png"
+                    gen_record.generated_image_with_logo.save(logo_filename, ContentFile(image_with_logo))
+                except Exception:
+                    pass
 
-            generation.enhanced_prompt = result.get('enhanced_prompt', '')
-            generation.revised_prompt = result.get('revised_prompt', '')
-            generation.model_used = result.get('model_used', '')
-            generation.processing_time = result.get('processing_time', 0)
-            generation.status = 'completed'
-            generation.save()
+            gen_record.enhanced_prompt = result.get('enhanced_prompt', '')
+            gen_record.revised_prompt = result.get('revised_prompt', '')
+            gen_record.model_used = result.get('model_used', '')
+            gen_record.processing_time = result.get('processing_time', 0)
+            gen_record.status = 'completed'
+            gen_record.save()
+            return result
 
-            # Notify if linked to a post
+        # Generate image(s)
+        if with_copy and copy_text:
+            # Variation 1: bold centered layout
+            prompt_v1 = gen_prompt + '\nUse a bold, centered layout for the text with visual elements surrounding it.'
+            # Variation 2: asymmetric layout
+            prompt_v2 = gen_prompt + '\nUse an asymmetric layout with text on one side and visual focus on the other.'
+
+            result1 = _generate_and_process(generation, prompt_v1, 'Variation 1')
+
+            # Create second generation record for variation 2
+            generation2 = ImageGeneration.objects.create(
+                user=request.user,
+                post=linked_post,
+                provider=provider,
+                title=title,
+                prompt=prompt,
+                negative_prompt=negative_prompt,
+                style=style,
+                size=size,
+                quality=quality,
+                logo=logo,
+                brand_logo=brand_logo_obj,
+                logo_position=logo_position,
+                logo_size=logo_size,
+                logo_opacity=logo_opacity,
+                enhance_prompt=enhance,
+                add_lighting=lighting,
+                camera_angle=camera_angle,
+                product_position=product_position,
+                product_scale=product_scale,
+                with_copy=True,
+                copy_text_in_image=copy_text,
+                status='processing'
+            )
+            # Save product image to second record too
+            if product_file:
+                generation.product_image.seek(0)
+                generation2.product_image.save(product_file.name, ContentFile(generation.product_image.read()))
+
+            result2 = _generate_and_process(generation2, prompt_v2, 'Variation 2')
+
+            # Link siblings
+            generation.sibling_generation = generation2
+            generation.save(update_fields=['sibling_generation'])
+            generation2.sibling_generation = generation
+            generation2.save(update_fields=['sibling_generation'])
+
+            # Deduct diamonds for both
+            for res in [result1, result2]:
+                if res.get('success'):
+                    deduct_diamonds(
+                        user=request.user, feature='image',
+                        provider=res.get('provider', 'openai'),
+                        raw_tokens=res.get('tokens_used', 0),
+                        model_used=res.get('model_used', ''),
+                    )
+
+            # Update usage stats (2 images)
+            successful = sum(1 for r in [result1, result2] if r.get('success'))
+            img_settings.total_images_generated += successful
+            img_settings.total_api_calls += 2
+            if provider == 'openai':
+                img_settings.openai_images_generated += successful
+            else:
+                img_settings.gemini_images_generated += successful
+            img_settings.save()
+
             if linked_post:
                 linked_post.update_checklist()
                 notify_images_ready(linked_post)
 
-            # Update usage stats
-            img_settings.total_images_generated += 1
-            img_settings.total_api_calls += 1
-            if provider == 'openai':
-                img_settings.openai_images_generated += 1
-            else:
-                img_settings.gemini_images_generated += 1
-            img_settings.save()
-
-            # Deduct Diamond Tokens
-            deduct_diamonds(
-                user=request.user, feature='image',
-                provider=result.get('provider', 'openai'),
-                raw_tokens=result.get('tokens_used', 0),
-                model_used=result.get('model_used', ''),
-            )
-
-            return Response(ImageGenerationSerializer(generation, context={'request': request}).data)
+            # Build response with images array
+            resp_data = ImageGenerationSerializer(generation, context={'request': request}).data
+            resp_data['with_copy'] = True
+            resp_data['copy_text'] = copy_text
+            images_arr = []
+            for g in [generation, generation2]:
+                display = g.get_display_image()
+                images_arr.append({
+                    'generation_id': g.id,
+                    'image_url': request.build_absolute_uri(display.url) if display else None,
+                })
+            resp_data['images'] = images_arr
+            return Response(resp_data)
         else:
-            generation.status = 'failed'
-            generation.error_message = result.get('error', 'Unknown error')
-            generation.save()
-            return Response(
-                {'error': result.get('error', 'Failed to generate image')},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+            # Standard single-image generation
+            result = _generate_and_process(generation, gen_prompt)
+
+            if result.get('success'):
+                if linked_post:
+                    linked_post.update_checklist()
+                    notify_images_ready(linked_post)
+
+                img_settings.total_images_generated += 1
+                img_settings.total_api_calls += 1
+                if provider == 'openai':
+                    img_settings.openai_images_generated += 1
+                else:
+                    img_settings.gemini_images_generated += 1
+                img_settings.save()
+
+                deduct_diamonds(
+                    user=request.user, feature='image',
+                    provider=result.get('provider', 'openai'),
+                    raw_tokens=result.get('tokens_used', 0),
+                    model_used=result.get('model_used', ''),
+                )
+
+                return Response(ImageGenerationSerializer(generation, context={'request': request}).data)
+            else:
+                return Response(
+                    {'error': result.get('error', 'Failed to generate image')},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
 
     except Exception as e:
         return Response(

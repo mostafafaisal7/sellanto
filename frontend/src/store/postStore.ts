@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { Post, PostStatus, CreatePostData, UpdatePostData, PaginatedResponse } from '../types';
 import { postService } from '../services';
+import { toast } from './toastStore';
 
 interface PostState {
   posts: Post[];
@@ -62,6 +63,7 @@ export const usePostStore = create<PostState>()((set, get) => ({
         totalCount: state.totalCount + 1,
         isLoading: false,
       }));
+      toast.success('Post created successfully!');
       return post;
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Failed to create post';
@@ -95,6 +97,7 @@ export const usePostStore = create<PostState>()((set, get) => ({
         totalCount: state.totalCount - 1,
         isLoading: false,
       }));
+      toast.success('Post deleted.');
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Failed to delete post';
       set({ error: message, isLoading: false });

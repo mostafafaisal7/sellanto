@@ -1,5 +1,7 @@
 import axios from 'axios';
 import type { AuthTokens } from '../types';
+import { extractApiError } from '../utils/extractApiError';
+import { toast } from '../store/toastStore';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
 
@@ -85,7 +87,7 @@ api.interceptors.response.use(
       }
     }
 
-    // 402 — Insufficient Diamond Tokens
+    // 402 — Insufficient Diamond Tokens (has its own modal, skip auto-toast)
     if (error.response?.status === 402 && error.response?.data?.code === 'INSUFFICIENT_DIAMONDS') {
       const { diamond_cost, diamond_balance, feature } = error.response.data;
       window.dispatchEvent(
@@ -93,6 +95,22 @@ api.interceptors.response.use(
           detail: { cost: diamond_cost, balance: diamond_balance, feature },
         })
       );
+      return Promise.reject(error);
+    }
+
+    // Auto-toast for all other errors
+    const silentError = error.config?._silentError === true;
+    const extracted = extractApiError(error);
+
+    // Attach extracted message for callers that want it
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (error as any).userMessage = extracted.message;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (error as any).extractedError = extracted;
+
+    // Show toast unless caller opted out or it's a 401 (handled by redirect)
+    if (!silentError && error.response?.status !== 401) {
+      toast.error(extracted.message);
     }
 
     return Promise.reject(error);

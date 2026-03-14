@@ -7,6 +7,7 @@ import { Sidebar } from './Sidebar';
 import { Footer } from './Footer';
 import { SupportChatbot } from './SupportChatbot';
 import { InsufficientDiamondsModal } from '../diamond';
+import { ToastContainer } from '../ui/ToastContainer';
 import { useAdminStore } from '../../store';
 
 function ImpersonationBanner() {
@@ -75,7 +76,7 @@ export function Layout() {
       />
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} isImpersonating={isImpersonating} />
 
-      <main className={`${isImpersonating ? 'pt-[110px]' : 'pt-[70px]'} pb-[60px] lg:ml-[280px]`}>
+      <main className={`${isImpersonating ? 'pt-[110px]' : 'pt-[70px]'} pb-[60px] lg:ml-[300px]`}>
         <AnimatePresence mode="wait">
           <motion.div
             key={location.pathname}
@@ -93,6 +94,7 @@ export function Layout() {
       <Footer />
       <SupportChatbot isOpen={chatOpen} onClose={() => setChatOpen(false)} />
       <InsufficientDiamondsModal />
+      <ToastContainer />
     </div>
   );
 }

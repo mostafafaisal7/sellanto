@@ -36,6 +36,7 @@ import type { CaptionGeneration, CaptionTemplate, SavedCaption, CaptionTone, Cap
 import { authFetch } from '../services/api';
 import { PromptInfoButton } from '../components/ui/PromptInfoButton';
 import { DiamondCostIndicator } from '../components/diamond';
+import { toast } from '../store/toastStore';
 
 // Tone options with icons
 const tones: { id: CaptionTone; label: string; Icon: typeof BriefcaseIcon; description: string }[] = [
@@ -232,6 +233,7 @@ export function AICaptionPage() {
       if (response.ok) {
         setGeneratedCaption(data);
         if (data.used_prompt) setCaptionUsedPrompt(data.used_prompt);
+        toast.success('Caption generated successfully!');
       } else {
         setError(data.error || 'Failed to generate caption. Please check your API key in Settings.');
       }
@@ -295,6 +297,7 @@ export function AICaptionPage() {
       });
       if (response.ok) {
         fetchSavedCaptions();
+        toast.success('Caption saved!');
       }
     } catch (error) {
       console.error('Failed to save caption:', error);

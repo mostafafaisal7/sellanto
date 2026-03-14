@@ -16,6 +16,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { Button, Card, Input, Textarea, Spinner } from '../components/ui';
 import { DiamondCostIndicator } from '../components/diamond';
 import voiceService from '../services/voiceService';
+import { toast } from '../store/toastStore';
 import type { VoiceGeneration, UserVoiceSettings } from '../services/voiceService';
 
 // Voice options
@@ -118,6 +119,7 @@ export function AIVoicePage() {
         format: selectedFormat,
       });
       setGeneratedAudio(result);
+      toast.success('Voice generated successfully!');
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Generation failed';
       // Try to extract error from response
@@ -206,6 +208,7 @@ export function AIVoicePage() {
         default_model: defaultModel,
       });
       fetchSettings();
+      toast.success('Settings saved!');
     } catch (err) {
       console.error('Failed to save settings:', err);
     }

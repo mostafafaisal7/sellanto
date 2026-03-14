@@ -20,6 +20,7 @@ import {
   CheckCircleIcon,
   CloudArrowUpIcon,
   StarIcon,
+  PencilSquareIcon,
 } from '@heroicons/react/24/outline';
 import { HeartIcon as HeartSolidIcon, StarIcon as StarSolidIcon } from '@heroicons/react/24/solid';
 import { formatDistanceToNow } from 'date-fns';
@@ -27,6 +28,7 @@ import { Button, Card, Input, Textarea, Modal, Spinner } from '../components/ui'
 import { DiamondCostIndicator } from '../components/diamond';
 import type {
   ImageGeneration,
+  BrandAsset,
   SavedImage,
   UserLogo,
   PromptTemplate,
@@ -44,9 +46,11 @@ import { PromptInfoButton } from '../components/ui/PromptInfoButton';
 import { PromptPreviewPanel } from '../components/ai-image/PromptPreviewPanel';
 import { ImageDiagnosisModal } from '../components/ai-image/ImageDiagnosisModal';
 import { RepromptPanel } from '../components/ai-image/RepromptPanel';
+import { imageService } from '../services/imageService';
 import onboardingService from '../services/onboardingService';
 import type { Brand } from '../types';
 import type { PromptEngineerDiagnoseResponse } from '../types/promptEngineering';
+import { toast } from '../store/toastStore';
 
 // Style options
 const styles: { id: ImageStyle; label: string }[] = [
@@ -185,6 +189,21 @@ export function AIImagePage() {
     enhancePrompt
   );
 
+  // Brand logo state (mandatory for generation)
+  const [brandLogos, setBrandLogos] = useState<BrandAsset[]>([]);
+  const [selectedBrandLogo, setSelectedBrandLogo] = useState<number | null>(null);
+  const [brandLogoPosition, setBrandLogoPosition] = useState<'top_left' | 'top_right' | 'bottom_left' | 'bottom_right'>('bottom_right');
+
+  // With Copy state
+  const [withCopy, setWithCopy] = useState(false);
+  const [copySuggestions, setCopySuggestions] = useState<{ text: string; style?: string }[]>([]);
+  const [selectedCopyIdx, setSelectedCopyIdx] = useState<number | null>(null);
+  const [customCopyText, setCustomCopyText] = useState('');
+  const [useCustomCopy, setUseCustomCopy] = useState(false);
+  const [loadingCopy, setLoadingCopy] = useState(false);
+  const [generatedImages, setGeneratedImages] = useState<{ generation_id: number; image_url: string }[]>([]);
+  const [selectedVariation, setSelectedVariation] = useState(0);
+
   // Logo upload state
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [newLogoName, setNewLogoName] = useState('');
@@ -212,6 +231,24 @@ export function AIImagePage() {
     };
     loadBrands();
   }, []);
+
+  // Load brand logos when brand changes
+  useEffect(() => {
+    if (selectedBrand?.id) {
+      const loadBrandLogos = async () => {
+        try {
+          const logos = await imageService.getBrandLogos(selectedBrand.id);
+          setBrandLogos(logos);
+          if (logos.length > 0) setSelectedBrandLogo(logos[0].id);
+          else setSelectedBrandLogo(null);
+        } catch { /* ignore */ }
+      };
+      loadBrandLogos();
+    } else {
+      setBrandLogos([]);
+      setSelectedBrandLogo(null);
+    }
+  }, [selectedBrand?.id]);
 
   const fetchHistory = async () => {
     setIsLoading(true);
@@ -297,12 +334,30 @@ export function AIImagePage() {
     }
   };
 
+  const fetchCopySuggestions = async () => {
+    setLoadingCopy(true);
+    try {
+      const res = await imageService.generateCopySuggestions({
+        brand_id: selectedBrand?.id,
+        caption_text: prompt || title || 'marketing image',
+        count: 5,
+      });
+      const suggestions = res.suggestions || [];
+      setCopySuggestions(suggestions);
+      if (suggestions.length > 0) setSelectedCopyIdx(0);
+    } catch {
+      toast.error('Failed to generate copy suggestions');
+    }
+    setLoadingCopy(false);
+  };
+
   const generateImage = async () => {
     if (!prompt.trim()) return;
 
     setIsGenerating(true);
     setError('');
     setGeneratedImage(null);
+    setGeneratedImages([]);
     try {
       const formData = new FormData();
       formData.append('title', title || 'Untitled');
@@ -314,7 +369,14 @@ export function AIImagePage() {
       formData.append('quality', selectedQuality);
       formData.append('enhance_prompt', String(enhancePrompt));
 
-      if (selectedLogo && logoPosition !== 'none') {
+      // Brand logo (mandatory)
+      if (selectedBrandLogo) {
+        formData.append('brand_logo_id', String(selectedBrandLogo));
+        formData.append('logo_position', brandLogoPosition);
+        formData.append('logo_size', String(logoSize));
+        formData.append('logo_opacity', String(logoOpacity));
+      } else if (selectedLogo && logoPosition !== 'none') {
+        // Legacy fallback
         formData.append('logo_id', String(selectedLogo));
         formData.append('logo_position', logoPosition);
         formData.append('logo_size', String(logoSize));
@@ -330,6 +392,16 @@ export function AIImagePage() {
       if (seed !== undefined) formData.append('seed', String(seed));
       if (selectedLighting) formData.append('add_lighting', selectedLighting);
       if (selectedCameraAngle) formData.append('camera_angle', selectedCameraAngle);
+      if (selectedBrand?.id) formData.append('brand_id', String(selectedBrand.id));
+
+      // With Copy
+      if (withCopy) {
+        formData.append('with_copy', 'true');
+        const activeCopy = useCustomCopy
+          ? customCopyText
+          : (selectedCopyIdx !== null ? copySuggestions[selectedCopyIdx]?.text : '');
+        if (activeCopy) formData.append('copy_text', activeCopy);
+      }
 
       const response = await authFetch('/api/v1/ai-image/generate/', {
         method: 'POST',
@@ -342,6 +414,14 @@ export function AIImagePage() {
         setGeneratedImage(data);
         const usedP = data.used_prompt || data.enhanced_prompt || data.revised_prompt || '';
         if (usedP) setImageUsedPrompt(usedP);
+
+        // Handle dual images for with_copy
+        if (data.images && data.images.length > 1) {
+          setGeneratedImages(data.images);
+          setSelectedVariation(0);
+        }
+
+        toast.success(withCopy ? '2 image variations generated!' : 'Image generated successfully!');
       } else {
         setError(data.error || 'Failed to generate image. Please check your API key in Settings.');
       }
@@ -720,6 +800,173 @@ export function AIImagePage() {
               )}
             </Card>
 
+            {/* Brand Logo Selection (Mandatory) */}
+            <Card>
+              <div className="flex items-center gap-3 mb-4">
+                <StarIcon className="w-5 h-5 text-amber-400" />
+                <h3 className="font-semibold text-text-primary">Brand Logo <span className="text-red-400 text-xs">*required</span></h3>
+              </div>
+              {brandLogos.length > 0 ? (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-4 gap-2">
+                    {brandLogos.map((bl) => (
+                      <button
+                        key={bl.id}
+                        onClick={() => setSelectedBrandLogo(bl.id)}
+                        className={`p-2 rounded-xl border-2 transition-all ${
+                          selectedBrandLogo === bl.id
+                            ? 'border-amber-500 bg-amber-500/10'
+                            : 'border-white/10 hover:border-white/20'
+                        }`}
+                      >
+                        <img src={bl.file} alt={bl.name} className="w-full h-12 object-contain" />
+                        <p className="text-[10px] text-text-muted mt-1 truncate">{bl.name}</p>
+                      </button>
+                    ))}
+                  </div>
+                  <div>
+                    <label className="block text-sm text-text-secondary mb-2">Logo Position</label>
+                    <div className="grid grid-cols-4 gap-2">
+                      {([
+                        { id: 'top_left' as const, label: 'Top Left' },
+                        { id: 'top_right' as const, label: 'Top Right' },
+                        { id: 'bottom_left' as const, label: 'Bottom Left' },
+                        { id: 'bottom_right' as const, label: 'Bottom Right' },
+                      ]).map((pos) => (
+                        <button
+                          key={pos.id}
+                          onClick={() => setBrandLogoPosition(pos.id)}
+                          className={`p-2 rounded-xl border-2 text-center transition-all text-xs ${
+                            brandLogoPosition === pos.id
+                              ? 'border-amber-500 bg-amber-500/10 text-amber-400'
+                              : 'border-white/10 text-text-secondary hover:border-white/20'
+                          }`}
+                        >
+                          {pos.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm text-text-secondary mb-2">Size: {logoSize}%</label>
+                      <input type="range" min="5" max="30" value={logoSize} onChange={(e) => setLogoSize(Number(e.target.value))} className="w-full" />
+                    </div>
+                    <div>
+                      <label className="block text-sm text-text-secondary mb-2">Opacity: {logoOpacity}%</label>
+                      <input type="range" min="10" max="100" value={logoOpacity} onChange={(e) => setLogoOpacity(Number(e.target.value))} className="w-full" />
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-4 space-y-2">
+                  <p className="text-sm text-yellow-400">No brand logos found. Upload a logo in Strategy Hub → Brand DNA first.</p>
+                  <a href="/strategy?tab=dna" className="inline-block text-xs text-primary-400 hover:underline">
+                    Go to Brand DNA →
+                  </a>
+                </div>
+              )}
+            </Card>
+
+            {/* With Copy Toggle */}
+            <Card>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <DocumentTextIcon className="w-5 h-5 text-purple-400" />
+                  <div>
+                    <h3 className="font-semibold text-text-primary">With Copy</h3>
+                    <p className="text-xs text-text-muted">Generate image with marketing text rendered by AI</p>
+                  </div>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={withCopy}
+                    onChange={(e) => setWithCopy(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-dark-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-500"></div>
+                </label>
+              </div>
+
+              <AnimatePresence>
+                {withCopy && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.3 }}
+                    className="mt-4 space-y-4 overflow-hidden"
+                  >
+                    {/* Tab toggle */}
+                    <div className="flex gap-1 bg-dark-700 rounded-lg p-0.5">
+                      <button
+                        onClick={() => setUseCustomCopy(false)}
+                        className={`flex-1 text-xs py-2 px-3 rounded-md transition-colors flex items-center justify-center gap-1.5 ${
+                          !useCustomCopy ? 'bg-purple-500/20 text-purple-400 font-medium' : 'text-text-muted hover:text-text-secondary'
+                        }`}
+                      >
+                        <SparklesIcon className="w-3.5 h-3.5" /> AI Suggestions
+                      </button>
+                      <button
+                        onClick={() => setUseCustomCopy(true)}
+                        className={`flex-1 text-xs py-2 px-3 rounded-md transition-colors flex items-center justify-center gap-1.5 ${
+                          useCustomCopy ? 'bg-purple-500/20 text-purple-400 font-medium' : 'text-text-muted hover:text-text-secondary'
+                        }`}
+                      >
+                        <PencilSquareIcon className="w-3.5 h-3.5" /> Custom Text
+                      </button>
+                    </div>
+
+                    {/* AI Suggestions */}
+                    {!useCustomCopy && (
+                      <div className="space-y-2">
+                        <button
+                          onClick={fetchCopySuggestions}
+                          disabled={loadingCopy}
+                          className="w-full py-2.5 px-4 bg-purple-500/10 border border-purple-500/30 rounded-xl text-sm text-purple-400 hover:bg-purple-500/20 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                        >
+                          {loadingCopy ? <Spinner /> : <SparklesIcon className="w-4 h-4" />}
+                          {loadingCopy ? 'Generating...' : copySuggestions.length > 0 ? 'Regenerate Suggestions' : 'Generate Copy Suggestions'}
+                        </button>
+                        {copySuggestions.map((s, idx) => (
+                          <button
+                            key={idx}
+                            onClick={() => setSelectedCopyIdx(idx)}
+                            className={`w-full text-left p-3 rounded-lg border transition-all ${
+                              selectedCopyIdx === idx
+                                ? 'border-purple-500/50 bg-purple-500/10'
+                                : 'border-white/5 bg-dark-700 hover:border-white/15'
+                            }`}
+                          >
+                            <p className="text-sm text-text-primary">{s.text}</p>
+                            {s.style && <span className="text-[10px] text-text-muted uppercase mt-1 inline-block">{s.style}</span>}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Custom Text */}
+                    {useCustomCopy && (
+                      <Textarea
+                        placeholder="Type your marketing copy text..."
+                        rows={2}
+                        value={customCopyText}
+                        onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setCustomCopyText(e.target.value)}
+                      />
+                    )}
+
+                    <div className="flex items-center gap-2 bg-purple-500/5 border border-purple-500/10 rounded-lg p-2.5">
+                      <SparklesIcon className="w-4 h-4 text-purple-400 shrink-0" />
+                      <p className="text-[11px] text-purple-300">
+                        With Copy generates <strong>2 image variations</strong> with your text rendered by AI (2x diamond cost)
+                      </p>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </Card>
+
             {/* Advanced Options Toggle */}
             <button
               onClick={() => setShowAdvanced(!showAdvanced)}
@@ -943,11 +1190,11 @@ export function AIImagePage() {
               size="lg"
               onClick={generateImage}
               isLoading={isGenerating}
-              disabled={!prompt.trim()}
+              disabled={!prompt.trim() || (brandLogos.length > 0 && !selectedBrandLogo)}
               leftIcon={<SparklesIcon className="w-5 h-5" />}
               className="bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600"
             >
-              Generate Image <DiamondCostIndicator cost={15} className="ml-2" />
+              {withCopy ? 'Generate 2 Variations' : 'Generate Image'} <DiamondCostIndicator cost={withCopy ? 30 : 15} className="ml-2" />
             </Button>
           </div>
 
@@ -986,11 +1233,58 @@ export function AIImagePage() {
                   <p className="mt-4 text-text-secondary">Generating your image...</p>
                   <p className="text-xs text-text-muted mt-2">This may take a few moments</p>
                 </div>
+              ) : generatedImages.length > 1 ? (
+                /* Dual image display for with_copy */
+                <div className="space-y-4">
+                  <p className="text-sm text-text-secondary text-center">Choose your preferred variation:</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    {generatedImages.map((img, i) => (
+                      <div
+                        key={img.generation_id}
+                        onClick={() => setSelectedVariation(i)}
+                        className={`rounded-xl overflow-hidden border-2 cursor-pointer transition-all ${
+                          selectedVariation === i
+                            ? 'border-blue-500 ring-2 ring-blue-500/30'
+                            : 'border-white/10 hover:border-white/25'
+                        }`}
+                      >
+                        <img src={img.image_url} alt={`Variation ${i + 1}`} className="w-full h-auto" />
+                        <div className="p-2 bg-dark-700/80 text-center">
+                          <p className="text-xs text-text-primary font-medium">Variation {i + 1}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {generatedImage?.copy_text_in_image && (
+                    <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-xl">
+                      <p className="text-xs text-text-muted mb-1">Copy Text</p>
+                      <p className="text-sm text-purple-300 font-medium">{generatedImage.copy_text_in_image}</p>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-3 gap-3 pt-4 border-t border-white/5">
+                    <div className="text-center">
+                      <p className="text-sm font-bold text-text-primary capitalize">{generatedImage?.style}</p>
+                      <p className="text-xs text-text-muted">Style</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-sm font-bold text-text-primary">{generatedImage?.size}</p>
+                      <p className="text-xs text-text-muted">Size</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-sm font-bold text-text-primary">
+                        {(generatedImage?.processing_time || 0).toFixed(1)}s
+                      </p>
+                      <p className="text-xs text-text-muted">Time</p>
+                    </div>
+                  </div>
+                </div>
               ) : generatedImage?.generated_image ? (
                 <div className="space-y-4">
                   <div className="rounded-xl overflow-hidden bg-dark-700">
                     <img
-                      src={generatedImage.generated_image}
+                      src={generatedImage.generated_image_with_logo || generatedImage.generated_image}
                       alt={generatedImage.title}
                       className="w-full h-auto"
                     />

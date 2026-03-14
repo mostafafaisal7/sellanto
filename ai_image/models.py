@@ -302,9 +302,11 @@ class ImageGeneration(models.Model):
     size = models.CharField(max_length=20, choices=SIZE_CHOICES, default='1024x1024')
     quality = models.CharField(max_length=20, choices=QUALITY_CHOICES, default='high')
     
-    # Logo Settings
+    # Logo Settings (legacy UserLogo — kept for backward compat)
     logo = models.ForeignKey(UserLogo, on_delete=models.SET_NULL, null=True, blank=True)
-    logo_position = models.CharField(max_length=20, choices=LOGO_POSITION_CHOICES, default='none')
+    # Brand logo from BrandAsset (new mandatory system)
+    brand_logo = models.ForeignKey('brands.BrandAsset', on_delete=models.SET_NULL, null=True, blank=True, related_name='image_generations')
+    logo_position = models.CharField(max_length=20, choices=LOGO_POSITION_CHOICES, default='bottom_right')
     logo_size = models.IntegerField(default=10, help_text="Logo size as percentage of image (5-30)")
     logo_opacity = models.IntegerField(default=100, help_text="Logo opacity (10-100)")
     
@@ -314,10 +316,15 @@ class ImageGeneration(models.Model):
     product_scale = models.IntegerField(default=50, help_text="Product size as percentage (20-90)")
     composited_image = models.ImageField(upload_to=generated_image_path, blank=True, null=True, help_text="Final composited image with product")
 
-    # Copy Overlay
+    # Copy Overlay (post-generation Pillow overlay)
     copy_overlay_image = models.ImageField(upload_to=generated_image_path, blank=True, null=True, help_text="Image with copy text overlay applied")
     copy_overlay_text = models.CharField(max_length=200, blank=True, default='', help_text="The copy text overlaid on the image")
     copy_overlay_settings = models.JSONField(blank=True, null=True, help_text="Overlay styling settings (position, font, color, etc.)")
+
+    # With Copy (AI-rendered copy text in generated image)
+    with_copy = models.BooleanField(default=False, help_text="Whether copy text was rendered in the image by AI")
+    copy_text_in_image = models.CharField(max_length=500, blank=True, default='', help_text="Copy text rendered within the generated image")
+    sibling_generation = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='sibling', help_text="Linked variation when with_copy=true")
 
     # Advanced Options
     seed = models.IntegerField(blank=True, null=True, help_text="Seed for reproducibility")
