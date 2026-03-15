@@ -333,6 +333,7 @@ urlpatterns = [
     # Diamond Admin endpoints
     path('admin/users/<int:user_id>/recharge/', diamond_views.AdminRechargeView.as_view(), name='api-admin-recharge'),
     path('admin/global-api-keys/', diamond_views.AdminGlobalAPIKeysView.as_view(), name='api-admin-global-keys'),
+    path('admin/test-api-key/', diamond_views.AdminTestAPIKeyView.as_view(), name='api-admin-test-api-key'),
     path('admin/diamond-overview/', diamond_views.AdminDiamondOverviewView.as_view(), name='api-admin-diamond-overview'),
 
     # ViewSet routes

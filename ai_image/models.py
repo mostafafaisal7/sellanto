@@ -384,10 +384,10 @@ class ImageGeneration(models.Model):
     def get_display_image(self):
         if self.copy_overlay_image:
             return self.copy_overlay_image
-        if self.composited_image:
-            return self.composited_image
         if self.generated_image_with_logo:
             return self.generated_image_with_logo
+        if self.composited_image:
+            return self.composited_image
         return self.generated_image
     
     @property

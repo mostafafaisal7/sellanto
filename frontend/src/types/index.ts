@@ -388,6 +388,7 @@ export interface CaptionGeneration {
   tokens_used: number;
   processing_time: number;
   model_used: string;
+  provider?: string;
   used_prompt?: string;
   created_at: string;
   updated_at: string;
@@ -1567,8 +1568,16 @@ export interface DiamondCosts {
   plan_grants: Record<string, number>;
 }
 
+export interface GlobalAPIKeyProviderStatus {
+  is_set: boolean;
+  is_active: boolean;
+  masked_key: string;
+  updated_at: string | null;
+  set_by: string | null;
+}
+
 export interface GlobalAPIKeysStatus {
-  openai: { is_set: boolean; is_active: boolean; masked_key: string; updated_at: string | null };
-  gemini: { is_set: boolean; is_active: boolean; masked_key: string; updated_at: string | null };
-  claude: { is_set: boolean; is_active: boolean; masked_key: string; updated_at: string | null };
+  openai: GlobalAPIKeyProviderStatus;
+  gemini: GlobalAPIKeyProviderStatus;
+  claude: GlobalAPIKeyProviderStatus;
 }

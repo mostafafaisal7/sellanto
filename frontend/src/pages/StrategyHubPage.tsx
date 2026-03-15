@@ -67,6 +67,23 @@ interface CompetitorInsight {
   extracted_at?: string;
 }
 
+function formatProvider(p?: string): string {
+  if (!p) return '';
+  const map: Record<string, string> = { openai: 'OpenAI', gemini: 'Gemini', claude: 'Claude' };
+  return map[p] || p;
+}
+function formatModel(m?: string): string {
+  if (!m) return '';
+  const known: Record<string, string> = {
+    'dall-e-3': 'DALL-E 3', 'dall-e-2': 'DALL-E 2',
+    'gpt-image-1.5': 'GPT Image 1.5',
+  };
+  if (known[m]) return known[m];
+  const parts = m.replace(/-\d{8,}$/, '').split('-');
+  if (['claude', 'gemini', 'gpt'].includes(parts[0])) parts.shift();
+  return parts.join(' ').replace(/\b\w/g, c => c.toUpperCase()).replace(/\s+/g, ' ').trim();
+}
+
 export function StrategyHubPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab') as 'pillars' | 'competitors' | 'dna' | 'trending' | null;
@@ -168,12 +185,20 @@ export function StrategyHubPage() {
   // Prompt visibility state
   const [dnaUsedPrompt, setDnaUsedPrompt] = useState('');
   const [dnaRegenerating, setDnaRegenerating] = useState(false);
+  const [dnaProvider, setDnaProvider] = useState('');
+  const [dnaModelUsed, setDnaModelUsed] = useState('');
   const [pillarsUsedPrompt, setPillarsUsedPrompt] = useState('');
   const [pillarsRegenerating, setPillarsRegenerating] = useState(false);
+  const [pillarsProvider, setPillarsProvider] = useState('');
+  const [pillarsModelUsed, setPillarsModelUsed] = useState('');
   const [competitorUsedPrompts, setCompetitorUsedPrompts] = useState<Record<string, string>>({});
   const [competitorRegenerating, setCompetitorRegenerating] = useState<Record<string, boolean>>({});
+  const [compProvider, setCompProvider] = useState('');
+  const [compModelUsed, setCompModelUsed] = useState('');
   const [trendingUsedPrompt, setTrendingUsedPrompt] = useState('');
   const [trendingRegenerating, setTrendingRegenerating] = useState(false);
+  const [trendProvider, setTrendProvider] = useState('');
+  const [trendModelUsed, setTrendModelUsed] = useState('');
   const [suggestUsedPrompt, setSuggestUsedPrompt] = useState('');
   const [suggestRegenerating, setSuggestRegenerating] = useState(false);
 
@@ -362,6 +387,8 @@ export function StrategyHubPage() {
           setCompetitorUsedPrompts(p => ({ ...p, _all: combined }));
         }
       }
+      if (result.provider) setCompProvider(result.provider);
+      if (result.model_used) setCompModelUsed(result.model_used);
       loadData();
     } catch (err: any) {
       const msg = err?.response?.data?.error || 'Analysis failed. Check your API key.';
@@ -480,6 +507,8 @@ export function StrategyHubPage() {
         toast.success('Brand DNA generated!');
       }
       if (result.used_prompt) setDnaUsedPrompt(result.used_prompt);
+      if (result.provider) setDnaProvider(result.provider);
+      if (result.model_used) setDnaModelUsed(result.model_used);
     } catch (err: any) {
       const msg = err?.response?.data?.error || 'Failed to generate Brand DNA. Check your API key.';
       setDnaError(msg);
@@ -498,6 +527,8 @@ export function StrategyHubPage() {
         setDnaSource('website');
       }
       if (result.used_prompt) setDnaUsedPrompt(result.used_prompt);
+      if (result.provider) setDnaProvider(result.provider);
+      if (result.model_used) setDnaModelUsed(result.model_used);
     } catch { /* keep existing */ }
     setDnaRegenerating(false);
   };
@@ -514,6 +545,8 @@ export function StrategyHubPage() {
       const topics = result?.topics || [];
       setTrendingTopics(topics);
       if (result?.used_prompt) setTrendingUsedPrompt(result.used_prompt);
+      if (result?.provider) setTrendProvider(result.provider);
+      if (result?.model_used) setTrendModelUsed(result.model_used);
       if (topics.length === 0) {
         setTrendingError('No trending topics found. Try again.');
       }
@@ -537,6 +570,8 @@ export function StrategyHubPage() {
       const topics = result?.topics || [];
       setTrendingTopics(topics);
       if (result?.used_prompt) setTrendingUsedPrompt(result.used_prompt);
+      if (result?.provider) setTrendProvider(result.provider);
+      if (result?.model_used) setTrendModelUsed(result.model_used);
     } catch { /* keep existing */ }
     setTrendingRegenerating(false);
   };
@@ -554,6 +589,8 @@ export function StrategyHubPage() {
         });
       }
       if (result.used_prompt) setCompetitorUsedPrompts(p => ({ ...p, [handleOrUrl]: result.used_prompt }));
+      if (result.provider) setCompProvider(result.provider);
+      if (result.model_used) setCompModelUsed(result.model_used);
       loadData();
     } catch { /* keep existing */ }
     setCompetitorRegenerating(p => ({ ...p, [handleOrUrl]: false }));
@@ -758,12 +795,15 @@ export function StrategyHubPage() {
                 <h3 className="text-lg font-semibold text-gray-200 flex items-center gap-2">
                   <ChartPieIcon className="w-5 h-5 text-primary-400" />
                   Pillar Distribution
-                  {pillarsUsedPrompt && <PromptInfoButton prompt={pillarsUsedPrompt} label="Content Pillars Generation Prompt" regenerating={pillarsRegenerating} regenerateLabel="Regenerate Pillars" onRegenerate={async (ep) => { if (!brandId) return; setPillarsRegenerating(true); try { const focusAreas = pillarGenFocusAreas.split(',').map(s => s.trim()).filter(Boolean); const r = await strategyService.generatePillars(brandId, pillarGenCount, focusAreas, ep); if (r?.used_prompt) setPillarsUsedPrompt(r.used_prompt); loadData(); } catch {} setPillarsRegenerating(false); }} promptHistory={pillarsHistory.history} onLoadHistory={pillarsHistory.load} historyLoading={pillarsHistory.loading} />}
+                  {pillarsUsedPrompt && <PromptInfoButton prompt={pillarsUsedPrompt} label="Content Pillars Generation Prompt" regenerating={pillarsRegenerating} regenerateLabel="Regenerate Pillars" onRegenerate={async (ep) => { if (!brandId) return; setPillarsRegenerating(true); try { const focusAreas = pillarGenFocusAreas.split(',').map(s => s.trim()).filter(Boolean); const r = await strategyService.generatePillars(brandId, pillarGenCount, focusAreas, ep); if (r?.used_prompt) setPillarsUsedPrompt(r.used_prompt); if (r?.provider) setPillarsProvider(r.provider); if (r?.model_used) setPillarsModelUsed(r.model_used); loadData(); } catch {} setPillarsRegenerating(false); }} promptHistory={pillarsHistory.history} onLoadHistory={pillarsHistory.load} historyLoading={pillarsHistory.loading} />}
                 </h3>
                 <span className="text-xs text-gray-400">
                   {compliance.total_posts} total post{compliance.total_posts !== 1 ? 's' : ''}
                 </span>
               </div>
+              {(pillarsProvider || pillarsModelUsed) && (
+                <p className="text-[10px] text-slate-500 mb-3 -mt-3">Powered by {[formatProvider(pillarsProvider), pillarsModelUsed && formatModel(pillarsModelUsed)].filter(Boolean).join(' · ')}</p>
+              )}
               <div className="space-y-5">
                 {compliance.pillars.map((p) => {
                   const isWarning = p.actual_percentage < p.target_percentage * 0.7;
@@ -1007,6 +1047,8 @@ export function StrategyHubPage() {
                           const focusAreas = pillarGenFocusAreas.split(',').map(s => s.trim()).filter(Boolean);
                           const pillarResult = await strategyService.generatePillars(brandId, pillarGenCount, focusAreas);
                           if (pillarResult?.used_prompt) setPillarsUsedPrompt(pillarResult.used_prompt);
+                          if (pillarResult?.provider) setPillarsProvider(pillarResult.provider);
+                          if (pillarResult?.model_used) setPillarsModelUsed(pillarResult.model_used);
                           setShowPillarGenModal(false);
                           setPillarGenFocusAreas('');
                           loadData();
@@ -1155,6 +1197,9 @@ export function StrategyHubPage() {
                           <LightBulbIcon className="w-4 h-4 text-yellow-400" />
                           Strategic Insights
                           {competitorUsedPrompts[comp.handle_or_url] && <PromptInfoButton prompt={competitorUsedPrompts[comp.handle_or_url]} label={`Competitor Analysis — ${comp.handle_or_url}`} onRegenerate={(ep) => handleCompetitorRegenerate(comp.handle_or_url, comp.id, ep)} regenerating={competitorRegenerating[comp.handle_or_url] || false} regenerateLabel="Re-analyze" promptHistory={competitorHistory.history} onLoadHistory={competitorHistory.load} historyLoading={competitorHistory.loading} />}
+                          {(compProvider || compModelUsed) && (
+                            <span className="text-[10px] text-slate-500 font-normal ml-auto">Powered by {[formatProvider(compProvider), compModelUsed && formatModel(compModelUsed)].filter(Boolean).join(' · ')}</span>
+                          )}
                         </h4>
                         <div className="space-y-3">
                           {compInsights.map((insight) => (
@@ -1710,6 +1755,11 @@ export function StrategyHubPage() {
                   </span>
                   <button onClick={handleEnterDnaEdit} className="p-1 rounded hover:bg-white/10 text-text-muted hover:text-primary-400 transition-colors"><PencilIcon className="w-4 h-4" /></button>
                 </h3>
+                {(dnaProvider || dnaModelUsed) && (
+                  <p className="text-[10px] text-slate-500 mb-3 -mt-2">
+                    Powered by {[formatProvider(dnaProvider), dnaModelUsed && formatModel(dnaModelUsed)].filter(Boolean).join(' · ')}
+                  </p>
+                )}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {dnaData.brand_name && (
                     <div>
@@ -2049,6 +2099,9 @@ export function StrategyHubPage() {
                 <p className="text-sm text-text-secondary mt-1">
                   Discover trending topics relevant to your brand using Google Trends + AI analysis
                 </p>
+                {(trendProvider || trendModelUsed) && (
+                  <p className="text-[10px] text-slate-500 mt-1">Powered by {[formatProvider(trendProvider), trendModelUsed && formatModel(trendModelUsed)].filter(Boolean).join(' · ')}</p>
+                )}
               </div>
               <button
                 onClick={handleGenerateTrending}

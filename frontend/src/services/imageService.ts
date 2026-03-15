@@ -183,8 +183,10 @@ export const imageService = {
 
   // Brand Logos (from BrandAsset, with Brand.logo fallback)
   async getBrandLogos(brandId: number): Promise<BrandAsset[]> {
-    const response = await api.get<BrandAsset[]>('/brand-assets/', { params: { brand: brandId } });
-    const assetLogos = (response.data || []).filter((a) => a.asset_type === 'logo');
+    const response = await api.get('/brand-assets/', { params: { brand: brandId } });
+    const raw = response.data;
+    const list: BrandAsset[] = Array.isArray(raw) ? raw : (raw?.results || []);
+    const assetLogos = list.filter((a) => a.asset_type === 'logo');
 
     // Fallback: if no BrandAsset logos, include brand's primary logo
     if (assetLogos.length === 0) {

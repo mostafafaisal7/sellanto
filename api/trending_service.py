@@ -430,6 +430,8 @@ TOP QUERIES (most searched related to brand keywords):
             'topics': created,
             'google_trends_count': len(all_trends),
             'used_prompt': prompt,
+            'provider': getattr(llm_result, 'provider', 'claude'),
+            'model_used': getattr(llm_result, 'model', ''),
         }
 
     except json.JSONDecodeError as e:

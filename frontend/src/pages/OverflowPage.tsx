@@ -63,6 +63,23 @@ interface CaptionVariant {
   id: string; ideaId: number; text: string; selected: boolean;
 }
 
+function formatProvider(p?: string): string {
+  if (!p) return '';
+  const map: Record<string, string> = { openai: 'OpenAI', gemini: 'Gemini', claude: 'Claude' };
+  return map[p] || p;
+}
+function formatModel(m?: string): string {
+  if (!m) return '';
+  const known: Record<string, string> = {
+    'dall-e-3': 'DALL-E 3', 'dall-e-2': 'DALL-E 2',
+    'gpt-image-1.5': 'GPT Image 1.5',
+  };
+  if (known[m]) return known[m];
+  const parts = m.replace(/-\d{8,}$/, '').split('-');
+  if (['claude', 'gemini', 'gpt'].includes(parts[0])) parts.shift();
+  return parts.join(' ').replace(/\b\w/g, c => c.toUpperCase()).replace(/\s+/g, ' ').trim();
+}
+
 // ─── Main Component ──────────────────────────────────────
 export function OverflowPage() {
   const navigate = useNavigate();
@@ -304,6 +321,8 @@ function DNASubStep({ brandId }: { brandId: number | null }) {
   const [newFieldType, setNewFieldType] = useState<'text' | 'list'>('text');
   const [dnaUsedPrompt, setDnaUsedPrompt] = useState('');
   const [dnaRegenerating, setDnaRegenerating] = useState(false);
+  const dnaProvider = useOverflowStore((s) => s.dnaProvider);
+  const dnaModelUsed = useOverflowStore((s) => s.dnaModelUsed);
   const dnaHistory = usePromptHistory(brandId, 'brand_dna');
 
   // Brand Logo
@@ -336,6 +355,7 @@ function DNASubStep({ brandId }: { brandId: number | null }) {
               setDnaData(result.brand_dna);
               overflow.markDNAComplete();
               if (result.used_prompt) setDnaUsedPrompt(result.used_prompt);
+              if (result.provider || result.model_used) useOverflowStore.getState().setDnaProviderModel(result.provider || '', result.model_used || '');
             }
           }).catch(() => {}).finally(() => setLoading(false));
         }
@@ -357,6 +377,7 @@ function DNASubStep({ brandId }: { brandId: number | null }) {
         setDnaData(result.brand_dna);
         overflow.markDNAComplete();
         if (result.used_prompt) setDnaUsedPrompt(result.used_prompt);
+        if (result.provider || result.model_used) useOverflowStore.getState().setDnaProviderModel(result.provider || '', result.model_used || '');
       }
     } catch (err: any) {
       setError(err?.response?.data?.error || 'Failed to generate DNA.');
@@ -372,6 +393,7 @@ function DNASubStep({ brandId }: { brandId: number | null }) {
       if (result.brand_dna) {
         setDnaData(result.brand_dna);
         if (result.used_prompt) setDnaUsedPrompt(result.used_prompt);
+        if (result.provider || result.model_used) useOverflowStore.getState().setDnaProviderModel(result.provider || '', result.model_used || '');
       }
     } catch { /* ignore */ }
     setDnaRegenerating(false);
@@ -457,6 +479,13 @@ function DNASubStep({ brandId }: { brandId: number | null }) {
         headers: { Authorization: `Bearer ${localStorage.getItem('access_token')}` },
         body: logoFormData,
       });
+      // Also create BrandAsset so MediaStep can find the logo
+      const assetFormData = new FormData();
+      assetFormData.append('brand', String(brandId));
+      assetFormData.append('file', logoFile);
+      assetFormData.append('asset_type', 'logo');
+      assetFormData.append('name', dnaData?.brand_name || 'Brand Logo');
+      await api.post('/brand-assets/', assetFormData).catch(() => {});
       setLogoFile(null);
       setLogoPreview(null);
     } catch (err) { console.error('Failed to upload logo:', err); }
@@ -653,7 +682,10 @@ function DNASubStep({ brandId }: { brandId: number | null }) {
 
           {/* Brand Identity Card */}
           <div className="card p-6 transition-all">
-            <h3 className="text-lg font-semibold mb-4 flex items-center justify-between">Brand Identity <button onClick={enterEditMode} className="p-1 rounded hover:bg-white/10 text-text-muted hover:text-primary-400 transition-colors"><PencilIcon className="w-4 h-4" /></button></h3>
+            <h3 className="text-lg font-semibold mb-1 flex items-center justify-between">Brand Identity <button onClick={enterEditMode} className="p-1 rounded hover:bg-white/10 text-text-muted hover:text-primary-400 transition-colors"><PencilIcon className="w-4 h-4" /></button></h3>
+            {(dnaProvider || dnaModelUsed) && (
+              <p className="text-[10px] text-slate-500 mb-3">Powered by {[formatProvider(dnaProvider), dnaModelUsed && formatModel(dnaModelUsed)].filter(Boolean).join(' · ')}</p>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {dnaData.brand_name && (<div><label className="text-xs font-medium text-text-secondary uppercase tracking-wide">Brand Name</label><p className="text-sm mt-1">{dnaData.brand_name}</p></div>)}
               {dnaData.tagline && (<div><label className="text-xs font-medium text-text-secondary uppercase tracking-wide">Tagline</label><p className="text-sm mt-1 italic">"{dnaData.tagline}"</p></div>)}
@@ -803,6 +835,8 @@ function PillarsSubStep({ brandId }: { brandId: number | null }) {
   const [showGenPanel, setShowGenPanel] = useState(false);
   const [pillarsUsedPrompt, setPillarsUsedPrompt] = useState('');
   const [pillarsRegenerating, setPillarsRegenerating] = useState(false);
+  const pillarsProvider = useOverflowStore((s) => s.pillarsProvider);
+  const pillarsModelUsed = useOverflowStore((s) => s.pillarsModelUsed);
   const pillarsHistory = usePromptHistory(brandId, 'pillars');
 
   const handlePillarsRegenerate = async (editedPrompt: string) => {
@@ -812,6 +846,7 @@ function PillarsSubStep({ brandId }: { brandId: number | null }) {
       const areas = focusAreas.split(',').map((a) => a.trim()).filter(Boolean);
       const genResult = await strategyService.generatePillars(brandId, genCount, areas, editedPrompt);
       if (genResult.used_prompt) setPillarsUsedPrompt(genResult.used_prompt);
+      if (genResult.provider || genResult.model_used) useOverflowStore.getState().setPillarsProviderModel(genResult.provider || '', genResult.model_used || '');
       await load();
     } catch { /* ignore */ }
     setPillarsRegenerating(false);
@@ -859,6 +894,7 @@ function PillarsSubStep({ brandId }: { brandId: number | null }) {
       const areas = focusAreas.split(',').map((a) => a.trim()).filter(Boolean);
       const genResult = await strategyService.generatePillars(brandId, genCount, areas);
       if (genResult.used_prompt) setPillarsUsedPrompt(genResult.used_prompt);
+      if (genResult.provider || genResult.model_used) useOverflowStore.getState().setPillarsProviderModel(genResult.provider || '', genResult.model_used || '');
       setShowGenPanel(false);
       setFocusAreas('');
       await load();
@@ -887,6 +923,9 @@ function PillarsSubStep({ brandId }: { brandId: number | null }) {
           <div className="w-5 h-5 rounded bg-gradient-to-br from-indigo-500 to-purple-500" />
           Content Pillars
           <PromptInfoButton prompt={pillarsUsedPrompt} label="Content Pillars Generation Prompt" onRegenerate={handlePillarsRegenerate} regenerating={pillarsRegenerating} regenerateLabel="Regenerate Pillars" promptHistory={pillarsHistory.history} onLoadHistory={pillarsHistory.load} historyLoading={pillarsHistory.loading} />
+          {(pillarsProvider || pillarsModelUsed) && (
+            <span className="text-[10px] text-slate-500 font-normal ml-auto">Powered by {[formatProvider(pillarsProvider), pillarsModelUsed && formatModel(pillarsModelUsed)].filter(Boolean).join(' · ')}</span>
+          )}
         </h3>
         <div className="flex items-center gap-2">
           <button onClick={() => setShowGenPanel(!showGenPanel)} className="btn-primary text-sm flex items-center gap-1.5">
@@ -1027,6 +1066,8 @@ function CompetitorsSubStep({ brandId }: { brandId: number | null }) {
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [competitorUsedPrompts, setCompetitorUsedPrompts] = useState<Record<string, string>>({});
   const [competitorRegenerating, setCompetitorRegenerating] = useState<Record<string, boolean>>({});
+  const compProvider = useOverflowStore((s) => s.compProvider);
+  const compModelUsed = useOverflowStore((s) => s.compModelUsed);
   const [aiSuggestions, setAiSuggestions] = useState<Array<{ name: string; platform: string; handle_or_url: string; reason: string }>>([]);
   const [findingByAi, setFindingByAi] = useState(false);
   const competitorHistory = usePromptHistory(brandId, 'competitors');
@@ -1099,6 +1140,7 @@ function CompetitorsSubStep({ brandId }: { brandId: number | null }) {
         result.used_prompts.forEach((p: { competitor: string; prompt: string }) => { promptMap[p.competitor] = p.prompt; });
         setCompetitorUsedPrompts((prev) => ({ ...prev, ...promptMap }));
       }
+      if (result.provider || result.model_used) useOverflowStore.getState().setCompProviderModel(result.provider || '', result.model_used || '');
       overflow.markCompetitorsComplete();
       load();
     } catch (err: any) {
@@ -1125,6 +1167,7 @@ function CompetitorsSubStep({ brandId }: { brandId: number | null }) {
         result.used_prompts.forEach((p: { competitor: string; prompt: string }) => { promptMap[p.competitor] = p.prompt; });
         setCompetitorUsedPrompts((prev) => ({ ...prev, ...promptMap }));
       }
+      if (result.provider || result.model_used) useOverflowStore.getState().setCompProviderModel(result.provider || '', result.model_used || '');
     } catch { /* ignore */ }
     setCompetitorRegenerating((prev) => ({ ...prev, [compHandle]: false }));
   };
@@ -1155,6 +1198,9 @@ function CompetitorsSubStep({ brandId }: { brandId: number | null }) {
           </div>
         </div>
         <p className="text-sm text-white">Add competitor profiles and get AI-powered strategic insights.</p>
+        {(compProvider || compModelUsed) && (
+          <p className="text-[10px] text-slate-500 mt-1">Powered by {[formatProvider(compProvider), compModelUsed && formatModel(compModelUsed)].filter(Boolean).join(' · ')}</p>
+        )}
       </div>
 
       {analysisError && (
@@ -1330,6 +1376,8 @@ function TrendingSubStep({ brandId }: { brandId: number | null }) {
   const trendingUsedPrompt = useOverflowStore((s) => s.trendingUsedPrompt);
   const [trendingRegenerating, setTrendingRegenerating] = useState(false);
   const trendingHistory = usePromptHistory(brandId, 'trending');
+  const trendProvider = useOverflowStore((s) => s.trendProvider);
+  const trendModelUsed = useOverflowStore((s) => s.trendModelUsed);
 
   const handleTrendingRegenerate = async (editedPrompt: string) => {
     if (!brandId) return;
@@ -1339,6 +1387,7 @@ function TrendingSubStep({ brandId }: { brandId: number | null }) {
       const arr = result?.topics || [];
       setTopics(arr);
       if (result?.used_prompt) useOverflowStore.getState().setTrendingUsedPrompt(result.used_prompt);
+      if (result?.provider || result?.model_used) useOverflowStore.getState().setTrendProviderModel(result?.provider || '', result?.model_used || '');
     } catch { /* ignore */ }
     setTrendingRegenerating(false);
   };
@@ -1391,6 +1440,7 @@ function TrendingSubStep({ brandId }: { brandId: number | null }) {
       const arr = result?.topics || [];
       setTopics(arr);
       if (result?.used_prompt) useOverflowStore.getState().setTrendingUsedPrompt(result.used_prompt);
+      if (result?.provider || result?.model_used) useOverflowStore.getState().setTrendProviderModel(result?.provider || '', result?.model_used || '');
       if (arr.length > 0) markTrendingComplete();
       else setError('No trending topics found. Try again.');
     } catch (err: any) {
@@ -1454,6 +1504,9 @@ function TrendingSubStep({ brandId }: { brandId: number | null }) {
       <p className="text-sm text-white">
         Discover trending topics relevant to your brand. Like/dislike topics to teach AI your preferences — disliked topics won't appear in future generations. Add your own custom topics too.
       </p>
+      {(trendProvider || trendModelUsed) && (
+        <p className="text-[10px] text-slate-500 -mt-2">Powered by {[formatProvider(trendProvider), trendModelUsed && formatModel(trendModelUsed)].filter(Boolean).join(' · ')}</p>
+      )}
       {error && (
         <div className="bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3">
           <p className="text-sm text-red-400">{error}</p>
@@ -1605,6 +1658,8 @@ function IdeasStep({ brandId }: { brandId: number | null }) {
   const ideasUsedPrompt = overflow.ideasUsedPrompt;
   const [ideasRegenerating, setIdeasRegenerating] = useState(false);
   const ideasHistory = usePromptHistory(brandId, 'ideas');
+  const ideasProvider = useOverflowStore((s) => s.ideasProvider);
+  const ideasModelUsed = useOverflowStore((s) => s.ideasModelUsed);
 
   const handleIdeasRegenerate = async (editedPrompt: string) => {
     if (!brandId) return;
@@ -1623,6 +1678,7 @@ function IdeasStep({ brandId }: { brandId: number | null }) {
       if (result.used_prompt) {
         useOverflowStore.getState().setIdeasUsedPrompt(result.used_prompt);
       }
+      if (result.provider || result.model_used) useOverflowStore.getState().setIdeasProviderModel(result.provider || '', result.model_used || '');
       const mapped = newIdeas.map((i: ContentIdea) => ({
         id: i.id, title: i.title, hook: i.hook, angle: i.angle, platform: i.platform,
         content_format: i.content_format, engagement_tier: i.engagement_tier, pillar_name: i.pillar_name,
@@ -1652,6 +1708,7 @@ function IdeasStep({ brandId }: { brandId: number | null }) {
       if (result.used_prompt) {
         useOverflowStore.getState().setIdeasUsedPrompt(result.used_prompt);
       }
+      if (result.provider || result.model_used) useOverflowStore.getState().setIdeasProviderModel(result.provider || '', result.model_used || '');
       // Store idea data for CaptionsStep + auto-select all
       const mapped = newIdeas.map((i: ContentIdea) => ({
         id: i.id, title: i.title, hook: i.hook, angle: i.angle || '',
@@ -1691,6 +1748,9 @@ function IdeasStep({ brandId }: { brandId: number | null }) {
         <p className="text-sm text-white">
           1 idea per trending topic — auto-generated from your Brand DNA & market analysis.
         </p>
+        {(ideasProvider || ideasModelUsed) && (
+          <p className="text-[10px] text-slate-500 mt-1">Powered by {[formatProvider(ideasProvider), ideasModelUsed && formatModel(ideasModelUsed)].filter(Boolean).join(' · ')}</p>
+        )}
         {error && <p className="text-sm text-red-400 mt-2">{error}</p>}
       </div>
 
@@ -1756,6 +1816,8 @@ function CaptionsStep() {
   const [editText, setEditText] = useState('');
   const [captionUsedPrompts, setCaptionUsedPrompts] = useState<Record<string, string>>({});
   const [captionRegenerating, setCaptionRegenerating] = useState<Record<string, boolean>>({});
+  const captionProvider = useOverflowStore((s) => s.captionProvider);
+  const captionModelUsed = useOverflowStore((s) => s.captionModelUsed);
 
   const handleCaptionRegenerate = async (ideaId: string, editedPrompt: string) => {
     setCaptionRegenerating((prev) => ({ ...prev, [ideaId]: true }));
@@ -1813,9 +1875,10 @@ Output the caption ONLY — no labels, no preamble, no explanation.${customInstr
         include_cta: true,
         custom_instructions: variantInstruction,
       });
-      // Store used prompt from first variant
-      if (i === 0 && result.used_prompt) {
-        const up = result.used_prompt; setCaptionUsedPrompts((prev) => ({ ...prev, [String(ideaId)]: up }));
+      // Store used prompt + provider/model from first variant
+      if (i === 0) {
+        if (result.used_prompt) { const up = result.used_prompt; setCaptionUsedPrompts((prev) => ({ ...prev, [String(ideaId)]: up })); }
+        if (result.provider || result.model_used) useOverflowStore.getState().setCaptionProviderModel(result.provider || '', result.model_used || '');
       }
       variants.push({
         id: `${ideaId}-${i}`,
@@ -2040,6 +2103,12 @@ Output the caption ONLY — no labels, no preamble, no explanation.${customInstr
                 </div>
               ))}
 
+              {captions.length > 0 && (captionProvider || captionModelUsed) && (
+                <p className="text-[10px] text-slate-500 text-right mt-1">
+                  Powered by {[formatProvider(captionProvider), captionModelUsed && formatModel(captionModelUsed)].filter(Boolean).join(' · ')}
+                </p>
+              )}
+
               {captions.length > 0 && (
                 <div className="flex items-center gap-3 mt-2">
                   <button
@@ -2132,9 +2201,13 @@ function MediaStep() {
   const [imageRegenerating, setImageRegenerating] = useState<Record<string, boolean>>({});
   const [providers, setProviders] = useState<Record<string, 'openai' | 'gemini' | 'both'>>({});
   const [bothResults, setBothResults] = useState<Record<string, { openai?: any; gemini?: any }>>({});
+  const [imageModelUsed, setImageModelUsed] = useState<Record<string, string>>({});
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [copyOverlayOpen, setCopyOverlayOpen] = useState<string | null>(null);
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  // Auto-fill AI state
+  const [autoFilling, setAutoFilling] = useState<Record<string, boolean>>({});
 
   // Brand logo state (mandatory)
   const [brandLogos, setBrandLogos] = useState<{ id: number; file: string; name: string }[]>([]);
@@ -2164,9 +2237,17 @@ function MediaStep() {
   const fetchCopySuggestionsFor = async (captionId: string, captionText: string) => {
     setLoadingCopyMap((p) => ({ ...p, [captionId]: true }));
     try {
+      // Build idea context from the caption's linked idea
+      const cap = captions.find((c) => c.id === captionId);
+      const idea = cap ? overflow.ideasData.find((i) => i.id === cap.ideaId) : null;
+      const ideaCtx = idea ? `${idea.title}\nHook: ${idea.hook}\nAngle: ${idea.angle || ''}` : '';
+      const refinedPrompt = refinedPrompts[captionId] || '';
       const res = await imageService.generateCopySuggestions({
         brand_id: overflow.brandId || undefined,
         caption_text: captionText || 'marketing image',
+        idea_context: ideaCtx,
+        image_description: refinedPrompt,
+        trending_topics: overflow.selectedTrendingTopics.slice(0, 5).join(', '),
         count: 5,
       });
       const suggestions = res.suggestions || [];
@@ -2213,6 +2294,31 @@ function MediaStep() {
       topics: overflow.selectedTrendingTopics.slice(0, 5),
       caption_snippet: captionText.substring(0, 200),
     };
+  };
+
+  const handleAutoFill = async (captionId: string, captionText: string, idea: ReturnType<typeof getIdea>) => {
+    setAutoFilling((p) => ({ ...p, [captionId]: true }));
+    try {
+      // Build a seed prompt for the AI
+      const parts: string[] = [];
+      if (idea) { parts.push(idea.title); if (idea.hook) parts.push(idea.hook); }
+      if (overflow.selectedTrendingTopics.length > 0) parts.push(`themed around ${overflow.selectedTrendingTopics[0]}`);
+      if (overflow.brandContext) parts.push(`for ${overflow.brandContext.brand_name}`);
+      const seedPrompt = parts.join(' — ') || 'A professional social media image';
+
+      const ctx = gatherContext(captionText);
+      const refineResult = await imageService.refinePrompt({
+        ...ctx,
+        user_prompt: seedPrompt,
+        style: styles[captionId] || 'modern',
+      });
+      // Set the AI prompt into the textarea AND as refined prompt (ready for "Generate Image")
+      if (refineResult.refined_prompt) {
+        setPrompts((p) => ({ ...p, [captionId]: refineResult.refined_prompt }));
+        setRefinedPrompts((p) => ({ ...p, [captionId]: refineResult.refined_prompt }));
+      }
+    } catch { /* ignore */ }
+    setAutoFilling((p) => ({ ...p, [captionId]: false }));
   };
 
   const handleFileUpload = (captionId: string, e: React.ChangeEvent<HTMLInputElement>) => {
@@ -2300,10 +2406,12 @@ function MediaStep() {
     setErrorMap((p) => ({ ...p, [captionId]: null }));
     setBothResults((p) => ({ ...p, [captionId]: {} }));
 
-    const enhancedImagePrompt = `Create a professional social media content image based on this description: ${refined}\n\nRequirements:\n- Clean, brand-appropriate composition suitable for marketing\n- High visual quality with professional lighting\n- Clear focal point and intentional negative space\n- Style: ${style}\n- No text or watermarks in the image\n\nEnhance this prompt with specific details about composition, lighting direction, color palette, and depth of field to produce the highest quality result.`;
+    // Use the refined prompt directly — already well-crafted by Claude AI.
+    // Do NOT mention logos/watermarks in the prompt — the AI renders them as text.
+    // The real brand logo is composited via PIL post-generation.
 
     const buildRequest = (prov: 'openai' | 'gemini') => {
-      const req: any = { prompt: enhancedImagePrompt, style, enhance_prompt: true, provider: prov };
+      const req: any = { prompt: refined, style, enhance_prompt: true, provider: prov };
       const files = uploadedFiles[captionId] || [];
       if (mode === 'upload' && files.length > 0) {
         req.product_image = files[0];
@@ -2363,6 +2471,7 @@ function MediaStep() {
         }
         const genPrompt = result.enhanced_prompt || result.revised_prompt || '';
         if (genPrompt) setImageUsedPrompts((p) => ({ ...p, [captionId]: genPrompt }));
+        if (result.model_used) setImageModelUsed((p) => ({ ...p, [captionId]: result.model_used! }));
       }
     } catch (err: any) {
       const msg = err?.response?.data?.error || err?.message || 'Failed to generate image.';
@@ -2414,7 +2523,7 @@ function MediaStep() {
         if (anyResult) { const gp = anyResult.enhanced_prompt || anyResult.revised_prompt || ''; if (gp) setImageUsedPrompts((p) => ({ ...p, [captionId]: gp })); }
       } else {
         const result = await imageService.generate(buildReq(provider));
-        const rawUrl = result.composited_image || result.generated_image || result.generated_image_with_logo || null;
+        const rawUrl = result.generated_image_with_logo || result.composited_image || result.generated_image || null;
         const imageUrl = toMediaUrl(rawUrl);
         overflow.setCaptionMedia(captionId, imageUrl, result.id || null);
         if (result.id) overflow.addMedia(result.id);
@@ -2599,16 +2708,15 @@ function MediaStep() {
                         <span className="text-text-muted font-normal ml-1">(optional)</span>
                       </label>
                       <button
-                        onClick={() => {
-                          const parts: string[] = [];
-                          if (idea) { parts.push(idea.title); if (idea.hook) parts.push(idea.hook); }
-                          if (overflow.selectedTrendingTopics.length > 0) parts.push(`themed around ${overflow.selectedTrendingTopics[0]}`);
-                          if (overflow.brandContext) parts.push(`for ${overflow.brandContext.brand_name}`);
-                          if (parts.length > 0) setPrompts((p) => ({ ...p, [cap.id]: parts.join(' — ') }));
-                        }}
-                        className="text-[10px] text-primary-400 hover:text-primary-300 flex items-center gap-1"
+                        onClick={() => handleAutoFill(cap.id, cap.text, idea)}
+                        disabled={autoFilling[cap.id]}
+                        className="text-[10px] text-primary-400 hover:text-primary-300 flex items-center gap-1 disabled:opacity-50"
                       >
-                        <SparklesIcon className="w-2.5 h-2.5" /> Auto-fill
+                        {autoFilling[cap.id] ? (
+                          <><ArrowPathIcon className="w-2.5 h-2.5 animate-spin" /> Generating...</>
+                        ) : (
+                          <><SparklesIcon className="w-2.5 h-2.5" /> AI Auto-fill</>
+                        )}
                       </button>
                     </div>
                     <textarea
@@ -2856,6 +2964,11 @@ function MediaStep() {
                           <TrashIcon className="w-3 h-3" /> Remove
                         </button>
                       </div>
+                      {(providers[cap.id] || imageModelUsed[cap.id]) && (
+                        <p className="text-[10px] text-slate-500 text-center pt-1">
+                          Powered by {[formatProvider(providers[cap.id]), imageModelUsed[cap.id] && formatModel(imageModelUsed[cap.id])].filter(Boolean).join(' · ')}
+                        </p>
+                      )}
                     </div>
                   )}
 
@@ -2909,11 +3022,11 @@ function MediaStep() {
                               <p className="text-[10px] text-red-400">Failed to generate</p>
                             </div>
                           );
-                          const provUrl = toMediaUrl(provResult.composited_image || provResult.generated_image || provResult.generated_image_with_logo || null);
+                          const provUrl = toMediaUrl(provResult.generated_image_with_logo || provResult.composited_image || provResult.generated_image || null);
                           const isSelected = media?.mediaId === (provResult.id || null);
                           return (
                             <div key={prov} className={`rounded-lg border p-2 space-y-2 ${isSelected ? 'border-green-500/50 bg-green-500/5' : 'border-white/10'}`}>
-                              <p className="text-[10px] font-medium text-text-muted uppercase text-center">{prov === 'openai' ? 'OpenAI' : 'Gemini'}</p>
+                              <p className="text-[10px] font-medium text-text-muted uppercase text-center">{prov === 'openai' ? 'OpenAI' : 'Gemini'}{provResult.model_used ? ` · ${formatModel(provResult.model_used)}` : ''}</p>
                               {provUrl && (
                                 <div className="relative group cursor-pointer" onClick={() => setPreviewImage(provUrl)}>
                                   <img src={provUrl} alt={prov} className="rounded-lg max-h-44 mx-auto border border-white/10" />

@@ -523,6 +523,9 @@ export function AIVoicePage() {
                       Generated in {generatedAudio.processing_time.toFixed(2)}s
                     </p>
                   )}
+                  <p className="text-[10px] text-slate-500 text-center pt-1">
+                    Powered by OpenAI{generatedAudio.model ? ` · ${generatedAudio.model.toUpperCase()}` : ''}
+                  </p>
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -616,6 +619,7 @@ export function AIVoicePage() {
                           <span>{item.characters_used} chars</span>
                           <span>{formatFileSize(item.file_size_bytes)}</span>
                           <span>{formatDistanceToNow(new Date(item.created_at), { addSuffix: true })}</span>
+                          <span className="text-slate-500">OpenAI{item.model ? ` · ${item.model.toUpperCase()}` : ''}</span>
                         </div>
                       </div>
 

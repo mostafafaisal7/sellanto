@@ -45,6 +45,20 @@ interface OverflowState {
   ideasUsedPrompt: string;
   trendingUsedPrompt: string;
 
+  // Provider/model info (survives step navigation)
+  dnaProvider: string;
+  dnaModelUsed: string;
+  pillarsProvider: string;
+  pillarsModelUsed: string;
+  compProvider: string;
+  compModelUsed: string;
+  trendProvider: string;
+  trendModelUsed: string;
+  ideasProvider: string;
+  ideasModelUsed: string;
+  captionProvider: string;
+  captionModelUsed: string;
+
   selectedCaptionIds: number[];
   generatedMediaIds: number[];
   generatedMediaUrl: string | null;
@@ -71,6 +85,12 @@ interface OverflowState {
   setIdeasData: (ideas: IdeaData[]) => void;
   setIdeasUsedPrompt: (prompt: string) => void;
   setTrendingUsedPrompt: (prompt: string) => void;
+  setDnaProviderModel: (p: string, m: string) => void;
+  setPillarsProviderModel: (p: string, m: string) => void;
+  setCompProviderModel: (p: string, m: string) => void;
+  setTrendProviderModel: (p: string, m: string) => void;
+  setIdeasProviderModel: (p: string, m: string) => void;
+  setCaptionProviderModel: (p: string, m: string) => void;
   toggleIdeaSelection: (ideaId: number) => void;
   setIdeaSelection: (ids: number[]) => void;
   setMediaPreference: (ideaId: number, pref: 'image' | 'video' | 'none') => void;
@@ -106,6 +126,18 @@ export const useOverflowStore = create<OverflowState>()(
       ideaMediaPreferences: {},
       ideasUsedPrompt: '',
       trendingUsedPrompt: '',
+      dnaProvider: '',
+      dnaModelUsed: '',
+      pillarsProvider: '',
+      pillarsModelUsed: '',
+      compProvider: '',
+      compModelUsed: '',
+      trendProvider: '',
+      trendModelUsed: '',
+      ideasProvider: '',
+      ideasModelUsed: '',
+      captionProvider: '',
+      captionModelUsed: '',
       selectedCaptionIds: [],
       generatedMediaIds: [],
       generatedMediaUrl: null,
@@ -150,6 +182,12 @@ export const useOverflowStore = create<OverflowState>()(
       setIdeasData: (ideas) => set({ ideasData: ideas }),
       setIdeasUsedPrompt: (prompt) => set({ ideasUsedPrompt: prompt }),
       setTrendingUsedPrompt: (prompt) => set({ trendingUsedPrompt: prompt }),
+      setDnaProviderModel: (p, m) => set({ dnaProvider: p, dnaModelUsed: m }),
+      setPillarsProviderModel: (p, m) => set({ pillarsProvider: p, pillarsModelUsed: m }),
+      setCompProviderModel: (p, m) => set({ compProvider: p, compModelUsed: m }),
+      setTrendProviderModel: (p, m) => set({ trendProvider: p, trendModelUsed: m }),
+      setIdeasProviderModel: (p, m) => set({ ideasProvider: p, ideasModelUsed: m }),
+      setCaptionProviderModel: (p, m) => set({ captionProvider: p, captionModelUsed: m }),
       toggleIdeaSelection: (ideaId) => {
         const { selectedIdeaIds } = get();
         if (selectedIdeaIds.includes(ideaId)) {
@@ -199,6 +237,9 @@ export const useOverflowStore = create<OverflowState>()(
         competitorsCompleted: false, trendingCompleted: false,
         selectedTrendingTopics: [], brandContext: null,
         ideasData: [], selectedIdeaIds: [], ideaMediaPreferences: {}, ideasUsedPrompt: '', trendingUsedPrompt: '',
+        dnaProvider: '', dnaModelUsed: '', pillarsProvider: '', pillarsModelUsed: '',
+        compProvider: '', compModelUsed: '', trendProvider: '', trendModelUsed: '',
+        ideasProvider: '', ideasModelUsed: '', captionProvider: '', captionModelUsed: '',
         selectedCaptionIds: [], generatedMediaIds: [], generatedMediaUrl: null,
         createdPostId: null, selectedCaptions: [], captionMediaMap: {},
         isCompleted: false, isSkipped: false,
@@ -211,6 +252,9 @@ export const useOverflowStore = create<OverflowState>()(
         selectedTrendingTopics: [], brandContext: null,
         ideasData: [idea], selectedIdeaIds: [idea.id],
         ideaMediaPreferences: {}, ideasUsedPrompt: '', trendingUsedPrompt: '',
+        dnaProvider: '', dnaModelUsed: '', pillarsProvider: '', pillarsModelUsed: '',
+        compProvider: '', compModelUsed: '', trendProvider: '', trendModelUsed: '',
+        ideasProvider: '', ideasModelUsed: '', captionProvider: '', captionModelUsed: '',
         selectedCaptionIds: [], generatedMediaIds: [], generatedMediaUrl: null,
         createdPostId: null, selectedCaptions: [], captionMediaMap: {},
         isCompleted: false, isSkipped: false,
@@ -267,6 +311,18 @@ export const useOverflowStore = create<OverflowState>()(
         ideasData: state.ideasData,
         ideasUsedPrompt: state.ideasUsedPrompt,
         trendingUsedPrompt: state.trendingUsedPrompt,
+        dnaProvider: state.dnaProvider,
+        dnaModelUsed: state.dnaModelUsed,
+        pillarsProvider: state.pillarsProvider,
+        pillarsModelUsed: state.pillarsModelUsed,
+        compProvider: state.compProvider,
+        compModelUsed: state.compModelUsed,
+        trendProvider: state.trendProvider,
+        trendModelUsed: state.trendModelUsed,
+        ideasProvider: state.ideasProvider,
+        ideasModelUsed: state.ideasModelUsed,
+        captionProvider: state.captionProvider,
+        captionModelUsed: state.captionModelUsed,
         selectedIdeaIds: state.selectedIdeaIds,
         ideaMediaPreferences: state.ideaMediaPreferences,
         selectedCaptionIds: state.selectedCaptionIds,

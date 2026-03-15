@@ -7,6 +7,7 @@ from pathlib import Path
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+<<<<<<< HEAD
 # API Key Configuration (fallbacks - users should set keys via Settings page)
 OPENAI_API_KEY = config('OPENAI_API_KEY', default='')
 GEMINI_API_KEY = config('GEMINI_API_KEY', default='')
@@ -24,6 +25,8 @@ FACEBOOK_REDIRECT_URI = config(
 # Your React frontend URL (used for postMessage security check in popup)
 FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:3000')
 
+=======
+>>>>>>> feature/swapnil-v1.2
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = config('DJANGO_SECRET_KEY', default='django-insecure-rf#m85xc6pefl#85gx(-g)%w)2_*_eg5*26ovyanr!7n%8vhm=')
 

@@ -896,6 +896,7 @@ export function AIVideoPage() {
                       <p className="text-xs text-text-muted">Generated in {(generatedVideo.processing_time || 0).toFixed(1)}s</p>
                     </div>
                   )}
+                  <p className="text-[10px] text-slate-500 text-center pt-1">Powered by Gemini</p>
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -951,6 +952,7 @@ export function AIVideoPage() {
                     <p className="text-sm text-text-muted mt-1">
                       {formatDistanceToNow(new Date(item.created_at), { addSuffix: true })}
                     </p>
+                    <p className="text-[10px] text-slate-500 mt-0.5">Gemini</p>
                   </div>
                 </Card>
               ))}

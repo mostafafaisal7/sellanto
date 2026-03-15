@@ -134,6 +134,23 @@ const cameraAngles: { id: CameraAngle; label: string }[] = [
 
 type TabType = 'generate' | 'history' | 'saved' | 'logos' | 'templates' | 'settings';
 
+function formatProvider(p?: string): string {
+  if (!p) return '';
+  const map: Record<string, string> = { openai: 'OpenAI', gemini: 'Gemini', claude: 'Claude' };
+  return map[p] || p;
+}
+function formatModel(m?: string): string {
+  if (!m) return '';
+  const known: Record<string, string> = {
+    'dall-e-3': 'DALL-E 3', 'dall-e-2': 'DALL-E 2',
+    'gpt-image-1.5': 'GPT Image 1.5',
+  };
+  if (known[m]) return known[m];
+  const parts = m.replace(/-\d{8,}$/, '').split('-');
+  if (['claude', 'gemini', 'gpt'].includes(parts[0])) parts.shift();
+  return parts.join(' ').replace(/\b\w/g, c => c.toUpperCase()).replace(/\s+/g, ' ').trim();
+}
+
 export function AIImagePage() {
   const [activeTab, setActiveTab] = useState<TabType>('generate');
   const [isGenerating, setIsGenerating] = useState(false);
@@ -1279,6 +1296,11 @@ export function AIImagePage() {
                       <p className="text-xs text-text-muted">Time</p>
                     </div>
                   </div>
+                  {(generatedImage?.provider || generatedImage?.model_used) && (
+                    <p className="text-[10px] text-slate-500 text-center pt-1">
+                      Powered by {[formatProvider(generatedImage?.provider), generatedImage?.model_used && formatModel(generatedImage.model_used)].filter(Boolean).join(' · ')}
+                    </p>
+                  )}
                 </div>
               ) : generatedImage?.generated_image ? (
                 <div className="space-y-4">
@@ -1319,6 +1341,11 @@ export function AIImagePage() {
                       <p className="text-xs text-text-muted">Time</p>
                     </div>
                   </div>
+                  {(generatedImage?.provider || generatedImage?.model_used) && (
+                    <p className="text-[10px] text-slate-500 text-center pt-1">
+                      Powered by {[formatProvider(generatedImage?.provider), generatedImage?.model_used && formatModel(generatedImage.model_used)].filter(Boolean).join(' · ')}
+                    </p>
+                  )}
 
                   {/* Diagnose Issues */}
                   {generatedImage.status === 'completed' && selectedBrand && (
@@ -1424,6 +1451,11 @@ export function AIImagePage() {
                     <p className="text-xs text-text-muted mt-1">
                       {formatDistanceToNow(new Date(item.created_at), { addSuffix: true })}
                     </p>
+                    {(item.provider || item.model_used) && (
+                      <p className="text-[10px] text-slate-500 mt-0.5">
+                        {[formatProvider(item.provider), item.model_used && formatModel(item.model_used)].filter(Boolean).join(' · ')}
+                      </p>
+                    )}
                   </div>
                 </Card>
               ))}
@@ -1665,8 +1697,8 @@ export function AIImagePage() {
                 <p className="text-xs text-text-muted">Quality</p>
               </div>
               <div className="p-3 bg-dark-700/50 rounded-xl text-center">
-                <p className="text-sm font-medium text-text-primary capitalize">{showPreview.provider}</p>
-                <p className="text-xs text-text-muted">Provider</p>
+                <p className="text-sm font-medium text-text-primary capitalize">{formatProvider(showPreview.provider)}</p>
+                <p className="text-xs text-text-muted">{showPreview.model_used ? formatModel(showPreview.model_used) : 'Provider'}</p>
               </div>
             </div>
             <div className="flex gap-3 pt-4">

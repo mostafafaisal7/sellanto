@@ -348,7 +348,8 @@ class DiamondTransaction(models.Model):
 
 
 class GlobalAPIKey(models.Model):
-    """Admin-managed global API keys shared by all users."""
+    """Admin-managed global API keys shared by all users.
+    Keys are encrypted with Fernet (derived from SECRET_KEY) before storage."""
 
     PROVIDER_CHOICES = [
         ('openai', 'OpenAI'),
@@ -357,7 +358,7 @@ class GlobalAPIKey(models.Model):
     ]
 
     provider = models.CharField(max_length=20, choices=PROVIDER_CHOICES, unique=True)
-    api_key = models.TextField(help_text='API key (stored securely)')
+    api_key = models.TextField(blank=True, default='', help_text='Encrypted API key (Fernet)')
     is_active = models.BooleanField(default=True)
     set_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -367,6 +368,22 @@ class GlobalAPIKey(models.Model):
         db_table = 'global_api_keys'
         verbose_name = 'Global API Key'
         verbose_name_plural = 'Global API Keys'
+
+    def set_key(self, plaintext: str):
+        """Encrypt and store an API key."""
+        from accounts.encryption import encrypt_value
+        self.api_key = encrypt_value(plaintext) if plaintext else ''
+        self.is_active = bool(plaintext)
+
+    def get_key(self) -> str:
+        """Decrypt and return the API key."""
+        from accounts.encryption import decrypt_value
+        if not self.api_key:
+            return ''
+        try:
+            return decrypt_value(self.api_key)
+        except Exception:
+            return ''
 
     def __str__(self):
         return f"{self.provider} — {'Active' if self.is_active else 'Inactive'}"

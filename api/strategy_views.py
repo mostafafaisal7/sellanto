@@ -320,6 +320,8 @@ class CompetitorCrawlView(APIView):
             service = get_llm_service(request.user)
             all_insights = []
             all_used_prompts = []
+            last_provider = 'claude'
+            last_model = ''
 
             # Get brand context
             pillars = brand.content_pillars.filter(is_active=True)
@@ -482,11 +484,10 @@ Return ONLY valid JSON array — no markdown, no commentary."""},
                     return Response({'error': result.error}, status=status.HTTP_400_BAD_REQUEST)
 
                 deduct_diamonds(user=request.user, feature='competitor_analysis', provider='claude', raw_tokens=result.tokens_used if hasattr(result, 'tokens_used') else 0)
+                last_provider = getattr(result, 'provider', 'claude')
+                last_model = getattr(result, 'model', '')
 
-                all_used_prompts.append({
-                    'competitor': profile.handle_or_url,
-                    'prompt': prompt,
-                })
+                all_used_prompts.append(prompt)
 
                 raw = result.content
                 if raw.startswith('```'):
@@ -557,6 +558,8 @@ Return ONLY valid JSON array — no markdown, no commentary."""},
                 'pages_crawled': pages_crawled_total,
                 'insights': all_insights,
                 'used_prompts': all_used_prompts,
+                'provider': last_provider,
+                'model_used': last_model,
             })
 
         except Exception as e:
@@ -918,6 +921,8 @@ Return ONLY a JSON array of exactly {count} objects:
                 'count_requested': count,
                 'ideas': saved_ideas,
                 'used_prompt': prompt,
+                'provider': getattr(result, 'provider', 'claude'),
+                'model_used': getattr(result, 'model', ''),
             })
 
         except json.JSONDecodeError:
@@ -1682,6 +1687,8 @@ Existing pillars (DO NOT duplicate): {', '.join(existing_pillars) if existing_pi
                 'count': len(created_pillars),
                 'pillars': serializer.data,
                 'used_prompt': prompt,
+                'provider': getattr(llm_result, 'provider', 'claude'),
+                'model_used': getattr(llm_result, 'model', ''),
             }, status=status.HTTP_201_CREATED)
 
         except Exception as e:

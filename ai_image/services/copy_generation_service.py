@@ -17,6 +17,8 @@ def generate_copy_suggestions(
     brand_context: Optional[Dict] = None,
     image_description: str = '',
     cta_text: str = '',
+    idea_context: str = '',
+    trending_topics: str = '',
     count: int = 5,
 ) -> List[Dict]:
     """
@@ -36,14 +38,15 @@ def generate_copy_suggestions(
 Generate short, punchy text overlays for brand images. These are NOT social media captions — they are
 SHORT headline text that will be overlaid directly on the image, like a professional graphic designer would create.
 
-Rules:
+CRITICAL RULES:
 - Maximum 8 words per line, maximum 2 lines total
-- Each suggestion should have a distinctly different tone
-- The text must be impactful and readable when overlaid on an image
+- Each suggestion MUST be UNIQUE and DIFFERENT from the others — vary the angle, hook, and message
+- The copy MUST be directly derived from the caption content and idea context — NOT generic marketing slogans
+- Extract key phrases, hooks, CTAs, product names, or emotional triggers from the caption
 - Consider the brand voice and industry context
 - Return ONLY valid JSON, no markdown or extra text"""
 
-    user_prompt = f"""Generate {count} text overlay suggestions for a brand image.
+    user_prompt = f"""Generate {count} UNIQUE text overlay suggestions for a brand image.
 
 <brand_context>
 Brand: {brand_name}
@@ -52,11 +55,15 @@ Target Audience: {target_audience}
 Brand Voice: {voice_tone}
 </brand_context>
 
-<image_context>
-Caption: {caption_text[:300] if caption_text else 'N/A'}
-Image Description: {image_description[:200] if image_description else 'N/A'}
+<content_context>
+Caption (PRIMARY — derive copy from this): {caption_text[:500] if caption_text else 'N/A'}
+Idea Context: {idea_context[:300] if idea_context else 'N/A'}
+Trending Topics: {trending_topics[:200] if trending_topics else 'N/A'}
+Image Prompt: {image_description[:300] if image_description else 'N/A'}
 CTA: {cta_text if cta_text else 'N/A'}
-</image_context>
+</content_context>
+
+IMPORTANT: Each copy text must be a DIFFERENT take on the caption's message. Extract different hooks, angles, or key phrases from the caption. Do NOT repeat similar patterns or generic slogans.
 
 Return JSON in this exact format:
 {{"suggestions": [

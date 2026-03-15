@@ -9,6 +9,8 @@ export interface CopyOverlayGenerateRequest {
   caption_text?: string;
   image_description?: string;
   cta_text?: string;
+  idea_context?: string;
+  trending_topics?: string;
   count?: number;
 }
 

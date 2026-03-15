@@ -180,18 +180,20 @@ class AdminGlobalAPIKeysView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        if not request.user.is_superuser:
+        if not request.user.is_staff:
             return Response({'error': 'Admin only'}, status=403)
 
         keys_data = {}
         for provider in ['openai', 'gemini', 'claude']:
             try:
                 gk = GlobalAPIKey.objects.get(provider=provider)
+                decrypted = gk.get_key()
                 keys_data[provider] = {
-                    'is_set': bool(gk.api_key),
+                    'is_set': bool(decrypted),
                     'is_active': gk.is_active,
-                    'masked_key': mask_key(gk.api_key) if gk.api_key else '',
+                    'masked_key': mask_key(decrypted) if decrypted else '',
                     'updated_at': gk.updated_at,
+                    'set_by': gk.set_by.username if gk.set_by else None,
                 }
             except GlobalAPIKey.DoesNotExist:
                 keys_data[provider] = {
@@ -199,12 +201,13 @@ class AdminGlobalAPIKeysView(APIView):
                     'is_active': False,
                     'masked_key': '',
                     'updated_at': None,
+                    'set_by': None,
                 }
 
         return Response(keys_data)
 
     def put(self, request):
-        if not request.user.is_superuser:
+        if not request.user.is_staff:
             return Response({'error': 'Admin only'}, status=403)
 
         updated = []
@@ -212,20 +215,95 @@ class AdminGlobalAPIKeysView(APIView):
             key_field = f'{provider}_api_key'
             if key_field in request.data:
                 raw_key = request.data[key_field]
-                gk, created = GlobalAPIKey.objects.update_or_create(
+                gk, created = GlobalAPIKey.objects.get_or_create(
                     provider=provider,
-                    defaults={
-                        'api_key': raw_key,
-                        'is_active': bool(raw_key),
-                        'set_by': request.user,
-                    }
+                    defaults={'set_by': request.user}
                 )
+                gk.set_key(raw_key)
+                gk.set_by = request.user
+                gk.save()
                 updated.append(provider)
 
         return Response({
             'success': True,
             'updated_providers': updated,
         })
+
+
+class AdminTestAPIKeyView(APIView):
+    """POST /api/v1/admin/test-api-key/ — Test if an API key is valid."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        if not request.user.is_staff:
+            return Response({'error': 'Admin only'}, status=403)
+
+        provider = request.data.get('provider')
+        if provider not in ['openai', 'gemini', 'claude']:
+            return Response({'error': 'Invalid provider'}, status=400)
+
+        # Use provided key (pre-save test) or stored key
+        raw_key = (request.data.get('api_key', '') or '').strip()
+        if not raw_key:
+            try:
+                gk = GlobalAPIKey.objects.get(provider=provider, is_active=True)
+                raw_key = gk.get_key()
+            except GlobalAPIKey.DoesNotExist:
+                pass
+
+        if not raw_key:
+            return Response({
+                'success': False,
+                'error': f'No {provider} key available to test',
+            }, status=400)
+
+        import requests as http_requests
+
+        try:
+            if provider == 'openai':
+                resp = http_requests.get(
+                    'https://api.openai.com/v1/models',
+                    headers={'Authorization': f'Bearer {raw_key}'},
+                    timeout=10,
+                )
+                if resp.status_code == 200:
+                    return Response({'success': True, 'message': 'OpenAI key is valid'})
+                return Response({'success': False, 'error': f'OpenAI: {resp.status_code} — {resp.text[:200]}'})
+
+            elif provider == 'gemini':
+                resp = http_requests.get(
+                    f'https://generativelanguage.googleapis.com/v1beta/models?key={raw_key}',
+                    timeout=10,
+                )
+                if resp.status_code == 200:
+                    return Response({'success': True, 'message': 'Gemini key is valid'})
+                return Response({'success': False, 'error': f'Gemini: {resp.status_code} — {resp.text[:200]}'})
+
+            elif provider == 'claude':
+                resp = http_requests.post(
+                    'https://api.anthropic.com/v1/messages',
+                    headers={
+                        'x-api-key': raw_key,
+                        'anthropic-version': '2023-06-01',
+                        'content-type': 'application/json',
+                    },
+                    json={
+                        'model': 'claude-haiku-4-5-20251001',
+                        'max_tokens': 1,
+                        'messages': [{'role': 'user', 'content': 'Hi'}],
+                    },
+                    timeout=10,
+                )
+                if resp.status_code == 200:
+                    return Response({'success': True, 'message': 'Claude key is valid'})
+                elif resp.status_code == 401:
+                    return Response({'success': False, 'error': 'Invalid Claude API key (401 Unauthorized)'})
+                return Response({'success': False, 'error': f'Claude: {resp.status_code} — {resp.text[:200]}'})
+
+        except http_requests.Timeout:
+            return Response({'success': False, 'error': f'{provider} API timed out (10s)'})
+        except Exception as e:
+            return Response({'success': False, 'error': f'Connection error: {str(e)[:200]}'})
 
 
 class AdminDiamondOverviewView(APIView):

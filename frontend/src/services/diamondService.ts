@@ -76,6 +76,13 @@ export const diamondService = {
     return data;
   },
 
+  async testAPIKey(provider: string, apiKey?: string): Promise<{ success: boolean; message?: string; error?: string }> {
+    const payload: Record<string, string> = { provider };
+    if (apiKey) payload.api_key = apiKey;
+    const { data } = await api.post('/admin/test-api-key/', payload);
+    return data;
+  },
+
   async getDiamondOverview() {
     const { data } = await api.get('/admin/diamond-overview/');
     return data;

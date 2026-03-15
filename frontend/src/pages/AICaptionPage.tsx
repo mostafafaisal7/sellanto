@@ -86,6 +86,23 @@ export const templateCategories: { id: TemplateCategory; label: string }[] = [
 
 type TabType = 'generate' | 'history' | 'saved' | 'templates' | 'settings';
 
+function formatProvider(p?: string): string {
+  if (!p) return '';
+  const map: Record<string, string> = { openai: 'OpenAI', gemini: 'Gemini', claude: 'Claude' };
+  return map[p] || p;
+}
+function formatModel(m?: string): string {
+  if (!m) return '';
+  const known: Record<string, string> = {
+    'dall-e-3': 'DALL-E 3', 'dall-e-2': 'DALL-E 2',
+    'gpt-image-1.5': 'GPT Image 1.5',
+  };
+  if (known[m]) return known[m];
+  const parts = m.replace(/-\d{8,}$/, '').split('-');
+  if (['claude', 'gemini', 'gpt'].includes(parts[0])) parts.shift();
+  return parts.join(' ').replace(/\b\w/g, c => c.toUpperCase()).replace(/\s+/g, ' ').trim();
+}
+
 export function AICaptionPage() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<TabType>('generate');
@@ -744,9 +761,9 @@ export function AICaptionPage() {
                     </div>
                     <div className="text-center">
                       <p className="text-lg font-bold text-text-primary">
-                        {generatedCaption.model_used?.split('-').slice(-1)[0]}
+                        {formatProvider(generatedCaption.provider) || 'Claude'}
                       </p>
-                      <p className="text-xs text-text-muted">Model</p>
+                      <p className="text-xs text-text-muted">{formatModel(generatedCaption.model_used) || 'Model'}</p>
                     </div>
                   </div>
 
@@ -813,6 +830,7 @@ export function AICaptionPage() {
                       <span className="capitalize">{item.tone}</span>
                       <span className="capitalize">{item.platform}</span>
                       <span>{item.tokens_used} tokens</span>
+                      <span>{item.model_used ? formatModel(item.model_used) : 'Claude'}</span>
                     </div>
                     <div className="flex items-center gap-1">
                       <button

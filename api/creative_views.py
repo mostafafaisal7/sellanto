@@ -831,6 +831,8 @@ class GenerateCopyOverlayTextView(APIView):
             brand_context=brand_context,
             image_description=data.get('image_description', ''),
             cta_text=data.get('cta_text', ''),
+            idea_context=data.get('idea_context', ''),
+            trending_topics=data.get('trending_topics', ''),
             count=data.get('count', 5),
         )
 

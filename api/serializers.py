@@ -1652,6 +1652,8 @@ class CopyOverlayGenerateSerializer(serializers.Serializer):
     caption_text = serializers.CharField(required=False, default='')
     image_description = serializers.CharField(required=False, default='')
     cta_text = serializers.CharField(required=False, default='')
+    idea_context = serializers.CharField(required=False, default='')
+    trending_topics = serializers.CharField(required=False, default='')
     count = serializers.IntegerField(required=False, default=5, min_value=1, max_value=10)
 
 

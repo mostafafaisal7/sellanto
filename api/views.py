@@ -730,8 +730,9 @@ def generate_caption(request):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-        # Return serialized CaptionGeneration object + used_prompt
+        # Return serialized CaptionGeneration object + used_prompt + provider
         response_data = CaptionGenerationSerializer(caption_gen).data
+        response_data['provider'] = result.get('provider', 'claude')
         if result.get('used_prompt'):
             response_data['used_prompt'] = result['used_prompt']
         return Response(response_data)
@@ -1545,8 +1546,8 @@ def generate_image(request):
                     )
                     logo_filename = f"{uuid.uuid4().hex}_logo.png"
                     gen_record.generated_image_with_logo.save(logo_filename, ContentFile(image_with_logo))
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.error(f"Logo compositing failed for gen {gen_record.id}: {e} (path={active_logo_path}, pos={logo_position})")
 
             gen_record.enhanced_prompt = result.get('enhanced_prompt', '')
             gen_record.revised_prompt = result.get('revised_prompt', '')
@@ -2736,9 +2737,14 @@ class BrandAssetViewSet(viewsets.ModelViewSet):
     serializer_class = BrandAssetSerializer
     permission_classes = [IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser]
+    pagination_class = None
 
     def get_queryset(self):
-        return BrandAsset.objects.filter(brand__user=self.request.user)
+        qs = BrandAsset.objects.filter(brand__user=self.request.user)
+        brand_id = self.request.query_params.get('brand')
+        if brand_id:
+            qs = qs.filter(brand_id=brand_id)
+        return qs
 
 
 class LaunchPlanView(generics.RetrieveUpdateAPIView):
@@ -3368,6 +3374,8 @@ Return ONLY a single JSON object with all 15 fields as keys.
                 'generated_at': brand.brand_dna_generated_at.isoformat(),
                 'message': 'Brand DNA generated successfully from your website!',
                 'used_prompt': prompt,
+                'provider': getattr(result, 'provider', 'claude'),
+                'model_used': getattr(result, 'model', ''),
             })
 
         except json.JSONDecodeError:
