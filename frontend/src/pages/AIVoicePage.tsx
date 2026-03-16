@@ -524,7 +524,7 @@ export function AIVoicePage() {
                     </p>
                   )}
                   <p className="text-[10px] text-slate-500 text-center pt-1">
-                    Powered by OpenAI{generatedAudio.model ? ` · ${generatedAudio.model.toUpperCase()}` : ''}
+                    Powered by OpenAI{(generatedAudio.model_used || generatedAudio.model) ? ` · ${(generatedAudio.model_used || generatedAudio.model).toUpperCase()}` : ''}
                   </p>
                 </div>
               ) : (

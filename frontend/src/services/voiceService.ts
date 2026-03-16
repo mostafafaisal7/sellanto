@@ -16,6 +16,8 @@ export interface VoiceGeneration {
   status: 'pending' | 'processing' | 'completed' | 'failed';
   error_message: string | null;
   processing_time: number | null;
+  model_used?: string;
+  provider?: string;
   created_at: string;
   updated_at: string;
 }

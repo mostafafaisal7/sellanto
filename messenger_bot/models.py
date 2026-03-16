@@ -100,7 +100,7 @@ class AIConfiguration(models.Model):
         help_text="Number of relevant chunks to retrieve from knowledge base"
     )
     similarity_threshold = models.FloatField(
-        default=0.7,
+        default=0.35,
         help_text="Minimum similarity score (0-1) for RAG results"
     )
     

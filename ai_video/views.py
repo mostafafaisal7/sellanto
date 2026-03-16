@@ -328,7 +328,9 @@ def generate_video_ajax(request):
                 'video_url': generation.get_display_video().url if generation.get_display_video() else None,
                 'thumbnail_url': generation.thumbnail.url if generation.thumbnail else None,
                 'enhanced_prompt': generation.enhanced_prompt,
-                'processing_time': round(generation.processing_time, 2)
+                'processing_time': round(generation.processing_time, 2),
+                'model_used': result.get('model_used', ''),
+                'provider': 'gemini',
             })
         else:
             generation.status = 'failed'

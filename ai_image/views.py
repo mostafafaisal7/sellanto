@@ -23,6 +23,7 @@ from .openai_service import OpenAIImageService
 from .gemini_service import GeminiImageService
 from .product_compositor import ProductCompositor, enhance_product_prompt, get_product_negative_prompt
 from accounts.api_keys import get_openai_key, get_gemini_key
+from brands.models import BrandAsset
 
 logger = logging.getLogger(__name__)
 
@@ -323,6 +324,7 @@ def generate_image_ajax(request):
         
         # Logo settings
         logo_id = request.POST.get('logo_id')
+        brand_logo_id = request.POST.get('brand_logo_id')
         logo_position = request.POST.get('logo_position', 'none')
         logo_size = int(request.POST.get('logo_size', 10))
         logo_opacity = int(request.POST.get('logo_opacity', 100))
@@ -337,11 +339,20 @@ def generate_image_ajax(request):
         lighting = request.POST.get('lighting', '')
         camera_angle = request.POST.get('camera_angle', '')
         
-        # Get logo if specified
+        # Get logo if specified (brand logo takes priority)
         logo = None
-        if logo_id and logo_position != 'none':
+        brand_logo = None
+        logo_file_path = None
+        if brand_logo_id and logo_position != 'none':
+            try:
+                brand_logo = BrandAsset.objects.get(pk=brand_logo_id, brand__user=request.user)
+                logo_file_path = brand_logo.file.path
+            except BrandAsset.DoesNotExist:
+                pass
+        elif logo_id and logo_position != 'none':
             try:
                 logo = UserLogo.objects.get(pk=logo_id, user=request.user)
+                logo_file_path = logo.logo_file.path
             except UserLogo.DoesNotExist:
                 pass
         
@@ -356,6 +367,7 @@ def generate_image_ajax(request):
             size=size,
             quality=quality,
             logo=logo,
+            brand_logo=brand_logo,
             logo_position=logo_position,
             logo_size=logo_size,
             logo_opacity=logo_opacity,
@@ -427,10 +439,10 @@ def generate_image_ajax(request):
                     # Continue without compositing - scene image is still available
             
             # Add logo if specified (apply to composited image if available)
-            if logo and logo_position != 'none':
+            if logo_file_path and logo_position != 'none':
                 image_with_logo = service.add_logo_to_image(
                     image_data=final_image_data,
-                    logo_path=logo.logo_file.path,
+                    logo_path=logo_file_path,
                     position=logo_position,
                     size_percent=logo_size,
                     opacity=logo_opacity

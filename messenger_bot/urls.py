@@ -20,9 +20,10 @@ urlpatterns = [
     path('dashboard/', views.messenger_dashboard, name='dashboard'),
     path('settings/', views.messenger_settings, name='settings'),
     
-    # PDF Management
+    # PDF Management & RAG
     path('upload-pdf/', views.upload_pdf, name='upload_pdf'),
     path('delete-pdf/<int:pdf_id>/', views.delete_pdf, name='delete_pdf'),
+    path('rag-status/', views.rag_status, name='rag_status'),
     
     # Prompts Management
     path('prompts/<int:prompt_id>/activate/', views.activate_prompt, name='activate_prompt'),

@@ -400,7 +400,9 @@ def generate_ajax(request):
                 'hashtags': result.get('hashtags', ''),
                 'analysis': result.get('analysis', ''),
                 'processing_time': round(result.get('processing_time', 0), 2),
-                'tokens_used': result.get('tokens_used', 0)
+                'tokens_used': result.get('tokens_used', 0),
+                'model_used': result.get('model_used', ''),
+                'provider': result.get('provider', 'openai'),
             })
         else:
             caption_gen.status = 'failed'

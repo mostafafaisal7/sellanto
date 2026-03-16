@@ -896,7 +896,10 @@ export function AIVideoPage() {
                       <p className="text-xs text-text-muted">Generated in {(generatedVideo.processing_time || 0).toFixed(1)}s</p>
                     </div>
                   )}
-                  <p className="text-[10px] text-slate-500 text-center pt-1">Powered by Gemini</p>
+                  <p className="text-[10px] text-slate-500 text-center pt-1">
+                    Powered by {generatedVideo.provider === 'gemini' ? 'Google Gemini' : generatedVideo.provider || 'Gemini'}
+                    {generatedVideo.model_used ? ` · ${generatedVideo.model_used}` : ''}
+                  </p>
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center py-16 text-center">

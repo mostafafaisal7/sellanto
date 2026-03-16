@@ -145,7 +145,9 @@ def generate_voice(request):
                 'title': generation.title,
                 'voice': voice,
                 'characters': len(input_text),
-                'processing_time': round(generation.processing_time, 2)
+                'processing_time': round(generation.processing_time, 2),
+                'model_used': model,
+                'provider': 'openai',
             })
             
         except Exception as e:

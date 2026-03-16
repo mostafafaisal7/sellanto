@@ -20,7 +20,6 @@ import {
   CheckCircleIcon,
   CloudArrowUpIcon,
   StarIcon,
-  PencilSquareIcon,
 } from '@heroicons/react/24/outline';
 import { HeartIcon as HeartSolidIcon, StarIcon as StarSolidIcon } from '@heroicons/react/24/solid';
 import { formatDistanceToNow } from 'date-fns';
@@ -211,15 +210,6 @@ export function AIImagePage() {
   const [selectedBrandLogo, setSelectedBrandLogo] = useState<number | null>(null);
   const [brandLogoPosition, setBrandLogoPosition] = useState<'top_left' | 'top_right' | 'bottom_left' | 'bottom_right'>('bottom_right');
 
-  // With Copy state
-  const [withCopy, setWithCopy] = useState(false);
-  const [copySuggestions, setCopySuggestions] = useState<{ text: string; style?: string }[]>([]);
-  const [selectedCopyIdx, setSelectedCopyIdx] = useState<number | null>(null);
-  const [customCopyText, setCustomCopyText] = useState('');
-  const [useCustomCopy, setUseCustomCopy] = useState(false);
-  const [loadingCopy, setLoadingCopy] = useState(false);
-  const [generatedImages, setGeneratedImages] = useState<{ generation_id: number; image_url: string }[]>([]);
-  const [selectedVariation, setSelectedVariation] = useState(0);
 
   // Logo upload state
   const [uploadingLogo, setUploadingLogo] = useState(false);
@@ -351,30 +341,12 @@ export function AIImagePage() {
     }
   };
 
-  const fetchCopySuggestions = async () => {
-    setLoadingCopy(true);
-    try {
-      const res = await imageService.generateCopySuggestions({
-        brand_id: selectedBrand?.id,
-        caption_text: prompt || title || 'marketing image',
-        count: 5,
-      });
-      const suggestions = res.suggestions || [];
-      setCopySuggestions(suggestions);
-      if (suggestions.length > 0) setSelectedCopyIdx(0);
-    } catch {
-      toast.error('Failed to generate copy suggestions');
-    }
-    setLoadingCopy(false);
-  };
-
   const generateImage = async () => {
     if (!prompt.trim()) return;
 
     setIsGenerating(true);
     setError('');
     setGeneratedImage(null);
-    setGeneratedImages([]);
     try {
       const formData = new FormData();
       formData.append('title', title || 'Untitled');
@@ -411,15 +383,6 @@ export function AIImagePage() {
       if (selectedCameraAngle) formData.append('camera_angle', selectedCameraAngle);
       if (selectedBrand?.id) formData.append('brand_id', String(selectedBrand.id));
 
-      // With Copy
-      if (withCopy) {
-        formData.append('with_copy', 'true');
-        const activeCopy = useCustomCopy
-          ? customCopyText
-          : (selectedCopyIdx !== null ? copySuggestions[selectedCopyIdx]?.text : '');
-        if (activeCopy) formData.append('copy_text', activeCopy);
-      }
-
       const response = await authFetch('/api/v1/ai-image/generate/', {
         method: 'POST',
         headers: { Authorization: `Bearer ${localStorage.getItem('access_token')}` },
@@ -432,13 +395,7 @@ export function AIImagePage() {
         const usedP = data.used_prompt || data.enhanced_prompt || data.revised_prompt || '';
         if (usedP) setImageUsedPrompt(usedP);
 
-        // Handle dual images for with_copy
-        if (data.images && data.images.length > 1) {
-          setGeneratedImages(data.images);
-          setSelectedVariation(0);
-        }
-
-        toast.success(withCopy ? '2 image variations generated!' : 'Image generated successfully!');
+        toast.success('Image generated successfully!');
       } else {
         setError(data.error || 'Failed to generate image. Please check your API key in Settings.');
       }
@@ -885,105 +842,6 @@ export function AIImagePage() {
               )}
             </Card>
 
-            {/* With Copy Toggle */}
-            <Card>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <DocumentTextIcon className="w-5 h-5 text-purple-400" />
-                  <div>
-                    <h3 className="font-semibold text-text-primary">With Copy</h3>
-                    <p className="text-xs text-text-muted">Generate image with marketing text rendered by AI</p>
-                  </div>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={withCopy}
-                    onChange={(e) => setWithCopy(e.target.checked)}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-dark-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-500"></div>
-                </label>
-              </div>
-
-              <AnimatePresence>
-                {withCopy && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    transition={{ duration: 0.3 }}
-                    className="mt-4 space-y-4 overflow-hidden"
-                  >
-                    {/* Tab toggle */}
-                    <div className="flex gap-1 bg-dark-700 rounded-lg p-0.5">
-                      <button
-                        onClick={() => setUseCustomCopy(false)}
-                        className={`flex-1 text-xs py-2 px-3 rounded-md transition-colors flex items-center justify-center gap-1.5 ${
-                          !useCustomCopy ? 'bg-purple-500/20 text-purple-400 font-medium' : 'text-text-muted hover:text-text-secondary'
-                        }`}
-                      >
-                        <SparklesIcon className="w-3.5 h-3.5" /> AI Suggestions
-                      </button>
-                      <button
-                        onClick={() => setUseCustomCopy(true)}
-                        className={`flex-1 text-xs py-2 px-3 rounded-md transition-colors flex items-center justify-center gap-1.5 ${
-                          useCustomCopy ? 'bg-purple-500/20 text-purple-400 font-medium' : 'text-text-muted hover:text-text-secondary'
-                        }`}
-                      >
-                        <PencilSquareIcon className="w-3.5 h-3.5" /> Custom Text
-                      </button>
-                    </div>
-
-                    {/* AI Suggestions */}
-                    {!useCustomCopy && (
-                      <div className="space-y-2">
-                        <button
-                          onClick={fetchCopySuggestions}
-                          disabled={loadingCopy}
-                          className="w-full py-2.5 px-4 bg-purple-500/10 border border-purple-500/30 rounded-xl text-sm text-purple-400 hover:bg-purple-500/20 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
-                        >
-                          {loadingCopy ? <Spinner /> : <SparklesIcon className="w-4 h-4" />}
-                          {loadingCopy ? 'Generating...' : copySuggestions.length > 0 ? 'Regenerate Suggestions' : 'Generate Copy Suggestions'}
-                        </button>
-                        {copySuggestions.map((s, idx) => (
-                          <button
-                            key={idx}
-                            onClick={() => setSelectedCopyIdx(idx)}
-                            className={`w-full text-left p-3 rounded-lg border transition-all ${
-                              selectedCopyIdx === idx
-                                ? 'border-purple-500/50 bg-purple-500/10'
-                                : 'border-white/5 bg-dark-700 hover:border-white/15'
-                            }`}
-                          >
-                            <p className="text-sm text-text-primary">{s.text}</p>
-                            {s.style && <span className="text-[10px] text-text-muted uppercase mt-1 inline-block">{s.style}</span>}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Custom Text */}
-                    {useCustomCopy && (
-                      <Textarea
-                        placeholder="Type your marketing copy text..."
-                        rows={2}
-                        value={customCopyText}
-                        onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setCustomCopyText(e.target.value)}
-                      />
-                    )}
-
-                    <div className="flex items-center gap-2 bg-purple-500/5 border border-purple-500/10 rounded-lg p-2.5">
-                      <SparklesIcon className="w-4 h-4 text-purple-400 shrink-0" />
-                      <p className="text-[11px] text-purple-300">
-                        With Copy generates <strong>2 image variations</strong> with your text rendered by AI (2x diamond cost)
-                      </p>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </Card>
-
             {/* Advanced Options Toggle */}
             <button
               onClick={() => setShowAdvanced(!showAdvanced)}
@@ -1211,7 +1069,7 @@ export function AIImagePage() {
               leftIcon={<SparklesIcon className="w-5 h-5" />}
               className="bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600"
             >
-              {withCopy ? 'Generate 2 Variations' : 'Generate Image'} <DiamondCostIndicator cost={withCopy ? 30 : 15} className="ml-2" />
+              Generate Image <DiamondCostIndicator cost={15} className="ml-2" />
             </Button>
           </div>
 
@@ -1249,58 +1107,6 @@ export function AIImagePage() {
                   <Spinner size="lg" />
                   <p className="mt-4 text-text-secondary">Generating your image...</p>
                   <p className="text-xs text-text-muted mt-2">This may take a few moments</p>
-                </div>
-              ) : generatedImages.length > 1 ? (
-                /* Dual image display for with_copy */
-                <div className="space-y-4">
-                  <p className="text-sm text-text-secondary text-center">Choose your preferred variation:</p>
-                  <div className="grid grid-cols-2 gap-3">
-                    {generatedImages.map((img, i) => (
-                      <div
-                        key={img.generation_id}
-                        onClick={() => setSelectedVariation(i)}
-                        className={`rounded-xl overflow-hidden border-2 cursor-pointer transition-all ${
-                          selectedVariation === i
-                            ? 'border-blue-500 ring-2 ring-blue-500/30'
-                            : 'border-white/10 hover:border-white/25'
-                        }`}
-                      >
-                        <img src={img.image_url} alt={`Variation ${i + 1}`} className="w-full h-auto" />
-                        <div className="p-2 bg-dark-700/80 text-center">
-                          <p className="text-xs text-text-primary font-medium">Variation {i + 1}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {generatedImage?.copy_text_in_image && (
-                    <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-xl">
-                      <p className="text-xs text-text-muted mb-1">Copy Text</p>
-                      <p className="text-sm text-purple-300 font-medium">{generatedImage.copy_text_in_image}</p>
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-3 gap-3 pt-4 border-t border-white/5">
-                    <div className="text-center">
-                      <p className="text-sm font-bold text-text-primary capitalize">{generatedImage?.style}</p>
-                      <p className="text-xs text-text-muted">Style</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-sm font-bold text-text-primary">{generatedImage?.size}</p>
-                      <p className="text-xs text-text-muted">Size</p>
-                    </div>
-                    <div className="text-center">
-                      <p className="text-sm font-bold text-text-primary">
-                        {(generatedImage?.processing_time || 0).toFixed(1)}s
-                      </p>
-                      <p className="text-xs text-text-muted">Time</p>
-                    </div>
-                  </div>
-                  {(generatedImage?.provider || generatedImage?.model_used) && (
-                    <p className="text-[10px] text-slate-500 text-center pt-1">
-                      Powered by {[formatProvider(generatedImage?.provider), generatedImage?.model_used && formatModel(generatedImage.model_used)].filter(Boolean).join(' · ')}
-                    </p>
-                  )}
                 </div>
               ) : generatedImage?.generated_image ? (
                 <div className="space-y-4">

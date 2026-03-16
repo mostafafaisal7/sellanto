@@ -532,6 +532,112 @@ def upload_pdf(request):
 
 
 @login_required
+@require_http_methods(['GET'])
+def rag_status(request):
+    """Diagnostic endpoint to check RAG health and knowledge base status."""
+    try:
+        connection = MessengerConnection.objects.get(user=request.user)
+    except MessengerConnection.DoesNotExist:
+        return JsonResponse({'error': 'No messenger connection found'}, status=404)
+
+    ai_config = getattr(connection, 'ai_config', None)
+    if not ai_config:
+        return JsonResponse({
+            'rag_enabled': False,
+            'error': 'No AI configuration found for this connection',
+            'fix': 'Go to Messenger Bot Settings and configure AI settings',
+        })
+
+    from .models import PDFChunk
+    from .services.rag_engine import RAGEngine
+
+    # PDF stats
+    pdfs = PDFKnowledgeBase.objects.filter(connection=connection)
+    pdf_list = []
+    for pdf in pdfs:
+        chunk_count = PDFChunk.objects.filter(pdf=pdf).count()
+        pdf_list.append({
+            'filename': pdf.filename,
+            'status': pdf.status,
+            'chunks': chunk_count,
+            'error': pdf.error_message or None,
+        })
+
+    total_pdf_chunks = PDFChunk.objects.filter(
+        pdf__connection=connection, pdf__status='completed'
+    ).count()
+
+    # Brand DNA stats
+    brand_dna_chunks = 0
+    brand_dna_status = 'not_found'
+    try:
+        from brands.models import BrandDNAChunk, Brand
+        brand = Brand.objects.filter(user=request.user, is_primary=True).first()
+        if brand:
+            if brand.brand_dna_generated_at:
+                brand_dna_chunks = BrandDNAChunk.objects.filter(brand=brand).count()
+                brand_dna_status = 'generated'
+            else:
+                brand_dna_status = 'not_generated'
+        else:
+            brand_dna_status = 'no_primary_brand'
+    except Exception:
+        brand_dna_status = 'error'
+
+    # Product stats
+    product_embeddings = 0
+    try:
+        from .models import ECommerceSettings, Product as EComProduct
+        ecom = ECommerceSettings.objects.filter(connection=connection, is_enabled=True).first()
+        if ecom:
+            product_embeddings = EComProduct.objects.filter(
+                ecommerce_settings=ecom, embedding__isnull=False
+            ).exclude(embedding='').count()
+    except Exception:
+        pass
+
+    # Embedding test
+    embedding_test = 'skipped'
+    if ai_config.openai_api_key:
+        try:
+            rag = RAGEngine(ai_config)
+            rag.openai_client.create_embedding('test', model=ai_config.embedding_model)
+            embedding_test = 'success'
+        except Exception as e:
+            embedding_test = f'failed: {str(e)}'
+    else:
+        embedding_test = 'no_api_key'
+
+    total_knowledge = total_pdf_chunks + brand_dna_chunks + product_embeddings
+
+    return JsonResponse({
+        'rag_enabled': ai_config.rag_enabled,
+        'openai_api_key_set': bool(ai_config.openai_api_key),
+        'embedding_model': ai_config.embedding_model,
+        'similarity_threshold': ai_config.similarity_threshold,
+        'top_k_results': ai_config.top_k_results,
+        'embedding_test': embedding_test,
+        'knowledge_base': {
+            'total_chunks': total_knowledge,
+            'pdf_chunks': total_pdf_chunks,
+            'brand_dna_chunks': brand_dna_chunks,
+            'brand_dna_status': brand_dna_status,
+            'product_embeddings': product_embeddings,
+            'pdfs': pdf_list,
+        },
+        'diagnosis': (
+            'RAG is healthy' if total_knowledge > 0 and embedding_test == 'success'
+            else 'Knowledge base is empty — upload PDFs or generate Brand DNA'
+            if total_knowledge == 0
+            else f'Embedding test failed: {embedding_test}'
+            if embedding_test not in ('success', 'skipped')
+            else 'RAG is disabled' if not ai_config.rag_enabled
+            else 'Unknown issue'
+        ),
+    })
+
+
+@login_required
 def delete_pdf(request, pdf_id):
     """Delete a PDF"""
     if request.method == 'POST':

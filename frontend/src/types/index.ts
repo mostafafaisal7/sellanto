@@ -645,6 +645,8 @@ export interface VideoGeneration {
   error_message?: string;
   processing_time: number;
   file_size: number;
+  provider?: string;
+  model_used?: string;
   created_at: string;
   updated_at: string;
 }
