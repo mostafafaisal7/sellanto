@@ -958,16 +958,27 @@ class SocialAccountDetailViewSet(viewsets.ModelViewSet):
             # Sync with MessengerConnection if platform is messenger
             if platform == 'messenger' and is_valid:
                 from messenger_bot.models import MessengerConnection, AIConfiguration
-                # Use update_or_create to sync credentials
-                conn, _ = MessengerConnection.objects.update_or_create(
-                    user=request.user,
-                    defaults={
-                        'page_id': account.facebook_page_id,
-                        'page_name': account_name,
-                        'page_access_token': account.facebook_access_token,
-                        'is_active': True
-                    }
-                )
+                _page_id    = account.facebook_page_id
+                _page_name  = account_name
+                _page_token = account.facebook_access_token
+                # Look up by page_id (unique) first to avoid IntegrityError
+                try:
+                    conn = MessengerConnection.objects.get(page_id=_page_id)
+                    conn.user              = request.user
+                    conn.page_name         = _page_name
+                    conn.page_access_token = _page_token
+                    conn.is_active         = True
+                    conn.save(update_fields=['user_id', 'page_name', 'page_access_token', 'is_active'])
+                except MessengerConnection.DoesNotExist:
+                    conn, _ = MessengerConnection.objects.update_or_create(
+                        user=request.user,
+                        defaults={
+                            'page_id':            _page_id,
+                            'page_name':          _page_name,
+                            'page_access_token':  _page_token,
+                            'is_active':          True,
+                        }
+                    )
                 # Ensure AI config exists
                 AIConfiguration.objects.get_or_create(connection=conn)
             

@@ -346,18 +346,35 @@ def facebook_oauth_callback(request):
             continue
 
         try:
-            # Save to SocialAccount (same pattern as existing handle_facebook_connect)
-            account, created = SocialAccount.objects.update_or_create(
-                user=user,
-                platform='facebook',
-                account_name=page_name,
-                defaults={
-                    'facebook_page_id':      page_id,
-                    'facebook_access_token': page_token,
-                    'token_expires_at':      None,  # Page tokens never expire
-                    'validation_error':      '',
-                }
-            )
+            # Prefer to find by page_id (stable), but unique_together is on
+            # (user, platform, account_name), so we can't use update_or_create
+            # with facebook_page_id directly. Filter first, then fall back.
+            existing = SocialAccount.objects.filter(
+                user=user, platform='facebook', facebook_page_id=page_id
+            ).first()
+            if existing:
+                existing.account_name          = page_name
+                existing.facebook_access_token = page_token
+                existing.token_expires_at      = None
+                existing.validation_error      = ''
+                existing.save(update_fields=[
+                    'account_name', 'facebook_access_token',
+                    'token_expires_at', 'validation_error',
+                ])
+                account = existing
+                created = False
+            else:
+                account, created = SocialAccount.objects.update_or_create(
+                    user=user,
+                    platform='facebook',
+                    account_name=page_name,
+                    defaults={
+                        'facebook_page_id':      page_id,
+                        'facebook_access_token': page_token,
+                        'token_expires_at':      None,
+                        'validation_error':      '',
+                    }
+                )
 
             action = 'created' if created else 'updated'
             logger.info(f'[FB OAuth] SocialAccount {action}: {page_name} ({page_id})')
@@ -398,16 +415,29 @@ def facebook_oauth_callback(request):
                     ig_id   = ig_data['id']
                     ig_name = ig_data.get('username') or ig_data.get('name') or f'{page_name} (Instagram)'
 
-                    ig_account, ig_created = SocialAccount.objects.update_or_create(
-                        user=user,
-                        platform='instagram',
-                        account_name=ig_name,
-                        defaults={
-                            'instagram_business_account_id': ig_id,
-                            'instagram_access_token':        page_token,
-                            'validation_error':              '',
-                        }
-                    )
+                    ig_existing = SocialAccount.objects.filter(
+                        user=user, platform='instagram',
+                        instagram_business_account_id=ig_id,
+                    ).first()
+                    if ig_existing:
+                        ig_existing.account_name            = ig_name
+                        ig_existing.instagram_access_token  = page_token
+                        ig_existing.validation_error        = ''
+                        ig_existing.save(update_fields=[
+                            'account_name', 'instagram_access_token', 'validation_error',
+                        ])
+                        ig_account = ig_existing
+                    else:
+                        ig_account, ig_created = SocialAccount.objects.update_or_create(
+                            user=user,
+                            platform='instagram',
+                            account_name=ig_name,
+                            defaults={
+                                'instagram_business_account_id': ig_id,
+                                'instagram_access_token':        page_token,
+                                'validation_error':              '',
+                            }
+                        )
                     ig_account.mark_as_active()
 
                     page_info['has_instagram']  = True
@@ -443,6 +473,12 @@ def facebook_oauth_callback(request):
         warning = f'Some pages could not be connected: {names}. You can retry them individually from your connections page.'
 
     logger.info(f'[FB OAuth] Success for {user.username}: {len(connected_pages)} pages, {len(failed_pages)} failed')
+
+    # ── Auto-setup Messenger (server-side, no frontend roundtrip needed) ──────
+    # This runs in the callback itself so Messenger is ready immediately after
+    # OAuth — no COOP/postMessage issues, no admin action required.
+    _auto_setup_messenger(user, connected_pages, request)
+
     return _popup_success(connected_pages, warning=warning)
 
 
@@ -505,19 +541,6 @@ def facebook_setup_messenger(request):
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    # ── Live token check before subscribing ───────────────────────────────────
-    valid, result = FacebookService.validate_credentials(page_id, page_token)
-    if not valid:
-        account.mark_as_invalid(result)
-        return Response(
-            {
-                'error': 'Facebook token is no longer valid.',
-                'detail': f'{result} Please reconnect your Facebook account.',
-                'action': 'reconnect',
-            },
-            status=status.HTTP_400_BAD_REQUEST
-        )
-
     # ── Subscribe page to Messenger webhook (best-effort) ────────────────────
     # We save the MessengerConnection regardless of whether the Facebook
     # subscription call succeeds, so the admin panel always shows the
@@ -574,30 +597,45 @@ def facebook_setup_messenger(request):
     # is_webhook_verified is ONLY set True by Meta's GET verification request
     # (messenger_bot/views.py webhook view). We never force it True here.
     try:
+        # Lookup by page_id first (the unique constraint field) to avoid
+        # IntegrityError when the same page was previously connected by this
+        # or any other user.  Fall back to user lookup, then create.
         try:
-            connection = MessengerConnection.objects.get(user=request.user)
-            # Update existing — preserve is_webhook_verified (Meta already verified or not)
-            connection.page_id           = page_id
+            connection = MessengerConnection.objects.get(page_id=page_id)
+            connection.user              = request.user
             connection.page_name         = page_name
             connection.page_access_token = page_token
             connection.webhook_url       = webhook_url
             connection.is_active         = True
             connection.save(update_fields=[
-                'page_id', 'page_name', 'page_access_token', 'webhook_url', 'is_active'
+                'user_id', 'page_name', 'page_access_token', 'webhook_url', 'is_active'
             ])
             created = False
         except MessengerConnection.DoesNotExist:
-            # New connection — webhook not yet verified by Meta
-            connection = MessengerConnection.objects.create(
-                user=request.user,
-                page_id=page_id,
-                page_name=page_name,
-                page_access_token=page_token,
-                webhook_url=webhook_url,
-                is_webhook_verified=False,
-                is_active=True,
-            )
-            created = True
+            try:
+                connection = MessengerConnection.objects.get(user=request.user)
+                # Update existing user connection — preserve is_webhook_verified
+                connection.page_id           = page_id
+                connection.page_name         = page_name
+                connection.page_access_token = page_token
+                connection.webhook_url       = webhook_url
+                connection.is_active         = True
+                connection.save(update_fields=[
+                    'page_id', 'page_name', 'page_access_token', 'webhook_url', 'is_active'
+                ])
+                created = False
+            except MessengerConnection.DoesNotExist:
+                # New connection — webhook not yet verified by Meta
+                connection = MessengerConnection.objects.create(
+                    user=request.user,
+                    page_id=page_id,
+                    page_name=page_name,
+                    page_access_token=page_token,
+                    webhook_url=webhook_url,
+                    is_webhook_verified=False,
+                    is_active=True,
+                )
+                created = True
 
         logger.info(
             f'[FB Messenger] Connection {"created" if created else "updated"} '
@@ -858,6 +896,122 @@ def facebook_connection_status(request):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# HELPERS — Messenger Auto-Setup
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _auto_setup_messenger(user, connected_pages, request):
+    """
+    Auto-creates or updates MessengerConnection right inside the OAuth callback.
+    Runs server-side so it works regardless of COOP headers, popup behaviour,
+    or number of pages the user has.
+
+    Page-selection logic:
+    1. If the user already has a MessengerConnection for a page that is still
+       in the newly-connected list → update that connection (keep same page).
+    2. Otherwise → use the first active page from the OAuth response.
+
+    Webhook subscription is best-effort — a failure here does NOT block the
+    OAuth flow. The admin can re-run subscription from the admin panel.
+    """
+    from messenger_bot.models import MessengerConnection
+    from platforms.models import SocialAccount
+
+    active_pages = [p for p in connected_pages if p.get('status') == 'active']
+    if not active_pages:
+        logger.info(f'[FB OAuth] Auto-messenger skipped for {user.username}: no active pages')
+        return
+
+    # ── Pick which page to use ────────────────────────────────────────────────
+    target_page_info = None
+    try:
+        existing_conn = MessengerConnection.objects.get(user=user)
+        for p in active_pages:
+            if p['page_id'] == existing_conn.page_id:
+                target_page_info = p
+                break
+    except MessengerConnection.DoesNotExist:
+        pass
+
+    if not target_page_info:
+        target_page_info = active_pages[0]
+
+    # ── Load full credentials from DB ─────────────────────────────────────────
+    try:
+        account = SocialAccount.objects.get(
+            id=target_page_info['id'],
+            user=user,
+            platform='facebook',
+            status='active',
+        )
+    except SocialAccount.DoesNotExist:
+        logger.warning(f'[FB OAuth] Auto-messenger: SocialAccount not found for id={target_page_info["id"]}')
+        return
+
+    page_id    = account.facebook_page_id
+    page_token = account.facebook_access_token
+    page_name  = account.account_name
+    base_url   = request.build_absolute_uri('/').rstrip('/')
+    webhook_url = f"{base_url}/messenger/webhook/"
+
+    # ── Best-effort webhook subscription ──────────────────────────────────────
+    try:
+        resp = requests.post(
+            f'{FB_GRAPH}/{page_id}/subscribed_apps',
+            params={
+                'subscribed_fields': 'messages,messaging_postbacks,messaging_optins',
+                'access_token':      page_token,
+            },
+            timeout=10,
+        )
+        sub_result = resp.json()
+        if sub_result.get('success'):
+            logger.info(f'[FB OAuth] Auto-messenger: subscribed_apps OK for page {page_id}')
+        else:
+            logger.warning(f'[FB OAuth] Auto-messenger: subscribed_apps failed: {sub_result}')
+    except Exception as e:
+        logger.warning(f'[FB OAuth] Auto-messenger: subscribed_apps request failed: {e}')
+
+    # ── Save MessengerConnection (duplicate-safe) ──────────────────────────────
+    try:
+        try:
+            connection = MessengerConnection.objects.get(page_id=page_id)
+            connection.user              = user
+            connection.page_name         = page_name
+            connection.page_access_token = page_token
+            connection.webhook_url       = webhook_url
+            connection.is_active         = True
+            connection.save(update_fields=[
+                'user_id', 'page_name', 'page_access_token', 'webhook_url', 'is_active',
+            ])
+            logger.info(f'[FB OAuth] Auto-messenger: updated existing connection for page {page_name}')
+        except MessengerConnection.DoesNotExist:
+            try:
+                connection = MessengerConnection.objects.get(user=user)
+                connection.page_id           = page_id
+                connection.page_name         = page_name
+                connection.page_access_token = page_token
+                connection.webhook_url       = webhook_url
+                connection.is_active         = True
+                connection.save(update_fields=[
+                    'page_id', 'page_name', 'page_access_token', 'webhook_url', 'is_active',
+                ])
+                logger.info(f'[FB OAuth] Auto-messenger: updated user connection to page {page_name}')
+            except MessengerConnection.DoesNotExist:
+                MessengerConnection.objects.create(
+                    user=user,
+                    page_id=page_id,
+                    page_name=page_name,
+                    page_access_token=page_token,
+                    webhook_url=webhook_url,
+                    is_webhook_verified=False,
+                    is_active=True,
+                )
+                logger.info(f'[FB OAuth] Auto-messenger: created new connection for page {page_name}')
+    except Exception as e:
+        logger.error(f'[FB OAuth] Auto-messenger: MessengerConnection save failed: {e}')
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # HELPERS — Popup HTML Responses
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -982,8 +1136,19 @@ def _render_popup_html(json_data, success=True, warning=None, title=None, detail
 
   <script>
     (function () {{
+      var payload = {json_data};
+
+      // Primary channel: localStorage (immune to Facebook's COOP headers that
+      // null out window.opener). The parent window listens for the 'storage' event.
       try {{
-        var payload = {json_data};
+        localStorage.setItem('fb_oauth_result', JSON.stringify(payload));
+      }} catch (e) {{
+        console.error('[FB OAuth] localStorage write failed:', e);
+      }}
+
+      // Secondary channel: postMessage (works when opener is still available,
+      // i.e. when popup is not disrupted by COOP headers).
+      try {{
         var targetOrigin = '{frontend_url}';
         if (window.opener && !window.opener.closed) {{
           window.opener.postMessage(payload, targetOrigin);
@@ -991,6 +1156,7 @@ def _render_popup_html(json_data, success=True, warning=None, title=None, detail
       }} catch (err) {{
         console.error('[FB OAuth] postMessage failed:', err);
       }}
+
       setTimeout(function () {{
         window.close();
       }}, 2500);

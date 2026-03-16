@@ -1115,24 +1115,37 @@ class AdminSetupMessengerView(APIView):
         # Save MessengerConnection regardless of webhook subscription result.
         # is_webhook_verified is ONLY set True by Meta's GET verification request.
         # We never force it True here — preserve existing value for updates.
+        #
+        # Lookup order: page_id first (the unique field) → then user → create.
+        # This avoids IntegrityError when the same page_id already exists under
+        # a different user row (e.g. admin re-assigns, or user re-connected).
         try:
-            connection = MessengerConnection.objects.get(user=user)
-            connection.page_id           = page_id
+            connection = MessengerConnection.objects.get(page_id=page_id)
+            connection.user              = user
             connection.page_name         = page_name
             connection.page_access_token = page_token
             connection.is_active         = True
-            connection.save(update_fields=['page_id', 'page_name', 'page_access_token', 'is_active'])
+            connection.save(update_fields=['user_id', 'page_name', 'page_access_token', 'is_active'])
             created = False
         except MessengerConnection.DoesNotExist:
-            connection = MessengerConnection.objects.create(
-                user=user,
-                page_id=page_id,
-                page_name=page_name,
-                page_access_token=page_token,
-                is_webhook_verified=False,
-                is_active=True,
-            )
-            created = True
+            try:
+                connection = MessengerConnection.objects.get(user=user)
+                connection.page_id           = page_id
+                connection.page_name         = page_name
+                connection.page_access_token = page_token
+                connection.is_active         = True
+                connection.save(update_fields=['page_id', 'page_name', 'page_access_token', 'is_active'])
+                created = False
+            except MessengerConnection.DoesNotExist:
+                connection = MessengerConnection.objects.create(
+                    user=user,
+                    page_id=page_id,
+                    page_name=page_name,
+                    page_access_token=page_token,
+                    is_webhook_verified=False,
+                    is_active=True,
+                )
+                created = True
 
         response = {
             'success':          True,

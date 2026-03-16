@@ -81,8 +81,9 @@ export function FacebookConnect({ onConnected, buttonLabel = 'Connect Facebook P
   const [status, setStatus]       = useState<FacebookConnectionStatus | null>(null);
   const [statusLoading, setStatusLoading] = useState(true);
 
-  const popupRef = useRef<Window | null>(null);
-  const pollRef  = useRef<ReturnType<typeof setInterval> | null>(null);
+  const popupRef    = useRef<Window | null>(null);
+  const pollRef     = useRef<ReturnType<typeof setInterval> | null>(null);
+  const handledRef  = useRef(false); // prevent double-processing from both channels
 
   // ── Fetch live status ──────────────────────────────────────────────────────
 
@@ -107,9 +108,74 @@ export function FacebookConnect({ onConnected, buttonLabel = 'Connect Facebook P
   const cleanup = useCallback(() => {
     if (pollRef.current) clearInterval(pollRef.current);
     window.removeEventListener('message', handleMessage);
+    window.removeEventListener('storage', handleStorage);
   }, []);
 
   useEffect(() => () => cleanup(), [cleanup]);
+
+  // ── Step 2b — process OAuth result (shared by both channels) ─────────────
+
+  const processOAuthResult = useCallback((data: any) => {
+    if (handledRef.current) return; // already handled by other channel
+    handledRef.current = true;
+    cleanup();
+
+    if (data.type === 'FB_OAUTH_SUCCESS') {
+      const receivedPages: FacebookOAuthPage[] = data.pages || [];
+      if (data.warning) setWarning(data.warning);
+
+      if (!receivedPages.length) {
+        setOAuthError({ title: 'No Pages Connected', detail: 'Please try again.' });
+        setStep('error');
+        return;
+      }
+
+      setPages(receivedPages);
+      const activePages = receivedPages.filter((p) => p.status === 'active');
+
+      if (activePages.length === 0) {
+        setOAuthError({
+          title: 'Pages Could Not Be Validated',
+          detail: receivedPages.map((p: FacebookOAuthPage) => `${p.name}: ${p.error || 'Unknown error'}`).join(' · '),
+        });
+        setStep('error');
+        return;
+      }
+
+      if (activePages.length === 1) {
+        doSetupMessenger(activePages[0], receivedPages);
+      } else {
+        setStep('picking');
+      }
+
+    } else if (data.type === 'FB_OAUTH_ERROR') {
+      setOAuthError({
+        title:  data.title  || 'Connection Failed',
+        detail: data.detail || 'Please try again.',
+      });
+      setStep('error');
+    }
+  }, [cleanup]);
+
+  // ── Step 2a — localStorage channel (immune to Facebook's COOP headers) ────
+
+  const handleStorage = useCallback((event: StorageEvent) => {
+    if (event.key !== 'fb_oauth_result' || !event.newValue) return;
+    try {
+      const data = JSON.parse(event.newValue);
+      localStorage.removeItem('fb_oauth_result');
+      if (data?.type?.startsWith('FB_OAUTH_')) processOAuthResult(data);
+    } catch { /* ignore parse errors */ }
+  }, [processOAuthResult]);
+
+  // ── Step 2b — postMessage channel (works when opener is available) ─────────
+
+  const handleMessage = useCallback((event: MessageEvent) => {
+    const apiBase = import.meta.env.VITE_API_URL?.replace('/api/v1', '') || window.location.origin;
+    if (event.origin !== apiBase && event.origin !== window.location.origin) return;
+    if (!event.data?.type?.startsWith('FB_OAUTH_')) return;
+    processOAuthResult(event.data);
+  }, [processOAuthResult]);
 
   // ── Step 1 — open popup ───────────────────────────────────────────────────
 
@@ -117,6 +183,10 @@ export function FacebookConnect({ onConnected, buttonLabel = 'Connect Facebook P
     setOAuthError(null);
     setWarning('');
     setStep('opening');
+    handledRef.current = false;
+
+    // Clear any stale result from a previous OAuth flow
+    localStorage.removeItem('fb_oauth_result');
 
     try {
       const { auth_url } = await facebookOAuthService.initiate();
@@ -141,13 +211,27 @@ export function FacebookConnect({ onConnected, buttonLabel = 'Connect Facebook P
       }
 
       setStep('waiting');
+      // Listen on both channels — whichever fires first wins
       window.addEventListener('message', handleMessage);
+      window.addEventListener('storage', handleStorage);
 
       // Detect popup closed without completing
       pollRef.current = setInterval(() => {
         if (popupRef.current?.closed) {
-          cleanup();
-          setStep((prev) => (prev === 'waiting' ? 'idle' : prev));
+          // Give localStorage channel a brief moment to fire before giving up
+          setTimeout(() => {
+            const stored = localStorage.getItem('fb_oauth_result');
+            if (stored) {
+              try {
+                const data = JSON.parse(stored);
+                localStorage.removeItem('fb_oauth_result');
+                if (data?.type?.startsWith('FB_OAUTH_')) processOAuthResult(data);
+                return;
+              } catch { /* ignore */ }
+            }
+            cleanup();
+            setStep((prev) => (prev === 'waiting' ? 'idle' : prev));
+          }, 300);
         }
       }, 500);
 
@@ -157,53 +241,6 @@ export function FacebookConnect({ onConnected, buttonLabel = 'Connect Facebook P
       setStep('error');
     }
   };
-
-  // ── Step 2 — receive popup postMessage ────────────────────────────────────
-
-  const handleMessage = useCallback((event: MessageEvent) => {
-    const apiBase = import.meta.env.VITE_API_URL?.replace('/api/v1', '') || window.location.origin;
-    if (event.origin !== apiBase && event.origin !== window.location.origin) return;
-    if (!event.data?.type?.startsWith('FB_OAUTH_')) return;
-
-    cleanup();
-
-    if (event.data.type === 'FB_OAUTH_SUCCESS') {
-      const receivedPages: FacebookOAuthPage[] = event.data.pages || [];
-      if (event.data.warning) setWarning(event.data.warning);
-
-      if (!receivedPages.length) {
-        setOAuthError({ title: 'No Pages Connected', detail: 'Please try again.' });
-        setStep('error');
-        return;
-      }
-
-      setPages(receivedPages);
-      const activePages = receivedPages.filter((p) => p.status === 'active');
-
-      if (activePages.length === 0) {
-        setOAuthError({
-          title: 'Pages Could Not Be Validated',
-          detail: receivedPages.map((p) => `${p.name}: ${p.error || 'Unknown error'}`).join(' · '),
-        });
-        setStep('error');
-        return;
-      }
-
-      if (activePages.length === 1) {
-        // Single active page — auto-pick Messenger
-        doSetupMessenger(activePages[0], receivedPages);
-      } else {
-        setStep('picking');
-      }
-
-    } else if (event.data.type === 'FB_OAUTH_ERROR') {
-      setOAuthError({
-        title:  event.data.title  || 'Connection Failed',
-        detail: event.data.detail || 'Please try again.',
-      });
-      setStep('error');
-    }
-  }, [cleanup]);
 
   // ── Step 3 — setup Messenger ──────────────────────────────────────────────
 
