@@ -125,10 +125,11 @@ def messenger_success(request):
         messages.error(request, 'No messenger connection found.')
         return redirect('connect_messenger')
     
+    from accounts.models import SiteConfiguration
     context = {
-        'connection': connection,
-        'webhook_url': request.build_absolute_uri(f'/messenger/webhook/{connection.page_id}/'),
-        'verify_token': connection.verify_token,
+        'connection':   connection,
+        'webhook_url':  request.build_absolute_uri('/messenger/webhook/'),
+        'verify_token': SiteConfiguration.get('messenger_verify_token', '(not set — go to Admin Panel → Facebook Settings)'),
     }
     
     return render(request, 'messenger_bot/success.html', context)
@@ -376,99 +377,122 @@ def _time_ago(dt):
 
 @csrf_exempt
 @require_http_methods(["GET", "POST"])
-def webhook(request, page_id):
-    """Facebook Messenger webhook endpoint"""
-    
+def webhook(request):
+    """
+    Facebook Messenger webhook endpoint — single app-level URL.
+
+    GET  → Meta verification (uses app-level verify_token from SiteConfiguration)
+    POST → Incoming messages (page_id read from payload, routed to correct MessengerConnection)
+
+    One URL serves ALL users' pages. Admin sets this URL once in Meta Console.
+    """
+    from accounts.models import SiteConfiguration
+
     if request.method == 'GET':
-        mode = request.GET.get('hub.mode')
-        token = request.GET.get('hub.verify_token')
+        mode      = request.GET.get('hub.mode')
+        token     = request.GET.get('hub.verify_token')
         challenge = request.GET.get('hub.challenge')
 
-        if mode == 'subscribe':
-            try:
-                connection = MessengerConnection.objects.get(page_id=page_id)
+        if mode != 'subscribe':
+            return JsonResponse({'error': 'Invalid request'}, status=400)
 
-                if token == connection.verify_token:
-                    connection.is_webhook_verified = True
-                    connection.save()
-                    logger.info(f"Webhook verified for page {page_id}")
-                    return HttpResponse(challenge, content_type='text/plain')
-                else:
-                    return JsonResponse({'error': 'Invalid verify token'}, status=403)
+        # Read the app-level verify token generated from the admin panel
+        app_verify_token = SiteConfiguration.get('messenger_verify_token', '')
 
-            except MessengerConnection.DoesNotExist:
-                return JsonResponse({'error': 'Connection not found'}, status=404)
+        if not app_verify_token:
+            logger.error('[Webhook] messenger_verify_token not set in SiteConfiguration. '
+                         'Go to Admin Panel → Facebook Settings and save to generate it.')
+            return JsonResponse({'error': 'Webhook not configured'}, status=503)
 
-        return JsonResponse({'error': 'Invalid request'}, status=400)
+        if token != app_verify_token:
+            logger.warning(f'[Webhook] Verify token mismatch. Expected from DB, got: {token[:8]}...')
+            return JsonResponse({'error': 'Invalid verify token'}, status=403)
+
+        # Mark ALL active MessengerConnections as webhook-verified
+        # (Meta verifies the app once, not per page)
+        updated = MessengerConnection.objects.filter(
+            is_active=True,
+            is_webhook_verified=False,
+        ).update(is_webhook_verified=True)
+
+        logger.info(f'[Webhook] App-level webhook verified by Meta. Marked {updated} connections as verified.')
+        return HttpResponse(challenge, content_type='text/plain')
 
     elif request.method == 'POST':
         try:
             data = json.loads(request.body)
             _log_webhook("=" * 50)
-            _log_webhook(f"WEBHOOK POST received for page: {page_id}")
-            _log_webhook(f"Data: {json.dumps(data, indent=2)[:500]}")
+            _log_webhook(f"WEBHOOK POST received")
+            _log_webhook(f"Data: {json.dumps(data)[:500]}")
 
-            try:
-                connection = MessengerConnection.objects.get(page_id=page_id)
-                _log_webhook(f"Connection found: {connection.page_name} (auto_reply={connection.auto_reply_enabled})")
-            except MessengerConnection.DoesNotExist:
-                _log_webhook(f"ERROR: Connection NOT found for page_id: {page_id}")
-                # Still return 200 to Facebook so it doesn't disable the webhook
-                return JsonResponse({'status': 'received'}, status=200)
+            for entry in data.get('entry', []):
+                # page_id is always in entry.id — this is how we route to the right user
+                page_id = str(entry.get('id', '')).strip()
 
-            if 'entry' in data:
-                _log_webhook(f"Processing {len(data['entry'])} entries...")
+                if not page_id:
+                    _log_webhook("Entry has no id, skipping")
+                    continue
+
+                _log_webhook(f"Processing entry for page_id: {page_id}")
+
+                try:
+                    connection = MessengerConnection.objects.get(page_id=page_id)
+                    _log_webhook(f"Connection found: {connection.page_name} (auto_reply={connection.auto_reply_enabled})")
+                except MessengerConnection.DoesNotExist:
+                    _log_webhook(f"ERROR: No MessengerConnection for page_id={page_id}")
+                    continue  # Try next entry, don't bail entirely
+
+                # Mark as verified on first successful POST (belt-and-suspenders)
+                if not connection.is_webhook_verified:
+                    connection.is_webhook_verified = True
+                    connection.save(update_fields=['is_webhook_verified'])
+
+                if 'messaging' not in entry:
+                    continue
 
                 try:
                     from .services.message_handler import MessageHandler
-                    _log_webhook("MessageHandler imported successfully")
-                except Exception as e:
-                    _log_webhook(f"ERROR importing MessageHandler: {e}\n{tb.format_exc()}")
-                    return JsonResponse({'status': 'received'}, status=200)
-
-                try:
                     message_handler = MessageHandler(connection)
                     _log_webhook("MessageHandler initialized OK")
                 except Exception as e:
                     _log_webhook(f"ERROR initializing MessageHandler: {e}\n{tb.format_exc()}")
-                    return JsonResponse({'status': 'received'}, status=200)
+                    continue
 
-                for entry in data['entry']:
-                    if 'messaging' in entry:
-                        for messaging_event in entry['messaging']:
-                            sender_id = messaging_event.get('sender', {}).get('id')
+                for messaging_event in entry['messaging']:
+                    sender_id = messaging_event.get('sender', {}).get('id')
 
-                            # Skip non-message events
-                            if 'delivery' in messaging_event or 'read' in messaging_event:
-                                continue
-                            if 'postback' in messaging_event or 'referral' in messaging_event:
-                                continue
+                    # Skip non-message events
+                    if 'delivery' in messaging_event or 'read' in messaging_event:
+                        continue
+                    if 'postback' in messaging_event or 'referral' in messaging_event:
+                        continue
 
-                            if 'message' in messaging_event:
-                                message = messaging_event['message']
+                    if 'message' not in messaging_event:
+                        continue
 
-                                if message.get('is_echo'):
-                                    continue
+                    message = messaging_event['message']
+                    if message.get('is_echo'):
+                        continue
 
-                                message_text = message.get('text', '')
-                                message_id = message.get('mid')
-                                attachments = message.get('attachments', [])
+                    message_text = message.get('text', '')
+                    message_id   = message.get('mid')
+                    attachments  = message.get('attachments', [])
 
-                                _log_webhook(f"Message from {sender_id}: '{message_text[:100]}' (attachments: {len(attachments)})")
+                    _log_webhook(f"Message from {sender_id}: '{message_text[:100]}' (attachments: {len(attachments)})")
 
-                                if sender_id:
-                                    try:
-                                        result = message_handler.process_message(
-                                            sender_id=sender_id,
-                                            message_data={
-                                                'text': message_text or '',
-                                                'attachments': attachments,
-                                                'mid': message_id
-                                            }
-                                        )
-                                        _log_webhook(f"process_message result: {result}")
-                                    except Exception as e:
-                                        _log_webhook(f"ERROR in process_message: {e}\n{tb.format_exc()}")
+                    if sender_id:
+                        try:
+                            result = message_handler.process_message(
+                                sender_id=sender_id,
+                                message_data={
+                                    'text':        message_text or '',
+                                    'attachments': attachments,
+                                    'mid':         message_id,
+                                }
+                            )
+                            _log_webhook(f"process_message result: {result}")
+                        except Exception as e:
+                            _log_webhook(f"ERROR in process_message: {e}\n{tb.format_exc()}")
 
             _log_webhook("Webhook handled OK, returning 200")
             return JsonResponse({'status': 'received'}, status=200)
@@ -476,7 +500,7 @@ def webhook(request, page_id):
         except Exception as e:
             _log_webhook(f"FATAL WEBHOOK ERROR: {e}\n{tb.format_exc()}")
             logger.error(f"Webhook error: {e}", exc_info=True)
-            # ALWAYS return 200 to Facebook to prevent webhook deactivation
+            # ALWAYS return 200 — never let Facebook disable the webhook
             return JsonResponse({'status': 'received'}, status=200)
 
 

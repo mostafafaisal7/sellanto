@@ -1959,10 +1959,9 @@ class MessengerConnectionViewSet(viewsets.ModelViewSet):
             serializer = self.get_serializer(existing, data=request.data, partial=True)
             serializer.is_valid(raise_exception=True)
             connection = serializer.save()
-            # Auto-generate webhook_url
-            page_id = connection.page_id
+            # Set single app-level webhook URL
             base_url = request.build_absolute_uri('/').rstrip('/')
-            connection.webhook_url = f"{base_url}/messenger/webhook/{page_id}/"
+            connection.webhook_url = f"{base_url}/messenger/webhook/"
             connection.save(update_fields=['webhook_url'])
             return Response(self.get_serializer(connection).data, status=status.HTTP_200_OK)
         except MessengerConnection.DoesNotExist:
@@ -1970,10 +1969,9 @@ class MessengerConnectionViewSet(viewsets.ModelViewSet):
             serializer = self.get_serializer(data=request.data)
             serializer.is_valid(raise_exception=True)
             connection = serializer.save(user=request.user)
-            # Auto-generate webhook_url
-            page_id = connection.page_id
+            # Set single app-level webhook URL
             base_url = request.build_absolute_uri('/').rstrip('/')
-            connection.webhook_url = f"{base_url}/messenger/webhook/{page_id}/"
+            connection.webhook_url = f"{base_url}/messenger/webhook/"
             connection.save(update_fields=['webhook_url'])
             return Response(self.get_serializer(connection).data, status=status.HTTP_201_CREATED)
 

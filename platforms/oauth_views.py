@@ -566,6 +566,10 @@ def facebook_setup_messenger(request):
         logger.warning(f'[FB Messenger] Webhook request failed for page {page_id}: {e}')
         webhook_warning = 'Could not reach Facebook for webhook setup. Set it up manually via Admin Panel → Facebook Settings.'
 
+    # ── Build single app-level webhook URL ───────────────────────────────────
+    base_url    = request.build_absolute_uri('/').rstrip('/')
+    webhook_url = f"{base_url}/messenger/webhook/"
+
     # ── Save MessengerConnection (always — even if webhook subscription failed) ─
     # is_webhook_verified is ONLY set True by Meta's GET verification request
     # (messenger_bot/views.py webhook view). We never force it True here.
@@ -576,8 +580,11 @@ def facebook_setup_messenger(request):
             connection.page_id           = page_id
             connection.page_name         = page_name
             connection.page_access_token = page_token
+            connection.webhook_url       = webhook_url
             connection.is_active         = True
-            connection.save(update_fields=['page_id', 'page_name', 'page_access_token', 'is_active'])
+            connection.save(update_fields=[
+                'page_id', 'page_name', 'page_access_token', 'webhook_url', 'is_active'
+            ])
             created = False
         except MessengerConnection.DoesNotExist:
             # New connection — webhook not yet verified by Meta
@@ -586,6 +593,7 @@ def facebook_setup_messenger(request):
                 page_id=page_id,
                 page_name=page_name,
                 page_access_token=page_token,
+                webhook_url=webhook_url,
                 is_webhook_verified=False,
                 is_active=True,
             )
@@ -606,6 +614,10 @@ def facebook_setup_messenger(request):
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
 
+    # Read the app-level verify token so the response can show it to the user
+    from accounts.models import SiteConfiguration
+    app_verify_token = SiteConfiguration.get('messenger_verify_token', '')
+
     response = {
         'success':             True,
         'page_id':             page_id,
@@ -613,6 +625,9 @@ def facebook_setup_messenger(request):
         'messenger_connected': True,
         'webhook_verified':    webhook_subscribed,
         'is_new_connection':   created,
+        # These are shown to the user in the UI so they can confirm Meta Console setup
+        'webhook_url':         webhook_url,
+        'webhook_token_set':   bool(app_verify_token),
     }
     if webhook_warning:
         response['warning'] = webhook_warning

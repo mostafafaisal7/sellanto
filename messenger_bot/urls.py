@@ -45,6 +45,6 @@ urlpatterns = [
     path('notifications/mark-all-read/', views.mark_all_notifications_read, name='mark_all_notifications_read'),
     path('notifications/delete-all-read/', views.delete_all_read_notifications, name='delete_all_read_notifications'),
     
-    # Webhook
-    path('webhook/<str:page_id>/', views.webhook, name='webhook'),
+    # Webhook — single app-level URL, page_id is read from the payload body
+    path('webhook/', views.webhook, name='webhook'),
 ]
