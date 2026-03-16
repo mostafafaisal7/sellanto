@@ -151,11 +151,7 @@ Desktop.ini
 staticfiles/
 node_modules/
 nul
-<<<<<<< HEAD
-webhook_debug.log
-=======
 
 # Debug logs
 webhook_debug.log
 *.log
->>>>>>> chat/fay-v1.2.3
