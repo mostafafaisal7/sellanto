@@ -95,13 +95,19 @@ export interface FacebookAccountRow {
   last_validated_at: string | null;
 }
 
+export interface MessengerAppWebhook {
+  webhook_url: string;
+  verify_token: string;
+  fields: string;
+  is_token_set: boolean;
+  note: string;
+}
+
 export interface MessengerWebhookConnection {
   id: number;
   username: string;
   page_id: string;
   page_name: string;
-  verify_token: string;
-  webhook_url: string;
   is_webhook_verified: boolean;
   is_active: boolean;
   auto_reply_enabled: boolean;
@@ -159,8 +165,13 @@ export const facebookOAuthService = {
     return res.data;
   },
 
-  async getMessengerWebhooks(): Promise<{ connections: MessengerWebhookConnection[]; total: number }> {
+  async getMessengerWebhooks(): Promise<{ app_webhook: MessengerAppWebhook; connections: MessengerWebhookConnection[]; total: number }> {
     const res = await api.get('/admin/messenger-webhooks/');
+    return res.data;
+  },
+
+  async regenerateVerifyToken(): Promise<{ success: boolean; message: string; messenger_webhook?: { webhook_url: string; verify_token: string } }> {
+    const res = await api.post('/admin/facebook-settings/', { regenerate_verify_token: 'true' });
     return res.data;
   },
 
