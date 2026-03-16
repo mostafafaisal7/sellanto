@@ -754,8 +754,10 @@ class AdminAnalyticsView(APIView):
 
 class FacebookSettingsView(APIView):
     """
-    GET  /api/v1/admin/facebook-settings/  → read current FB OAuth config
+    GET  /api/v1/admin/facebook-settings/  → read current FB OAuth config + webhook info
     POST /api/v1/admin/facebook-settings/  → save FB OAuth config to SiteConfiguration
+                                             auto-generates messenger_verify_token on first save
+                                             pass regenerate_verify_token=true to get a new one
 
     Values are stored in the SiteConfiguration DB table so the admin can
     update them at any time without touching server files or restarting.
@@ -772,13 +774,28 @@ class FacebookSettingsView(APIView):
         'frontend_url':          'Frontend URL (your React app URL, used for popup security)',
     }
 
+    def _get_webhook_info(self, request):
+        """Build the single app-level webhook URL and return verify token from DB."""
+        import secrets as _secrets
+        verify_token = SiteConfiguration.get('messenger_verify_token', '')
+        # Auto-generate if missing (first time admin loads this page after upgrade)
+        if not verify_token:
+            verify_token = _secrets.token_urlsafe(32)
+            SiteConfiguration.set(
+                'messenger_verify_token',
+                verify_token,
+                'App-level Facebook Messenger webhook verify token. Copy this into Meta Developer Console.'
+            )
+        backend_base = request.build_absolute_uri('/').rstrip('/')
+        webhook_url  = f"{backend_base}/messenger/webhook/"
+        return verify_token, webhook_url
+
     def get(self, request):
-        """Return current Facebook OAuth settings. App Secret is masked."""
+        """Return current Facebook OAuth settings + Messenger webhook info."""
         data = {}
         for key, description in self.KEYS.items():
             raw = SiteConfiguration.get(key, '')
             if key == 'facebook_app_secret' and raw:
-                # Mask secret — show only last 6 characters
                 display = '•' * (len(raw) - 6) + raw[-6:] if len(raw) > 6 else '••••••'
             else:
                 display = raw
@@ -788,7 +805,6 @@ class FacebookSettingsView(APIView):
                 'description': description,
             }
 
-        # Overall status
         app_id       = SiteConfiguration.get('facebook_app_id', '')
         app_secret   = SiteConfiguration.get('facebook_app_secret', '')
         redirect_uri = SiteConfiguration.get('facebook_redirect_uri', '')
@@ -796,19 +812,28 @@ class FacebookSettingsView(APIView):
 
         is_configured = bool(app_id and app_secret and redirect_uri)
         missing = []
-        if not app_id:
-            missing.append('App ID')
-        if not app_secret:
-            missing.append('App Secret')
-        if not redirect_uri:
-            missing.append('Redirect URI')
-        if not frontend_url:
-            missing.append('Frontend URL (optional but recommended)')
+        if not app_id:      missing.append('App ID')
+        if not app_secret:  missing.append('App Secret')
+        if not redirect_uri: missing.append('Redirect URI')
+        if not frontend_url: missing.append('Frontend URL (optional but recommended)')
+
+        verify_token, webhook_url = self._get_webhook_info(request)
 
         return Response({
             'settings':      data,
             'is_configured': is_configured,
             'missing':       missing,
+            # ── Messenger Webhook (copy these into Meta Developer Console) ──────
+            'messenger_webhook': {
+                'webhook_url':    webhook_url,
+                'verify_token':   verify_token,
+                'fields':         'messages, messaging_postbacks, messaging_optins',
+                'note': (
+                    'Set this ONE webhook URL in Meta Developer Console → '
+                    'Your App → Messenger → Webhooks. '
+                    'All users\' pages will send messages to this single URL automatically.'
+                ),
+            },
             'help': {
                 'where_to_find': 'https://developers.facebook.com → Your App → Settings → Basic',
                 'redirect_uri_note': (
@@ -826,27 +851,36 @@ class FacebookSettingsView(APIView):
         """
         Save Facebook OAuth settings.
         Only updates keys that are provided and non-empty.
-        Pass empty string "" to a key to clear it.
+        Pass regenerate_verify_token=true to generate a new Messenger webhook token.
         """
+        import secrets as _secrets
         updated = []
         errors  = []
 
+        # ── Optionally regenerate the Messenger verify token ─────────────────
+        if request.data.get('regenerate_verify_token'):
+            new_token = _secrets.token_urlsafe(32)
+            SiteConfiguration.set(
+                'messenger_verify_token',
+                new_token,
+                'App-level Facebook Messenger webhook verify token. Copy this into Meta Developer Console.'
+            )
+            updated.append('messenger_verify_token')
+
         for key in self.KEYS:
             if key not in request.data:
-                continue  # Not provided — skip, keep existing value
+                continue
 
             value = str(request.data[key]).strip()
 
-            # Validate redirect URI format
             if key == 'facebook_redirect_uri' and value:
                 if not (value.startswith('http://') or value.startswith('https://')):
-                    errors.append(f'facebook_redirect_uri must start with http:// or https://')
+                    errors.append('facebook_redirect_uri must start with http:// or https://')
                     continue
 
-            # Validate frontend URL format
             if key == 'frontend_url' and value:
                 if not (value.startswith('http://') or value.startswith('https://')):
-                    errors.append(f'frontend_url must start with http:// or https://')
+                    errors.append('frontend_url must start with http:// or https://')
                     continue
 
             try:
@@ -861,21 +895,38 @@ class FacebookSettingsView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        # Re-check if now fully configured
+        # Auto-generate verify token on first save if it doesn't exist yet
+        verify_token = SiteConfiguration.get('messenger_verify_token', '')
+        if not verify_token:
+            verify_token = _secrets.token_urlsafe(32)
+            SiteConfiguration.set(
+                'messenger_verify_token',
+                verify_token,
+                'App-level Facebook Messenger webhook verify token. Copy this into Meta Developer Console.'
+            )
+            updated.append('messenger_verify_token (auto-generated)')
+
         app_id       = SiteConfiguration.get('facebook_app_id', '')
         app_secret   = SiteConfiguration.get('facebook_app_secret', '')
         redirect_uri = SiteConfiguration.get('facebook_redirect_uri', '')
         is_configured = bool(app_id and app_secret and redirect_uri)
 
+        verify_token, webhook_url = self._get_webhook_info(request)
+
         response = {
             'success':       True,
             'updated_keys':  updated,
             'is_configured': is_configured,
-            'message':       (
+            'message': (
                 'Facebook OAuth is now fully configured. Users can connect their Facebook Pages.'
                 if is_configured else
                 'Settings saved. Some required fields are still missing — see is_configured=false.'
             ),
+            'messenger_webhook': {
+                'webhook_url':  webhook_url,
+                'verify_token': verify_token,
+                'fields':       'messages, messaging_postbacks, messaging_optins',
+            },
         }
         if errors:
             response['warnings'] = errors
@@ -886,8 +937,9 @@ class FacebookSettingsView(APIView):
 class AdminMessengerWebhooksView(APIView):
     """
     GET /api/v1/admin/messenger-webhooks/
-    Returns all MessengerConnection records so the admin can copy
-    webhook URLs and verify tokens to paste into Meta Developer Console.
+    Returns:
+      - The single app-level webhook URL + verify_token to paste into Meta Console (once)
+      - All MessengerConnection records showing each user's page and webhook verification status
     """
     permission_classes = [IsAdminUser]
 
@@ -895,31 +947,41 @@ class AdminMessengerWebhooksView(APIView):
         from messenger_bot.models import MessengerConnection
         from accounts.models import SiteConfiguration
 
-        frontend_url = (
-            SiteConfiguration.get('frontend_url', '')
-            or request.build_absolute_uri('/').rstrip('/')
-        )
-        # Derive backend base from request
-        backend_base = request.build_absolute_uri('/').rstrip('/')
+        backend_base  = request.build_absolute_uri('/').rstrip('/')
+        webhook_url   = f"{backend_base}/messenger/webhook/"
+        verify_token  = SiteConfiguration.get('messenger_verify_token', '')
 
         connections = MessengerConnection.objects.select_related('user').order_by('-connected_at')
         data = []
         for c in connections:
-            webhook_url = f"{backend_base}/messenger/webhook/{c.page_id}/"
             data.append({
                 'id':                  c.id,
                 'username':            c.user.username,
                 'page_id':             c.page_id,
                 'page_name':           c.page_name,
-                'verify_token':        c.verify_token,
-                'webhook_url':         webhook_url,
                 'is_webhook_verified': c.is_webhook_verified,
                 'is_active':           c.is_active,
                 'auto_reply_enabled':  c.auto_reply_enabled,
                 'connected_at':        str(c.connected_at) if c.connected_at else None,
             })
 
-        return Response({'connections': data, 'total': len(data)})
+        return Response({
+            # ── What admin copies into Meta Console (one time only) ───────────
+            'app_webhook': {
+                'webhook_url':   webhook_url,
+                'verify_token':  verify_token,
+                'fields':        'messages, messaging_postbacks, messaging_optins',
+                'is_token_set':  bool(verify_token),
+                'note': (
+                    'Set this single URL in Meta Developer Console → '
+                    'Messenger → Webhooks. All users\' pages share this one URL. '
+                    'To regenerate the token go to Admin → Facebook Settings and '
+                    'POST with regenerate_verify_token=true.'
+                ),
+            },
+            'connections': data,
+            'total': len(data),
+        })
 
 
 class AdminFacebookAccountsView(APIView):
@@ -1077,8 +1139,7 @@ class AdminSetupMessengerView(APIView):
             'page_name':        page_name,
             'webhook_verified': webhook_subscribed,
             'is_new':           created,
-            'verify_token':     connection.verify_token,
-            'webhook_url':      f"{request.build_absolute_uri('/').rstrip('/')}/messenger/webhook/{page_id}/",
+            'webhook_url':      f"{request.build_absolute_uri('/').rstrip('/')}/messenger/webhook/",
         }
         if webhook_warning:
             response['warning'] = webhook_warning
@@ -1114,7 +1175,7 @@ class AdminTestWebhookView(APIView):
 
         page_id      = connection.page_id
         backend_base = request.build_absolute_uri('/').rstrip('/')
-        webhook_url  = f"{backend_base}/messenger/webhook/{page_id}/"
+        webhook_url  = f"{backend_base}/messenger/webhook/"
 
         # Snapshot conversation count before test
         before_count = Conversation.objects.filter(connection=connection).count()
@@ -1146,12 +1207,12 @@ class AdminTestWebhookView(APIView):
             from messenger_bot.views import webhook as webhook_view
             factory = RequestFactory()
             fake_req = factory.post(
-                f'/messenger/webhook/{page_id}/',
+                '/messenger/webhook/',
                 data=json.dumps(payload),
                 content_type='application/json'
             )
             fake_req.user = connection.user  # attach user for any user checks
-            response_obj  = webhook_view(fake_req, page_id=page_id)
+            response_obj  = webhook_view(fake_req)
             webhook_result = {
                 'status_code': response_obj.status_code,
                 'ok': response_obj.status_code == 200,
