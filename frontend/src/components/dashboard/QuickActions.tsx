@@ -22,9 +22,16 @@ interface QuickAction {
 
 const actions: QuickAction[] = [
   {
-    name: 'Setup',
+    name: 'Magic Mode',
+    description: 'AI auto-create posts',
+    href: '/magic',
+    icon: SparklesIcon,
+    color: 'from-[#E8364F] to-[#FF6B6B]',
+  },
+  {
+    name: 'Setup V2',
     description: 'Brand & strategy',
-    href: '/overflow',
+    href: '/setup/brand-dna',
     icon: RocketLaunchIcon,
     color: 'from-warning to-accent',
   },
@@ -90,7 +97,7 @@ export function QuickActions() {
   return (
     <div className="mb-6">
       <h2 className="text-lg font-semibold text-text-primary mb-4">Quick Actions</h2>
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 xl:grid-cols-8 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-10 gap-4">
         {actions.map((action, index) => (
           <motion.div
             key={action.name}
