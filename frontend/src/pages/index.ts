@@ -29,5 +29,11 @@ export { PermissionsPage } from './PermissionsPage';
 export { OverflowPage } from './OverflowPage';
 export { IdeaHistoryPage } from './IdeaHistoryPage';
 
+// V2 Redesign pages
+export { ModeSelectPage } from './magic/ModeSelectPage';
+export { MagicModePage } from './magic/MagicModePage';
+export { GettingStartedPage } from './GettingStartedPage';
+export { SetupFlowPage } from './SetupFlowPage';
+
 // Dev / Test
 export { APITestPage } from './APITestPage';

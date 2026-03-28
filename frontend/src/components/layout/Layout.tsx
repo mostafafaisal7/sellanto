@@ -4,7 +4,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ShieldExclamationIcon, ArrowLeftIcon } from '@heroicons/react/24/outline';
 import { Navbar } from './Navbar';
 import { Sidebar } from './Sidebar';
-import { Footer } from './Footer';
 import { SupportChatbot } from './SupportChatbot';
 import { InsufficientDiamondsModal } from '../diamond';
 import { ToastContainer } from '../ui/ToastContainer';
@@ -48,25 +47,20 @@ export function Layout() {
   const { impersonatedUser } = useAdminStore();
   const isImpersonating = !!impersonatedUser;
 
-  // Close sidebar on route change
   useEffect(() => {
     setSidebarOpen(false);
   }, [location.pathname]);
 
-  // Close sidebar on escape key
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setSidebarOpen(false);
-      }
+      if (e.key === 'Escape') setSidebarOpen(false);
     };
-
     window.addEventListener('keydown', handleEscape);
     return () => window.removeEventListener('keydown', handleEscape);
   }, []);
 
   return (
-    <div className="min-h-screen bg-dark-800">
+    <div className="min-h-screen" style={{ background: 'rgb(var(--c-bg-primary))' }}>
       {isImpersonating && <ImpersonationBanner />}
       <Navbar
         onMenuClick={() => setSidebarOpen(!sidebarOpen)}
@@ -76,7 +70,7 @@ export function Layout() {
       />
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} isImpersonating={isImpersonating} />
 
-      <main className={`${isImpersonating ? 'pt-[110px]' : 'pt-[70px]'} pb-[60px] lg:ml-[300px]`}>
+      <main className={`${isImpersonating ? 'pt-[96px]' : 'pt-[56px]'} lg:ml-[230px]`}>
         <AnimatePresence mode="wait">
           <motion.div
             key={location.pathname}
@@ -84,14 +78,15 @@ export function Layout() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
             transition={{ duration: 0.2 }}
-            className="p-4 lg:p-6"
+            className="px-5 py-5 lg:px-7"
           >
-            <Outlet />
+            <div className="max-w-[920px] mx-auto">
+              <Outlet />
+            </div>
           </motion.div>
         </AnimatePresence>
       </main>
 
-      <Footer />
       <SupportChatbot isOpen={chatOpen} onClose={() => setChatOpen(false)} />
       <InsufficientDiamondsModal />
       <ToastContainer />

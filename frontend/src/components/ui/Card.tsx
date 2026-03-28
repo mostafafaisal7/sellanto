@@ -17,16 +17,16 @@ const paddingStyles = {
 
 export const Card = forwardRef<HTMLDivElement, CardProps>(
   ({ variant = 'default', hover = true, padding = 'md', className, children, ...props }, ref) => {
-    const baseStyles = 'rounded-2xl transition-all duration-300';
+    const baseStyles = 'rounded-[14px] transition-all duration-300';
 
     const variantStyles = {
-      default: 'bg-dark-600/80 backdrop-blur-xl border border-white/5',
-      gradient: 'bg-dark-600/80 backdrop-blur-xl gradient-border',
+      default: 'bg-bg-card border border-white/[0.06]',
+      gradient: 'bg-bg-card gradient-border',
       glass: 'bg-white/5 backdrop-blur-xl border border-white/10',
     };
 
     const hoverStyles = hover
-      ? 'hover:border-white/10 hover:shadow-card-hover hover:-translate-y-1'
+      ? 'hover:border-white/[0.12] hover:shadow-card-hover hover:-translate-y-0.5'
       : '';
 
     return (
@@ -91,7 +91,7 @@ CardContent.displayName = 'CardContent';
 
 export const CardFooter = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
   ({ className, children, ...props }, ref) => (
-    <div ref={ref} className={clsx('mt-4 pt-4 border-t border-white/5', className)} {...props}>
+    <div ref={ref} className={clsx('mt-4 pt-4 border-t border-white/[0.06]', className)} {...props}>
       {children}
     </div>
   )

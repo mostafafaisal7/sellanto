@@ -45,7 +45,7 @@ export function Modal({
           leaveFrom="opacity-100"
           leaveTo="opacity-0"
         >
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" />
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-[8px]" />
         </Transition.Child>
 
         {/* Modal container */}
@@ -63,7 +63,7 @@ export function Modal({
               <Dialog.Panel
                 className={clsx(
                   'w-full transform overflow-hidden rounded-2xl',
-                  'bg-dark-700 border border-white/10',
+                  'bg-bg-elevated border border-white/[0.06]',
                   'p-6 text-left align-middle shadow-xl transition-all',
                   sizeStyles[size]
                 )}

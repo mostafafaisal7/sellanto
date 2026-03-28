@@ -34,7 +34,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
               'input',
               leftIcon && 'pl-10',
               rightIcon && 'pr-10',
-              error && 'border-danger focus:border-danger focus:ring-danger/20',
+              error && '!border-coral focus:!border-coral focus:!shadow-[0_0_0_3px_rgba(232,54,79,0.15)]',
               className
             )}
             {...props}
@@ -45,7 +45,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             </span>
           )}
         </div>
-        {error && <p className="mt-1.5 text-xs text-danger">{error}</p>}
+        {error && <p className="mt-1.5 text-xs text-coral">{error}</p>}
         {helperText && !error && <p className="mt-1.5 text-xs text-text-muted">{helperText}</p>}
       </div>
     );
@@ -91,12 +91,12 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
           maxLength={maxLength}
           className={clsx(
             'textarea',
-            error && 'border-danger focus:border-danger focus:ring-danger/20',
+            error && '!border-coral focus:!border-coral focus:!shadow-[0_0_0_3px_rgba(232,54,79,0.15)]',
             className
           )}
           {...props}
         />
-        {error && <p className="mt-1.5 text-xs text-danger">{error}</p>}
+        {error && <p className="mt-1.5 text-xs text-coral">{error}</p>}
         {helperText && !error && <p className="mt-1.5 text-xs text-text-muted">{helperText}</p>}
       </div>
     );

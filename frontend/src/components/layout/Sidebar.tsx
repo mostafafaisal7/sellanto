@@ -41,16 +41,16 @@ interface NavItem {
 const mainNavItems: NavItem[] = [
   { name: 'Dashboard', href: '/', icon: HomeIcon },
   {
-    name: 'Strategy Hub', href: '/strategy', icon: MapIcon, badge: 'New',
+    name: 'Strategy Hub', href: '/strategy', icon: MapIcon,
     children: [
       { name: 'Brand DNA', href: '/strategy?tab=dna', icon: SparklesIcon },
       { name: 'Content Pillars', href: '/strategy?tab=pillars', icon: ChartBarIcon },
-      { name: 'Competitors Analysis', href: '/strategy?tab=competitors', icon: MapIcon },
-      { name: 'Trending Topics', href: '/strategy?tab=trending', icon: LightBulbIcon },
+      { name: 'Competitors', href: '/strategy?tab=competitors', icon: MapIcon },
+      { name: 'Trending', href: '/strategy?tab=trending', icon: LightBulbIcon },
     ],
   },
   {
-    name: 'Ideas Hub', href: '/ideas', icon: LightBulbIcon, badge: 'New',
+    name: 'Ideas Hub', href: '/ideas', icon: LightBulbIcon,
     children: [
       { name: 'Idea History', href: '/ideas/history', icon: ClockIcon },
     ],
@@ -58,16 +58,16 @@ const mainNavItems: NavItem[] = [
   {
     name: 'Create Post', href: '/posts/create', icon: PlusCircleIcon,
     children: [
-      { name: 'My Post History', href: '/posts', icon: DocumentTextIcon },
+      { name: 'My Posts', href: '/posts', icon: DocumentTextIcon },
     ],
   },
-  { name: 'Calendar', href: '/calendar', icon: CalendarDaysIcon, badge: 'New' },
+  { name: 'Calendar', href: '/calendar', icon: CalendarDaysIcon },
   { name: 'Connect Account', href: '/platforms', icon: LinkIcon },
   { name: 'Analytics', href: '/analytics', icon: ChartBarIcon },
 ];
 
 const aiNavItems: NavItem[] = [
-  { name: 'AI Caption', href: '/ai-caption', icon: SparklesIcon, badge: 'New' },
+  { name: 'AI Caption', href: '/ai-caption', icon: SparklesIcon },
   { name: 'AI Image', href: '/ai-image', icon: PhotoIcon },
   { name: 'AI Video', href: '/ai-video', icon: VideoCameraIcon },
   { name: 'AI Voice', href: '/ai-voice', icon: SpeakerWaveIcon },
@@ -80,17 +80,6 @@ const settingsNavItems: NavItem[] = [
   { name: 'Settings', href: '/settings', icon: Cog6ToothIcon },
 ];
 
-// Custom Gem icon component
-function GemIconCustom({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M6 3h12l4 6-10 12L2 9l4-6z" />
-      <path d="M2 9h20" />
-      <path d="M12 21L8 9l4-6 4 6-4 12z" />
-    </svg>
-  );
-}
-
 function NavItemWithChildren({ item, onClose }: { item: NavItem; onClose: () => void }) {
   const location = useLocation();
   const currentPath = location.pathname + location.search;
@@ -98,7 +87,6 @@ function NavItemWithChildren({ item, onClose }: { item: NavItem; onClose: () => 
   const isChildActive = item.children?.some((c) => currentPath === c.href) || false;
   const [expanded, setExpanded] = useState(isOnParentPath || isChildActive);
 
-  // Auto-expand when navigating to this section
   useEffect(() => {
     if (isOnParentPath || isChildActive) setExpanded(true);
   }, [currentPath]);
@@ -109,20 +97,17 @@ function NavItemWithChildren({ item, onClose }: { item: NavItem; onClose: () => 
         <NavLink
           to={item.href}
           onClick={onClose}
-          className={`sidebar-link flex-1 ${isOnParentPath ? 'active' : ''}`}
+          className={`nav-item flex-1 ${isOnParentPath ? 'active' : ''}`}
         >
-          <item.icon className="w-5 h-5" />
+          <item.icon className="w-[18px] h-[18px]" />
           <span className="flex-1">{item.name}</span>
-          {item.badge && (
-            <span className="badge badge-primary text-[10px]">{item.badge}</span>
-          )}
         </NavLink>
         <button
           onClick={() => setExpanded(!expanded)}
           className="p-1.5 mr-2 rounded-md text-text-muted hover:text-text-primary hover:bg-white/5 transition-colors"
         >
           <ChevronDownIcon
-            className={`w-3.5 h-3.5 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`}
+            className={`w-3 h-3 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`}
           />
         </button>
       </div>
@@ -142,7 +127,7 @@ function NavItemWithChildren({ item, onClose }: { item: NavItem; onClose: () => 
                   key={child.name}
                   to={child.href}
                   onClick={onClose}
-                  className={`sidebar-link pl-11 text-sm ${isActive ? 'active' : ''}`}
+                  className={`nav-item pl-11 text-[12.5px] ${isActive ? 'active' : ''}`}
                 >
                   <child.icon className="w-4 h-4" />
                   <span className="flex-1">{child.name}</span>
@@ -160,13 +145,21 @@ export function Sidebar({ isOpen, onClose, isImpersonating }: SidebarProps) {
   const { user } = useAuthStore();
 
   const NavSection = ({ items, title }: { items: NavItem[]; title?: string }) => (
-    <div className="mb-6">
+    <div className="mb-5">
       {title && (
-        <h3 className="px-4 mb-2 text-xs font-semibold text-text-muted uppercase tracking-wider">
+        <h3
+          className="px-4 mb-2 uppercase tracking-wider"
+          style={{
+            fontSize: '10.5px',
+            fontWeight: 700,
+            color: 'rgb(var(--c-text-muted))',
+            letterSpacing: '1.2px',
+          }}
+        >
           {title}
         </h3>
       )}
-      <nav className="space-y-1">
+      <nav className="space-y-0.5">
         {items.map((item) =>
           item.children ? (
             <NavItemWithChildren key={item.name} item={item} onClose={onClose} />
@@ -176,14 +169,11 @@ export function Sidebar({ isOpen, onClose, isImpersonating }: SidebarProps) {
               to={item.href}
               onClick={onClose}
               className={({ isActive }) =>
-                `sidebar-link ${isActive ? 'active' : ''}`
+                `nav-item ${isActive ? 'active' : ''}`
               }
             >
-              <item.icon className="w-5 h-5" />
+              <item.icon className="w-[18px] h-[18px]" />
               <span className="flex-1">{item.name}</span>
-              {item.badge && (
-                <span className="badge badge-primary text-[10px]">{item.badge}</span>
-              )}
             </NavLink>
           )
         )}
@@ -193,16 +183,39 @@ export function Sidebar({ isOpen, onClose, isImpersonating }: SidebarProps) {
 
   const sidebarContent = (
     <div className="flex flex-col h-full">
+      {/* Logo (desktop) */}
+      <div className="hidden lg:flex items-center gap-3 px-[18px] pt-[18px] pb-[14px]">
+        <div
+          className="w-8 h-8 rounded-[10px] flex items-center justify-center text-white font-black text-sm"
+          style={{
+            background: 'linear-gradient(135deg, rgb(var(--c-coral)), rgb(var(--c-coral-hover)))',
+          }}
+        >
+          S
+        </div>
+        <span className="text-[18px] font-bold text-text-primary">Sellanto</span>
+      </div>
+
       {/* Mobile close button */}
-      <div className="lg:hidden flex items-center justify-between p-4 border-b border-white/5">
-        <span className="text-lg font-bold gradient-text">Menu</span>
+      <div className="lg:hidden flex items-center justify-between p-4 border-b border-white/[0.06]">
+        <div className="flex items-center gap-2">
+          <div
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-black text-xs"
+            style={{
+              background: 'linear-gradient(135deg, rgb(var(--c-coral)), rgb(var(--c-coral-hover)))',
+            }}
+          >
+            S
+          </div>
+          <span className="text-base font-bold">Sellanto</span>
+        </div>
         <button onClick={onClose} className="btn-icon">
-          <XMarkIcon className="w-6 h-6" />
+          <XMarkIcon className="w-5 h-5" />
         </button>
       </div>
 
       {/* Navigation */}
-      <div className="flex-1 overflow-y-auto py-6 px-3">
+      <div className="flex-1 overflow-y-auto py-4 px-3 no-scrollbar">
         <NavSection items={mainNavItems} />
         <NavSection items={aiNavItems} title="AI Tools" />
         <NavSection items={settingsNavItems} title="Settings" />
@@ -210,18 +223,20 @@ export function Sidebar({ isOpen, onClose, isImpersonating }: SidebarProps) {
 
       {/* Upgrade card */}
       {user?.profile?.subscription_plan === 'free' && (
-        <div className="p-4">
-          <div className="card gradient-border p-4">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="icon-wrapper-sm bg-gradient-accent">
-                <GemIconCustom className="w-5 h-5" />
-              </div>
-              <div>
-                <h4 className="font-semibold text-sm">Upgrade to Pro</h4>
-                <p className="text-xs text-text-secondary">Unlock all features</p>
-              </div>
+        <div className="p-3">
+          <div
+            className="p-4 rounded-xl"
+            style={{
+              background: 'rgba(232, 54, 79, 0.08)',
+              border: '1px solid rgba(232, 54, 79, 0.2)',
+            }}
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <span>💎</span>
+              <span className="text-sm font-bold text-text-primary">Upgrade to Pro</span>
             </div>
-            <button className="btn-primary w-full py-2 text-sm">
+            <p className="text-xs text-text-secondary mb-3">Unlock all AI features</p>
+            <button className="btn-primary w-full py-2 text-xs">
               Upgrade Now
             </button>
           </div>
@@ -240,13 +255,19 @@ export function Sidebar({ isOpen, onClose, isImpersonating }: SidebarProps) {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="lg:hidden fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
+            className="lg:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
           />
         )}
       </AnimatePresence>
 
       {/* Desktop sidebar */}
-      <aside className={`hidden lg:flex lg:flex-col fixed left-0 ${isImpersonating ? 'top-[110px]' : 'top-[70px]'} bottom-[60px] w-[300px] bg-dark-800/95 backdrop-blur-xl border-r border-white/5 z-30`}>
+      <aside
+        className={`hidden lg:flex lg:flex-col fixed left-0 ${isImpersonating ? 'top-[96px]' : 'top-0'} bottom-0 w-[230px] z-30`}
+        style={{
+          background: 'rgb(var(--c-bg-secondary))',
+          borderRight: '1px solid var(--border-color)',
+        }}
+      >
         {sidebarContent}
       </aside>
 
@@ -254,11 +275,12 @@ export function Sidebar({ isOpen, onClose, isImpersonating }: SidebarProps) {
       <AnimatePresence>
         {isOpen && (
           <motion.aside
-            initial={{ x: -300 }}
+            initial={{ x: -230 }}
             animate={{ x: 0 }}
-            exit={{ x: -300 }}
+            exit={{ x: -230 }}
             transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-            className="lg:hidden fixed left-0 top-0 bottom-0 w-[300px] bg-dark-800 z-50"
+            className="lg:hidden fixed left-0 top-0 bottom-0 w-[230px] z-50"
+            style={{ background: 'rgb(var(--c-bg-secondary))' }}
           >
             {sidebarContent}
           </motion.aside>

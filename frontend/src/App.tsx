@@ -31,6 +31,11 @@ import {
   // V1.3
   OverflowPage,
   IdeaHistoryPage,
+  // V2 Redesign
+  ModeSelectPage,
+  MagicModePage,
+  GettingStartedPage,
+  SetupFlowPage,
   // Dev / Test
   APITestPage,
 } from './pages';
@@ -78,8 +83,8 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
     if (user?.is_staff) {
       return <Navigate to="/admin-panel" replace />;
     }
-    // Regular users always land on overflow page
-    return <Navigate to="/overflow" replace />;
+    // Regular users land on mode select page
+    return <Navigate to="/mode-select" replace />;
   }
 
   return <>{children}</>;
@@ -124,6 +129,26 @@ function App() {
           element={
             <ProtectedRoute skipOnboardingCheck>
               <OnboardingPage />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Mode Select (full-screen, no layout) */}
+        <Route
+          path="/mode-select"
+          element={
+            <ProtectedRoute skipOnboardingCheck>
+              <ModeSelectPage />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Magic Mode (full-screen wizard, no layout) */}
+        <Route
+          path="/magic"
+          element={
+            <ProtectedRoute skipOnboardingCheck>
+              <MagicModePage />
             </ProtectedRoute>
           }
         />
@@ -177,6 +202,10 @@ function App() {
           {/* V1.3 Routes */}
           <Route path="/overflow" element={<OverflowPage />} />
           <Route path="/ideas/history" element={<IdeaHistoryPage />} />
+
+          {/* V2 Redesign Routes */}
+          <Route path="/getting-started" element={<GettingStartedPage />} />
+          <Route path="/setup/*" element={<SetupFlowPage />} />
 
           {/* Dev / Test */}
           <Route path="/test-api" element={<APITestPage />} />
