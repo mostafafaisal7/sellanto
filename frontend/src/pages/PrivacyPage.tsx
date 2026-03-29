@@ -1,67 +1,88 @@
 import { motion } from 'framer-motion';
 import { ShieldCheckIcon } from '@heroicons/react/24/outline';
 
-const sections = [
+interface BulletItem {
+  bold?: string;
+  text: string;
+}
+
+interface Section {
+  title: string;
+  intro?: string;
+  bullets: BulletItem[];
+  outro?: string;
+}
+
+const sections: Section[] = [
   {
     title: '1. Information We Collect',
-    content: `We collect information you provide directly to us, including:
-
-• **Account Information**: Name, email address, and password when you create an account.
-• **Social Media Accounts**: OAuth tokens and page access tokens when you connect your social media accounts.
-• **Content**: Posts, captions, images, videos, and other content you create or upload.
-• **API Keys**: When you provide your own OpenAI or Gemini API keys, they are stored securely and encrypted.
-• **Usage Data**: How you interact with our platform, features used, and performance metrics.`,
+    intro: 'We collect information you provide directly to us, including:',
+    bullets: [
+      { bold: 'Account Information', text: 'Name, email address, and password when you create an account.' },
+      { bold: 'Social Media Accounts', text: 'OAuth tokens and page access tokens when you connect your social media accounts.' },
+      { bold: 'Content', text: 'Posts, captions, images, videos, and other content you create or upload.' },
+      { bold: 'API Keys', text: 'When you provide your own OpenAI or Gemini API keys, they are stored securely and encrypted.' },
+      { bold: 'Usage Data', text: 'How you interact with our platform, features used, and performance metrics.' },
+    ],
   },
   {
     title: '2. How We Use Your Information',
-    content: `We use the information we collect to:
-
-• Provide, maintain, and improve our services.
-• Process and publish your social media posts.
-• Generate AI-powered content (captions, images, videos, voiceovers).
-• Power the Messenger chatbot and knowledge base features.
-• Send you notifications about your posts and account activity.
-• Analyze usage patterns to improve user experience.`,
+    intro: 'We use the information we collect to:',
+    bullets: [
+      { text: 'Provide, maintain, and improve our services.' },
+      { text: 'Process and publish your social media posts.' },
+      { text: 'Generate AI-powered content (captions, images, videos, voiceovers).' },
+      { text: 'Power the Messenger chatbot and knowledge base features.' },
+      { text: 'Send you notifications about your posts and account activity.' },
+      { text: 'Analyze usage patterns to improve user experience.' },
+    ],
   },
   {
     title: '3. Data Storage & Security',
-    content: `• All data is stored on secure servers with encryption at rest and in transit.
-• API keys are encrypted before storage and never exposed in API responses.
-• Social media tokens are stored securely and used only for authorized actions.
-• We use industry-standard security practices including HTTPS, secure headers, and input validation.
-• Database backups are encrypted and access is restricted to authorized personnel only.`,
+    bullets: [
+      { text: 'All data is stored on secure servers with encryption at rest and in transit.' },
+      { text: 'API keys are encrypted before storage and never exposed in API responses.' },
+      { text: 'Social media tokens are stored securely and used only for authorized actions.' },
+      { text: 'We use industry-standard security practices including HTTPS, secure headers, and input validation.' },
+      { text: 'Database backups are encrypted and access is restricted to authorized personnel only.' },
+    ],
   },
   {
     title: '4. Third-Party Services',
-    content: `We integrate with the following third-party services:
-
-• **Facebook / Instagram / Twitter / LinkedIn** — For publishing posts and managing social accounts.
-• **OpenAI** — For AI caption generation, chatbot responses, and embeddings.
-• **Google Gemini** — For AI image and video generation.
-• **WooCommerce** — For e-commerce product catalog integration (when configured by user).
-
-Your data shared with these services is governed by their respective privacy policies.`,
+    intro: 'We integrate with the following third-party services:',
+    bullets: [
+      { bold: 'Facebook / Instagram / Twitter / LinkedIn', text: 'For publishing posts and managing social accounts.' },
+      { bold: 'OpenAI', text: 'For AI caption generation, chatbot responses, and embeddings.' },
+      { bold: 'Google Gemini', text: 'For AI image and video generation.' },
+      { bold: 'WooCommerce', text: 'For e-commerce product catalog integration (when configured by user).' },
+    ],
+    outro: 'Your data shared with these services is governed by their respective privacy policies.',
   },
   {
     title: '5. Data Retention',
-    content: `• Account data is retained as long as your account is active.
-• Post history and analytics data are retained for your reference.
-• When you delete your account, all associated data is permanently removed within 30 days.
-• You can request data export or deletion at any time through Settings.`,
+    bullets: [
+      { text: 'Account data is retained as long as your account is active.' },
+      { text: 'Post history and analytics data are retained for your reference.' },
+      { text: 'When you delete your account, all associated data is permanently removed within 30 days.' },
+      { text: 'You can request data export or deletion at any time through Settings.' },
+    ],
   },
   {
     title: '6. Your Rights',
-    content: `You have the right to:
-
-• **Access** your personal data at any time through your profile.
-• **Update** your information through the Settings page.
-• **Delete** your account and all associated data.
-• **Export** your data in a portable format.
-• **Disconnect** any linked social media accounts at any time.`,
+    intro: 'You have the right to:',
+    bullets: [
+      { bold: 'Access', text: 'your personal data at any time through your profile.' },
+      { bold: 'Update', text: 'your information through the Settings page.' },
+      { bold: 'Delete', text: 'your account and all associated data.' },
+      { bold: 'Export', text: 'your data in a portable format.' },
+      { bold: 'Disconnect', text: 'any linked social media accounts at any time.' },
+    ],
   },
   {
     title: '7. Contact Us',
-    content: `If you have questions about this Privacy Policy or your data, please contact us at **support@sellanto.com**.`,
+    intro: 'If you have questions about this Privacy Policy or your data, please contact us at:',
+    bullets: [],
+    outro: 'support@sellanto.com',
   },
 ];
 
@@ -108,9 +129,30 @@ export function PrivacyPage() {
             className="card p-6"
           >
             <h2 className="text-lg font-semibold text-text-primary mb-3">{section.title}</h2>
-            <div className="text-sm text-text-secondary leading-relaxed whitespace-pre-line">
-              {section.content}
-            </div>
+
+            {section.intro && (
+              <p className="text-sm text-text-secondary mb-3">{section.intro}</p>
+            )}
+
+            {section.bullets.length > 0 && (
+              <ul className="space-y-2 ml-1">
+                {section.bullets.map((item, i) => (
+                  <li key={i} className="flex items-start gap-2.5 text-sm text-text-secondary">
+                    <span className="mt-1.5 h-1.5 w-1.5 rounded-full bg-primary/60 shrink-0" />
+                    <span>
+                      {item.bold && (
+                        <span className="font-medium text-text-primary">{item.bold} — </span>
+                      )}
+                      {item.text}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {section.outro && (
+              <p className="text-sm text-text-secondary mt-3">{section.outro}</p>
+            )}
           </motion.div>
         ))}
       </div>

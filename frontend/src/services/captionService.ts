@@ -1,6 +1,13 @@
 import api from './api';
 import type { GenerateCaptionRequest, GeneratedCaption } from '../types';
 
+export interface RegenerateCaptionResponse {
+  success: boolean;
+  caption: string;
+  hashtags: string;
+  id: number;
+}
+
 export const captionService = {
   async generate(data: GenerateCaptionRequest & { override_prompt?: string }): Promise<GeneratedCaption> {
     const formData = new FormData();
@@ -20,8 +27,8 @@ export const captionService = {
     return response.data;
   },
 
-  async regenerate(id: number, feedback: string): Promise<GeneratedCaption> {
-    const response = await api.post<GeneratedCaption>(`/ai-caption/regenerate/${id}/`, { feedback });
+  async regenerate(id: number, feedback: string): Promise<RegenerateCaptionResponse> {
+    const response = await api.post<RegenerateCaptionResponse>(`/ai-caption/regenerate/${id}/`, { feedback });
     return response.data;
   },
 

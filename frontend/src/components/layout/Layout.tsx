@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ShieldExclamationIcon, ArrowLeftIcon } from '@heroicons/react/24/outline';
 import { Navbar } from './Navbar';
 import { Sidebar } from './Sidebar';
+import { Footer } from './Footer';
 import { SupportChatbot } from './SupportChatbot';
 import { InsufficientDiamondsModal } from '../diamond';
 import { ToastContainer } from '../ui/ToastContainer';
@@ -70,21 +71,26 @@ export function Layout() {
       />
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} isImpersonating={isImpersonating} />
 
-      <main className={`${isImpersonating ? 'pt-[96px]' : 'pt-[56px]'} lg:ml-[230px]`}>
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={location.pathname}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.2 }}
-            className="px-5 py-5 lg:px-7"
-          >
-            <div className="max-w-[920px] mx-auto">
+      <main className={`${isImpersonating ? 'pt-[96px]' : 'pt-[56px]'} lg:ml-[230px] min-h-screen flex flex-col`}>
+        <div className="flex-1">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={location.pathname}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.2 }}
+              className="px-5 py-5 lg:px-7"
+            >
               <Outlet />
-            </div>
-          </motion.div>
-        </AnimatePresence>
+            </motion.div>
+          </AnimatePresence>
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 lg:px-7">
+          <Footer />
+        </div>
       </main>
 
       <SupportChatbot isOpen={chatOpen} onClose={() => setChatOpen(false)} />

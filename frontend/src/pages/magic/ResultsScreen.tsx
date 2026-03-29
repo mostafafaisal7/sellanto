@@ -3,13 +3,15 @@ import { useNavigate } from 'react-router-dom';
 import { useMagicModeStore, type MagicPost } from '../../store/magicModeStore';
 import { FeedbackModal } from '../../components/redesign/FeedbackModal';
 import captionService from '../../services/captionService';
+import imageService from '../../services/imageService';
 import type { CaptionPlatform } from '../../types';
 
 function PostCard({ post, index }: { post: MagicPost; index: number }) {
-  const { approvePost, resetPostStatus, openFeedback } = useMagicModeStore();
+  const { approvePost, resetPostStatus, openFeedback, generatedPosts, setGeneratedPosts } = useMagicModeStore();
   const navigate = useNavigate();
   const isApproved = post.status === 'approved';
   const [publishing, setPublishing] = useState(false);
+  const [generatingImage, setGeneratingImage] = useState(false);
 
   const platformEmoji: Record<string, string> = {
     LinkedIn: '💼', Instagram: '📸', Facebook: '📘', Twitter: '🐦', TikTok: '🎵',
@@ -24,6 +26,30 @@ function PostCard({ post, index }: { post: MagicPost; index: number }) {
         title: post.title,
       },
     });
+  };
+
+  const handleGenerateImage = async () => {
+    setGeneratingImage(true);
+    try {
+      const result = await imageService.generate({
+        prompt: `Create a professional social media image for: "${post.title}". ${post.imageStyle || ''}`,
+        title: post.title,
+        provider: 'openai',
+        style: 'modern',
+        enhance_prompt: true,
+      });
+      const imgUrl = result.generated_image_with_logo || result.generated_image || result.composited_image;
+      if (imgUrl) {
+        setGeneratedPosts(
+          generatedPosts.map((p) =>
+            p.id === post.id ? { ...p, imageUrl: imgUrl } : p
+          )
+        );
+      }
+    } catch {
+      // Silent fail — user can retry
+    }
+    setGeneratingImage(false);
   };
 
   const handlePublish = async () => {
@@ -93,22 +119,32 @@ function PostCard({ post, index }: { post: MagicPost; index: number }) {
             />
           ) : (
             <>
-              <span
-                className="px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider mb-4"
-                style={{ background: 'rgba(0,0,0,0.4)', color: 'rgba(255,255,255,0.5)' }}
-              >
-                AI GENERATED IMAGE
-              </span>
-              <span className="text-[40px] opacity-60 mb-3">🖼️</span>
-              <span
-                className="px-5 py-2.5 rounded-[10px] text-[16px] font-extrabold text-white text-center backdrop-blur-[4px]"
-                style={{ background: 'rgba(255,255,255,0.08)' }}
-              >
-                {post.imageOverlay}
-              </span>
-              <p className="text-[11px] text-text-muted mt-3 text-center max-w-[220px]">
-                {post.imageStyle}
-              </p>
+              {generatingImage ? (
+                <>
+                  <div
+                    className="animate-spin rounded-full h-10 w-10 border-b-2 mb-4"
+                    style={{ borderColor: 'rgb(var(--c-coral))' }}
+                  />
+                  <p className="text-[13px] text-text-muted">Generating image...</p>
+                </>
+              ) : (
+                <>
+                  <span className="text-[40px] opacity-60 mb-3">🎨</span>
+                  <p className="text-[13px] text-text-muted mb-4 text-center max-w-[220px]">
+                    {post.imageOverlay}
+                  </p>
+                  <button
+                    onClick={handleGenerateImage}
+                    className="px-5 py-2.5 rounded-[12px] text-[13px] font-bold text-white transition-all duration-200"
+                    style={{
+                      background: 'linear-gradient(135deg, rgb(var(--c-coral)), rgb(var(--c-coral-hover)))',
+                      boxShadow: '0 2px 10px rgba(232,54,79,0.3)',
+                    }}
+                  >
+                    🖼️ Generate Image
+                  </button>
+                </>
+              )}
             </>
           )}
         </div>
@@ -220,38 +256,70 @@ export function ResultsScreen({ onGenerateMore }: ResultsScreenProps) {
     if (!post) { closeFeedback(); return; }
 
     setRegenerating(true);
-    try {
-      const feedbackText = Object.values(feedback).filter(Boolean).join('. ');
+    const isImageFeedback = feedback.what === 'The image style';
 
-      if (post.captionId) {
-        const result = await captionService.regenerate(post.captionId, feedbackText);
-        const newCaption = result.generated_caption || '';
+    // Build clean feedback text — use the specific follow-up answer, not the category label
+    const feedbackText = feedback.custom
+      || feedback.caption_fix
+      || feedback.tone_fix
+      || feedback.topic_fix
+      || feedback.image_fix
+      || Object.entries(feedback).filter(([k]) => k !== 'what').map(([, v]) => v).filter(Boolean).join('. ')
+      || feedback.what
+      || '';
+
+    try {
+      if (isImageFeedback) {
+        // Regenerate image based on feedback
+        const imgResult = await imageService.generate({
+          prompt: `Create a social media image for: "${post.title}". Style feedback: ${feedback.image_fix || feedbackText}`,
+          title: post.title,
+          provider: 'openai',
+          style: 'modern',
+          enhance_prompt: true,
+        });
+        const imgUrl = imgResult.generated_image_with_logo || imgResult.generated_image || imgResult.composited_image;
         setGeneratedPosts(
           generatedPosts.map((p) =>
             p.id === feedbackModal.postId
-              ? { ...p, caption: newCaption, status: 'ready' as const, captionId: result.id || p.captionId }
+              ? { ...p, imageUrl: imgUrl || p.imageUrl, status: 'ready' as const }
               : p
           )
         );
       } else {
-        const result = await captionService.generate({
-          topic: post.title,
-          tone: 'professional',
-          length: 'medium',
-          platform: post.platform.toLowerCase() as CaptionPlatform,
-          include_hashtags: true,
-          include_emojis: true,
-          include_cta: true,
-          custom_instructions: feedbackText,
-        });
-        const newCaption = result.generated_caption || '';
-        setGeneratedPosts(
-          generatedPosts.map((p) =>
-            p.id === feedbackModal.postId
-              ? { ...p, caption: newCaption, status: 'ready' as const, captionId: result.id }
-              : p
-          )
-        );
+        // Regenerate caption based on feedback
+        if (post.captionId) {
+          // Use regenerate endpoint — returns { success, caption, hashtags, id }
+          const result = await captionService.regenerate(post.captionId, feedbackText);
+          const newCaption = result.caption || '';
+          setGeneratedPosts(
+            generatedPosts.map((p) =>
+              p.id === feedbackModal.postId
+                ? { ...p, caption: newCaption, status: 'ready' as const, captionId: result.id || p.captionId }
+                : p
+            )
+          );
+        } else {
+          // No captionId — generate fresh with feedback as custom_instructions
+          const result = await captionService.generate({
+            topic: post.title,
+            tone: 'professional',
+            length: 'medium',
+            platform: post.platform.toLowerCase() as CaptionPlatform,
+            include_hashtags: true,
+            include_emojis: true,
+            include_cta: true,
+            custom_instructions: feedbackText,
+          });
+          const newCaption = result.generated_caption || '';
+          setGeneratedPosts(
+            generatedPosts.map((p) =>
+              p.id === feedbackModal.postId
+                ? { ...p, caption: newCaption, status: 'ready' as const, captionId: result.id }
+                : p
+            )
+          );
+        }
       }
     } catch {
       resetPostStatus(feedbackModal.postId);
@@ -294,7 +362,7 @@ export function ResultsScreen({ onGenerateMore }: ResultsScreenProps) {
               style={{ background: 'rgb(var(--c-bg-card))' }}
             >
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 mx-auto mb-3" style={{ borderColor: 'rgb(var(--c-coral))' }} />
-              <p className="text-text-secondary text-[14px]">Regenerating caption...</p>
+              <p className="text-text-secondary text-[14px]">Regenerating post...</p>
             </div>
           </div>
         )}

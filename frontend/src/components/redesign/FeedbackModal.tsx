@@ -12,7 +12,7 @@ const FEEDBACK_QUESTIONS: FeedbackQuestion[] = [
   {
     id: 'what', emoji: '🤔',
     question: 'What would you like to change?',
-    options: ['The caption / text', 'The image style', 'The overall topic', 'The brand colors', 'The tone of voice', 'Something else'],
+    options: ['The caption / text', 'The image style', 'The overall topic', 'The tone of voice', 'Something else'],
   },
   {
     id: 'caption_fix', emoji: '✍️',
@@ -49,45 +49,58 @@ interface FeedbackModalProps {
 export function FeedbackModal({ isOpen, onClose, onSubmit }: FeedbackModalProps) {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [currentStep, setCurrentStep] = useState(0);
+  const [customText, setCustomText] = useState('');
+  const [showCustomInput, setShowCustomInput] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
       setAnswers({});
       setCurrentStep(0);
+      setCustomText('');
+      setShowCustomInput(false);
     }
   }, [isOpen]);
 
   if (!isOpen) return null;
 
   // Find current question
-  const visibleQuestions = FEEDBACK_QUESTIONS.filter(
-    (q) => !q.condition || q.condition(answers)
-  );
   const question = currentStep === 0
     ? FEEDBACK_QUESTIONS[0]
-    : visibleQuestions.find((q) => q.id !== 'what' && (!q.condition || q.condition(answers)));
+    : FEEDBACK_QUESTIONS.find((q) => q.id !== 'what' && q.condition && q.condition(answers));
 
   const handleSelect = (option: string) => {
     if (!question) return;
+
+    // "Something else" → show custom text input
+    if (option === 'Something else') {
+      setShowCustomInput(true);
+      setAnswers({ ...answers, what: option });
+      return;
+    }
+
     const newAnswers = { ...answers, [question.id]: option };
     setAnswers(newAnswers);
 
-    // Check if there's a follow-up question
     if (currentStep === 0) {
       const hasFollowUp = FEEDBACK_QUESTIONS.some(
         (q) => q.id !== 'what' && q.condition && q.condition(newAnswers)
       );
       if (hasFollowUp) {
-        setTimeout(() => setCurrentStep(1), 400);
+        setTimeout(() => setCurrentStep(1), 300);
       } else {
-        setTimeout(() => onSubmit(newAnswers), 400);
+        setTimeout(() => onSubmit(newAnswers), 300);
       }
     } else {
-      setTimeout(() => onSubmit(newAnswers), 400);
+      setTimeout(() => onSubmit(newAnswers), 300);
     }
   };
 
-  if (!question) return null;
+  const handleCustomSubmit = () => {
+    if (!customText.trim()) return;
+    onSubmit({ ...answers, custom: customText.trim() });
+  };
+
+  if (!question && !showCustomInput) return null;
 
   return (
     <div
@@ -104,40 +117,82 @@ export function FeedbackModal({ isOpen, onClose, onSubmit }: FeedbackModalProps)
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Question */}
-        <div className="text-center mb-6">
-          <div className="text-[40px] mb-3">{question.emoji}</div>
-          <h3 className="text-[22px] font-extrabold text-text-primary">{question.question}</h3>
-          <p className="text-[14px] text-text-secondary mt-1">
-            Pick one and we'll regenerate this post for you.
-          </p>
-        </div>
-
-        {/* Options */}
-        <div className="space-y-2">
-          {question.options.map((option, i) => (
-            <button
-              key={option}
-              onClick={() => handleSelect(option)}
-              className={`w-full text-left px-5 py-3.5 rounded-[14px] text-[14px] font-semibold transition-all duration-200 au${Math.min(i + 1, 5)}`}
+        {showCustomInput ? (
+          <>
+            {/* Custom text input */}
+            <div className="text-center mb-6">
+              <div className="text-[40px] mb-3">💬</div>
+              <h3 className="text-[22px] font-extrabold text-text-primary">Tell us what to change</h3>
+              <p className="text-[14px] text-text-secondary mt-1">
+                Describe what you'd like differently and we'll regenerate it.
+              </p>
+            </div>
+            <textarea
+              value={customText}
+              onChange={(e) => setCustomText(e.target.value)}
+              placeholder="e.g. Make it more punchy, use different colors, focus on pricing..."
+              rows={4}
+              autoFocus
+              className="w-full rounded-[14px] p-4 text-[14px] resize-none mb-4"
               style={{
                 background: 'rgba(255,255,255,0.04)',
                 border: '2px solid var(--border-color)',
                 color: 'rgb(var(--c-text-primary))',
               }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = 'rgba(232,54,79,0.4)';
-                e.currentTarget.style.background = 'rgba(232,54,79,0.06)';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = 'var(--border-color)';
-                e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
+              onFocus={(e) => { e.currentTarget.style.borderColor = 'rgba(232,54,79,0.4)'; }}
+              onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--border-color)'; }}
+            />
+            <button
+              onClick={handleCustomSubmit}
+              disabled={!customText.trim()}
+              className="w-full py-3.5 rounded-[14px] text-[15px] font-bold text-white transition-all"
+              style={{
+                background: 'linear-gradient(135deg, rgb(var(--c-coral)), rgb(var(--c-coral-hover)))',
+                boxShadow: 'var(--shadow-glow-coral)',
+                opacity: !customText.trim() ? 0.4 : 1,
               }}
             >
-              {option}
+              Regenerate with this feedback
             </button>
-          ))}
-        </div>
+          </>
+        ) : question ? (
+          <>
+            {/* Question */}
+            <div className="text-center mb-6">
+              <div className="text-[40px] mb-3">{question.emoji}</div>
+              <h3 className="text-[22px] font-extrabold text-text-primary">{question.question}</h3>
+              <p className="text-[14px] text-text-secondary mt-1">
+                Pick one and we'll regenerate this post for you.
+              </p>
+            </div>
+
+            {/* Options */}
+            <div className="space-y-2">
+              {question.options.map((option, i) => (
+                <button
+                  key={option}
+                  onClick={() => handleSelect(option)}
+                  className={`w-full text-left px-5 py-3.5 rounded-[14px] text-[14px] font-semibold transition-all duration-200 au${Math.min(i + 1, 5)}`}
+                  style={{
+                    background: 'rgba(255,255,255,0.04)',
+                    border: '2px solid var(--border-color)',
+                    color: 'rgb(var(--c-text-primary))',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = 'rgba(232,54,79,0.4)';
+                    e.currentTarget.style.background = 'rgba(232,54,79,0.06)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = 'var(--border-color)';
+                    e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
+                  }}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+          </>
+        ) : null}
 
         {/* Cancel button */}
         <div className="text-center mt-5">

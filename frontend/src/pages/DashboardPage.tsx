@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import {
   UsersIcon,
   DocumentTextIcon,
@@ -9,13 +9,53 @@ import { WelcomeSection, StatsCard, QuickActions, SubscriptionInfo } from '../co
 import { LoadingPlaceholder } from '../components/ui';
 import { DiamondBalanceWidget, DiamondUsageChart } from '../components/diamond';
 import { useAuthStore, useDashboardStore } from '../store';
+import notificationService from '../services/notificationService';
+
+interface Notification {
+  id: number;
+  event_type: string;
+  title: string;
+  message: string;
+  is_read: boolean;
+  created_at: string;
+}
+
+const EVENT_ICONS: Record<string, string> = {
+  post_submitted: '📤', post_approved: '✅', changes_requested: '📝',
+  post_rejected: '❌', post_scheduled: '📅', post_published: '🚀',
+  publish_failed: '⚠️', captions_ready: '✍️', images_ready: '🎨',
+  video_ready: '🎬', batch_complete: '📦', weekly_report: '📊',
+  winner_detected: '🏆', new_comment: '💬', token_expiring: '🔑',
+  repurpose_suggestion: '♻️',
+};
+
+function timeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 7) return `${days}d ago`;
+  return `${Math.floor(days / 7)}w ago`;
+}
 
 export function DashboardPage() {
   const { user } = useAuthStore();
   const { stats, isLoading, fetchDashboardData } = useDashboardStore();
+  const [activities, setActivities] = useState<Notification[]>([]);
+  const [activitiesLoading, setActivitiesLoading] = useState(true);
 
   useEffect(() => {
     fetchDashboardData();
+    notificationService.getNotifications({ limit: 20 })
+      .then((data) => {
+        const list = Array.isArray(data) ? data : data.results || [];
+        setActivities(list);
+      })
+      .catch(() => {})
+      .finally(() => setActivitiesLoading(false));
   }, [fetchDashboardData]);
 
   if (isLoading && !stats) {
@@ -91,35 +131,39 @@ export function DashboardPage() {
           {/* Recent Activity */}
           <div className="card p-6">
             <h2 className="text-lg font-semibold text-text-primary mb-4">Recent Activity</h2>
-            <div className="space-y-4">
-              <div className="flex items-center gap-4 p-4 bg-dark-700/50 rounded-xl">
-                <div className="w-10 h-10 rounded-lg bg-success/20 flex items-center justify-center">
-                  <DocumentTextIcon className="w-5 h-5 text-success" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-text-primary">Post scheduled successfully</p>
-                  <p className="text-xs text-text-muted">2 hours ago</p>
-                </div>
+            {activitiesLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2" style={{ borderColor: 'rgb(var(--c-coral))' }} />
               </div>
-              <div className="flex items-center gap-4 p-4 bg-dark-700/50 rounded-xl">
-                <div className="w-10 h-10 rounded-lg bg-info/20 flex items-center justify-center">
-                  <UsersIcon className="w-5 h-5 text-info" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-text-primary">Connected Instagram account</p>
-                  <p className="text-xs text-text-muted">5 hours ago</p>
-                </div>
+            ) : activities.length === 0 ? (
+              <p className="text-sm text-text-muted text-center py-8">No recent activity yet.</p>
+            ) : (
+              <div className="space-y-3 max-h-[340px] overflow-y-auto no-scrollbar">
+                {activities.map((n) => (
+                  <div
+                    key={n.id}
+                    className="flex items-center gap-4 p-4 bg-dark-700/50 rounded-xl"
+                    style={{ opacity: n.is_read ? 0.7 : 1 }}
+                  >
+                    <div className="w-10 h-10 rounded-lg flex items-center justify-center text-[18px] flex-shrink-0"
+                      style={{ background: 'rgba(255,255,255,0.06)' }}
+                    >
+                      {EVENT_ICONS[n.event_type] || '🔔'}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-text-primary truncate">{n.title}</p>
+                      {n.message && (
+                        <p className="text-xs text-text-muted truncate">{n.message}</p>
+                      )}
+                      <p className="text-xs text-text-muted mt-0.5">{timeAgo(n.created_at)}</p>
+                    </div>
+                    {!n.is_read && (
+                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: 'rgb(var(--c-coral))' }} />
+                    )}
+                  </div>
+                ))}
               </div>
-              <div className="flex items-center gap-4 p-4 bg-dark-700/50 rounded-xl">
-                <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
-                  <ChartBarIcon className="w-5 h-5 text-primary" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-text-primary">Generated AI caption</p>
-                  <p className="text-xs text-text-muted">1 day ago</p>
-                </div>
-              </div>
-            </div>
+            )}
           </div>
         </div>
         <div>

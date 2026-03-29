@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import { useMagicModeStore } from '../../store/magicModeStore';
+import { useMagicModeStore, type MagicPost } from '../../store/magicModeStore';
 import api from '../../services/api';
 import strategyService from '../../services/strategyService';
 import captionService from '../../services/captionService';
+import imageService from '../../services/imageService';
 import type { ContentIdea, CaptionTone, CaptionPlatform } from '../../types';
 
 const STEPS = [
@@ -11,6 +12,7 @@ const STEPS = [
   { emoji: '📈', label: 'Finding trending topics', desc: "Scanning what's hot in your industry..." },
   { emoji: '💡', label: 'Generating content ideas', desc: 'Crafting ideas that match your brand...' },
   { emoji: '✍️', label: 'Writing captions', desc: 'Creating engaging text for each post...' },
+  { emoji: '🎨', label: 'Designing images', desc: 'Building visuals for each post...' },
   { emoji: '✅', label: 'Final polish', desc: 'Making sure everything looks perfect...' },
 ];
 
@@ -101,16 +103,25 @@ export function AIWorkingScreen({ onComplete }: AIWorkingScreenProps) {
       };
       const toneAnswer = store.answers.tone ? String(store.answers.tone).toLowerCase() : '';
       const captionTone: CaptionTone = toneMap[toneAnswer] || 'professional';
-      const platforms = store.answers.platforms;
-      const defaultPlatform: CaptionPlatform = Array.isArray(platforms) && platforms.length > 0
-        ? (platforms[0].replace(' / X', '').toLowerCase() as CaptionPlatform)
-        : 'linkedin';
+      // Build user-selected platforms list — enforce these instead of backend's idea.platform
+      const rawPlatforms = store.answers.platforms;
+      const userPlatforms: CaptionPlatform[] = Array.isArray(rawPlatforms) && rawPlatforms.length > 0
+        ? rawPlatforms.map((p: string) => p.replace(' / X', '').toLowerCase() as CaptionPlatform)
+        : [];
 
-      const posts = [];
-      for (const idea of ideas.slice(0, count)) {
+      const posts: MagicPost[] = [];
+      const slicedIdeas = ideas.slice(0, count);
+      for (let idx = 0; idx < slicedIdeas.length; idx++) {
+        const idea = slicedIdeas[idx];
         if (cancelledRef.current) return;
+
+        // Use user's selected platform(s) via round-robin; fall back to idea.platform or 'linkedin'
+        const captionPlatform: CaptionPlatform = userPlatforms.length > 0
+          ? userPlatforms[idx % userPlatforms.length]
+          : (idea.platform?.toLowerCase() as CaptionPlatform) || 'linkedin';
+        const displayPlatform = captionPlatform.charAt(0).toUpperCase() + captionPlatform.slice(1);
+
         try {
-          const captionPlatform: CaptionPlatform = (idea.platform?.toLowerCase() as CaptionPlatform) || defaultPlatform;
           const caption = await captionService.generate({
             topic: idea.title + (idea.hook ? ': ' + idea.hook : ''),
             tone: captionTone,
@@ -124,7 +135,7 @@ export function AIWorkingScreen({ onComplete }: AIWorkingScreenProps) {
           posts.push({
             id: idea.id,
             title: idea.title,
-            platform: idea.platform ? idea.platform.charAt(0).toUpperCase() + idea.platform.slice(1) : 'LinkedIn',
+            platform: displayPlatform,
             imageOverlay: idea.title,
             imageStyle: idea.hook || idea.angle || '',
             caption: caption.generated_caption || '',
@@ -137,7 +148,7 @@ export function AIWorkingScreen({ onComplete }: AIWorkingScreenProps) {
           posts.push({
             id: idea.id,
             title: idea.title,
-            platform: idea.platform ? idea.platform.charAt(0).toUpperCase() + idea.platform.slice(1) : 'LinkedIn',
+            platform: displayPlatform,
             imageOverlay: idea.title,
             imageStyle: idea.hook || idea.angle || '',
             caption: idea.hook || 'Caption could not be generated. Click "Give feedback" to retry.',
@@ -148,8 +159,31 @@ export function AIWorkingScreen({ onComplete }: AIWorkingScreenProps) {
       }
       if (cancelledRef.current) return;
 
-      // Step 5: Finalize
+      // Step 5: Generate images for each post
       setStep(5);
+      for (let i = 0; i < posts.length; i++) {
+        if (cancelledRef.current) return;
+        try {
+          const post = posts[i];
+          const imgResult = await imageService.generate({
+            prompt: `Create a professional social media image for: "${post.title}". ${post.imageStyle}`,
+            title: post.title,
+            provider: 'openai',
+            style: 'modern',
+            enhance_prompt: true,
+          });
+          const imgUrl = imgResult.generated_image_with_logo || imgResult.generated_image || imgResult.composited_image;
+          if (imgUrl) {
+            posts[i] = { ...post, imageUrl: imgUrl };
+          }
+        } catch {
+          // Non-fatal — post will show placeholder with generate button
+        }
+      }
+      if (cancelledRef.current) return;
+
+      // Step 6: Finalize
+      setStep(6);
       store.setGeneratedPosts(posts);
 
       // Brief pause so user sees the final step

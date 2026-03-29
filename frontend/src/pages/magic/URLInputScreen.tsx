@@ -9,19 +9,48 @@ export function URLInputScreen({ onSubmit, onSkip }: URLInputScreenProps) {
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [showMessage, setShowMessage] = useState(false);
+  const [error, setError] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
 
+  const isValidURL = (input: string): boolean => {
+    try {
+      const parsed = new URL(input.startsWith('http') ? input : `https://${input}`);
+      // Must have a real domain with at least one dot (e.g. example.com)
+      const host = parsed.hostname;
+      if (!host.includes('.')) return false;
+      // Domain parts must be non-empty and have valid TLD (min 2 chars)
+      const parts = host.split('.');
+      if (parts.some((p) => p.length === 0)) return false;
+      if (parts[parts.length - 1].length < 2) return false;
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   const handleSubmit = () => {
     if (!url.trim() || loading) return;
+    setError('');
+
+    let finalUrl = url.trim();
+    if (!finalUrl.startsWith('http://') && !finalUrl.startsWith('https://')) {
+      finalUrl = 'https://' + finalUrl;
+    }
+
+    if (!isValidURL(finalUrl)) {
+      setError('Please enter a valid website URL (e.g. https://yourbusiness.com)');
+      return;
+    }
+
     setLoading(true);
     setShowMessage(true);
     // Brief UX transition so the user sees the analyzing state
     setTimeout(() => {
-      onSubmit(url.trim());
+      onSubmit(finalUrl);
     }, 400);
   };
 
@@ -46,7 +75,7 @@ export function URLInputScreen({ onSubmit, onSkip }: URLInputScreenProps) {
           ref={inputRef}
           type="url"
           value={url}
-          onChange={(e) => setUrl(e.target.value)}
+          onChange={(e) => { setUrl(e.target.value); setError(''); }}
           placeholder="https://yourbusiness.com"
           disabled={loading}
           onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
@@ -82,6 +111,13 @@ export function URLInputScreen({ onSubmit, onSkip }: URLInputScreenProps) {
           )}
         </button>
       </div>
+
+      {/* Error message */}
+      {error && (
+        <p className="mt-3 text-[13px] font-medium" style={{ color: 'rgb(var(--c-coral))' }}>
+          {error}
+        </p>
+      )}
 
       {/* Loading message */}
       {showMessage && (

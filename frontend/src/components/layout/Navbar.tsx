@@ -3,12 +3,11 @@ import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   Bars3Icon,
-  MagnifyingGlassIcon,
   ChatBubbleLeftEllipsisIcon,
-  BellIcon,
 } from '@heroicons/react/24/outline';
 import { useAuthStore } from '../../store';
 import { DiamondBadge } from '../diamond';
+import { NotificationCenter } from '../NotificationCenter';
 
 interface NavbarProps {
   onMenuClick: () => void;
@@ -20,7 +19,6 @@ interface NavbarProps {
 export function Navbar({ onMenuClick, onChatToggle, isChatOpen, isImpersonating }: NavbarProps) {
   const { user } = useAuthStore();
   const [showProfile, setShowProfile] = useState(false);
-  const [hasNotification] = useState(true);
 
   const getInitials = (username: string) => {
     return username.slice(0, 2).toUpperCase();
@@ -35,7 +33,7 @@ export function Navbar({ onMenuClick, onChatToggle, isChatOpen, isImpersonating 
       }}
     >
       <div className="flex items-center justify-between h-full px-4 lg:px-5">
-        {/* Left: hamburger (mobile) + search */}
+        {/* Left: hamburger (mobile) + logo */}
         <div className="flex items-center gap-3 flex-1">
           <button
             onClick={onMenuClick}
@@ -45,22 +43,30 @@ export function Navbar({ onMenuClick, onChatToggle, isChatOpen, isImpersonating 
             <Bars3Icon className="w-5 h-5" />
           </button>
 
-          {/* Search */}
-          <div className="hidden md:flex flex-1 max-w-[420px]">
-            <div className="relative w-full">
-              <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
-              <input
-                type="text"
-                placeholder="Search..."
-                className="w-full pl-9 pr-4 py-2 text-sm rounded-[10px] transition-all duration-200"
-                style={{
-                  background: 'rgba(255,255,255,0.04)',
-                  border: '1px solid var(--border-color)',
-                  color: 'rgb(var(--c-text-primary))',
-                }}
-              />
+          {/* Logo + Brand */}
+          <Link to="/" className="flex items-center gap-2.5 group">
+            <div
+              className="w-8 h-8 rounded-[10px] flex items-center justify-center shrink-0"
+              style={{
+                background: 'linear-gradient(135deg, #E8364F, #FF6B6B)',
+                boxShadow: '0 2px 8px rgba(232,54,79,0.3)',
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                <path d="M13 3L4 14h7l-1 7 9-11h-7l1-7z" fill="white" strokeLinejoin="round" />
+              </svg>
             </div>
-          </div>
+            <span
+              className="text-[18px] font-extrabold tracking-tight hidden sm:block"
+              style={{
+                background: 'linear-gradient(135deg, #E8364F, #FF6B6B)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+              }}
+            >
+              Sellanto
+            </span>
+          </Link>
         </div>
 
         {/* Right section */}
@@ -69,15 +75,7 @@ export function Navbar({ onMenuClick, onChatToggle, isChatOpen, isImpersonating 
           <DiamondBadge />
 
           {/* Notifications */}
-          <button className="btn-icon relative">
-            <BellIcon className="w-5 h-5" />
-            {hasNotification && (
-              <span
-                className="absolute top-1.5 right-1.5 w-[7px] h-[7px] rounded-full"
-                style={{ background: 'rgb(var(--c-coral))' }}
-              />
-            )}
-          </button>
+          <NotificationCenter />
 
           {/* Messages */}
           <button
