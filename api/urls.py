@@ -227,9 +227,6 @@ urlpatterns = [
     path('drafts/<int:post_id>/hashtags/generate/', hashtag_views.GenerateHashtagsView.as_view(), name='api-generate-hashtags'),
     path('hashtags/<int:hashtag_id>/', hashtag_views.ToggleHashtagView.as_view(), name='api-toggle-hashtag'),
 
-    # Draft Checklist
-    path('drafts/<int:post_id>/checklist/', approval_views.DraftChecklistView.as_view(), name='api-draft-checklist'),
-
     # Approval Pipeline
     path('drafts/<int:post_id>/submit/', approval_views.SubmitForApprovalView.as_view(), name='api-submit-approval'),
     path('drafts/<int:post_id>/approve/', approval_views.ApprovePostView.as_view(), name='api-approve-post'),
@@ -335,6 +332,9 @@ urlpatterns = [
     path('admin/global-api-keys/', diamond_views.AdminGlobalAPIKeysView.as_view(), name='api-admin-global-keys'),
     path('admin/test-api-key/', diamond_views.AdminTestAPIKeyView.as_view(), name='api-admin-test-api-key'),
     path('admin/diamond-overview/', diamond_views.AdminDiamondOverviewView.as_view(), name='api-admin-diamond-overview'),
+
+    # Magic Mode History
+    path('magic/history/', views.MagicHistoryView.as_view(), name='api-magic-history'),
 
     # ViewSet routes
     path('', include(router.urls)),

@@ -24,6 +24,11 @@ const onboardingService = {
     return data;
   },
 
+  updateWorkspace: async (id: number, workspaceData: Partial<Workspace>): Promise<Workspace> => {
+    const { data } = await api.patch(`/workspaces/${id}/`, workspaceData);
+    return data;
+  },
+
   getWorkspaces: async (): Promise<Workspace[]> => {
     const { data } = await api.get('/workspaces/');
     return data.results || data;

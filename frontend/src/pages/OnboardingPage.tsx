@@ -32,11 +32,11 @@ const STEPS = [
 // =============================================
 // Step 1: Create Workspace
 // =============================================
-function WorkspaceStep({ onNext }: { onNext: (ws: Workspace) => void }) {
-  const [name, setName] = useState('');
-  const [tz, setTz] = useState('UTC');
-  const [language, setLanguage] = useState('en');
-  const [teamSize, setTeamSize] = useState<number | ''>('');
+function WorkspaceStep({ existingWorkspace, onNext }: { existingWorkspace?: Workspace | null; onNext: (ws: Workspace) => void }) {
+  const [name, setName] = useState(existingWorkspace?.name || '');
+  const [tz, setTz] = useState(existingWorkspace?.timezone || 'UTC');
+  const [language, setLanguage] = useState(existingWorkspace?.default_language || 'en');
+  const [teamSize, setTeamSize] = useState<number | ''>(existingWorkspace?.team_size || '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -45,15 +45,21 @@ function WorkspaceStep({ onNext }: { onNext: (ws: Workspace) => void }) {
     setLoading(true);
     setError('');
     try {
-      const workspace = await onboardingService.createWorkspace({
+      const data = {
         name,
         timezone: tz,
         default_language: language,
         ...(teamSize ? { team_size: Number(teamSize) } : {}),
-      });
+      };
+      let workspace: Workspace;
+      if (existingWorkspace?.id) {
+        workspace = await onboardingService.updateWorkspace(existingWorkspace.id, data);
+      } else {
+        workspace = await onboardingService.createWorkspace(data);
+      }
       onNext(workspace);
     } catch {
-      setError('Failed to create workspace. Please try again.');
+      setError('Failed to save workspace. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -81,25 +87,25 @@ function WorkspaceStep({ onNext }: { onNext: (ws: Workspace) => void }) {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium text-text-secondary mb-2">Timezone</label>
-          <select value={tz} onChange={(e) => setTz(e.target.value)} className="input w-full">
-            <option value="UTC">UTC</option>
-            <option value="US/Eastern">US Eastern</option>
-            <option value="US/Pacific">US Pacific</option>
-            <option value="Europe/London">London</option>
-            <option value="Asia/Tokyo">Tokyo</option>
-            <option value="Asia/Kolkata">India (IST)</option>
-            <option value="Asia/Dhaka">Bangladesh (BST)</option>
+          <select value={tz} onChange={(e) => setTz(e.target.value)} className="input w-full" style={{ backgroundColor: '#1a1a2e', color: '#e2e8f0' }}>
+            <option value="UTC" style={{ background: '#1a1a2e', color: '#e2e8f0' }}>UTC</option>
+            <option value="US/Eastern" style={{ background: '#1a1a2e', color: '#e2e8f0' }}>US Eastern</option>
+            <option value="US/Pacific" style={{ background: '#1a1a2e', color: '#e2e8f0' }}>US Pacific</option>
+            <option value="Europe/London" style={{ background: '#1a1a2e', color: '#e2e8f0' }}>London</option>
+            <option value="Asia/Tokyo" style={{ background: '#1a1a2e', color: '#e2e8f0' }}>Tokyo</option>
+            <option value="Asia/Kolkata" style={{ background: '#1a1a2e', color: '#e2e8f0' }}>India (IST)</option>
+            <option value="Asia/Dhaka" style={{ background: '#1a1a2e', color: '#e2e8f0' }}>Bangladesh (BST)</option>
           </select>
         </div>
         <div>
           <label className="block text-sm font-medium text-text-secondary mb-2">Default Language</label>
-          <select value={language} onChange={(e) => setLanguage(e.target.value)} className="input w-full">
-            <option value="en">English</option>
-            <option value="bn">Bengali</option>
-            <option value="es">Spanish</option>
-            <option value="fr">French</option>
-            <option value="de">German</option>
-            <option value="hi">Hindi</option>
+          <select value={language} onChange={(e) => setLanguage(e.target.value)} className="input w-full" style={{ backgroundColor: '#1a1a2e', color: '#e2e8f0' }}>
+            <option value="en" style={{ background: '#1a1a2e', color: '#e2e8f0' }}>English</option>
+            <option value="bn" style={{ background: '#1a1a2e', color: '#e2e8f0' }}>Bengali</option>
+            <option value="es" style={{ background: '#1a1a2e', color: '#e2e8f0' }}>Spanish</option>
+            <option value="fr" style={{ background: '#1a1a2e', color: '#e2e8f0' }}>French</option>
+            <option value="de" style={{ background: '#1a1a2e', color: '#e2e8f0' }}>German</option>
+            <option value="hi" style={{ background: '#1a1a2e', color: '#e2e8f0' }}>Hindi</option>
           </select>
         </div>
       </div>
@@ -116,7 +122,7 @@ function WorkspaceStep({ onNext }: { onNext: (ws: Workspace) => void }) {
         />
       </div>
       <button type="submit" disabled={!name.trim() || loading} className="btn-primary w-full py-3">
-        {loading ? 'Creating...' : 'Create Workspace & Continue'}
+        {loading ? 'Saving...' : existingWorkspace ? 'Update & Continue' : 'Create Workspace & Continue'}
       </button>
     </form>
   );
@@ -125,17 +131,24 @@ function WorkspaceStep({ onNext }: { onNext: (ws: Workspace) => void }) {
 // =============================================
 // Step 2: Brand Wizard
 // =============================================
-function BrandStep({ workspaceId, onNext }: { workspaceId: number; onNext: (brand: Brand) => void }) {
+function BrandStep({ workspaceId, existingBrand, onNext }: { workspaceId: number; existingBrand?: Brand | null; onNext: (brand: Brand) => void }) {
   const [form, setForm] = useState({
-    brand_name: '',
-    industry: '',
-    target_region: '',
-    website_url: '',
-    voice_tone: 'professional',
+    brand_name: existingBrand?.brand_name || '',
+    industry: existingBrand?.industry || '',
+    target_region: existingBrand?.target_region || '',
+    website_url: existingBrand?.website_url || '',
+    voice_tone: existingBrand?.voice_tone || 'professional',
   });
-  const [doDontRules, setDoDontRules] = useState('');
-  const [goals, setGoals] = useState<string[]>([]);
-  const [audiences, setAudiences] = useState<string[]>([]);
+  const [doDontRules, setDoDontRules] = useState(() => {
+    if (!existingBrand?.do_dont_rules) return '';
+    const rules = existingBrand.do_dont_rules;
+    const lines: string[] = [];
+    if (rules.do) lines.push(...rules.do);
+    if (rules.dont) lines.push(...rules.dont);
+    return lines.join('\n');
+  });
+  const [goals, setGoals] = useState<string[]>(existingBrand?.goals || []);
+  const [audiences, setAudiences] = useState<string[]>(existingBrand?.audiences || []);
   const [newAudience, setNewAudience] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -167,13 +180,20 @@ function BrandStep({ workspaceId, onNext }: { workspaceId: number; onNext: (bran
         });
       }
 
-      const brand = await onboardingService.createBrand({
+      const brandData = {
         ...form,
         workspace: workspaceId,
         goals,
         audiences,
         do_dont_rules: { do: doRules, dont: dontRules },
-      } as unknown as Partial<Brand>);
+      } as unknown as Partial<Brand>;
+
+      let brand: Brand;
+      if (existingBrand?.id) {
+        brand = await onboardingService.updateBrand(existingBrand.id, brandData);
+      } else {
+        brand = await onboardingService.createBrand(brandData);
+      }
       onNext(brand);
     } catch {
       setError('Failed to create brand. Please try again.');
@@ -229,15 +249,15 @@ function BrandStep({ workspaceId, onNext }: { workspaceId: number; onNext: (bran
       </div>
       <div>
         <label className="block text-sm font-medium text-text-secondary mb-2">Brand Voice</label>
-        <select value={form.voice_tone} onChange={(e) => setForm({ ...form, voice_tone: e.target.value })} className="input w-full">
-          <option value="professional">Professional</option>
-          <option value="casual">Casual</option>
-          <option value="friendly">Friendly</option>
-          <option value="enthusiastic">Enthusiastic</option>
-          <option value="humorous">Humorous</option>
-          <option value="inspirational">Inspirational</option>
-          <option value="formal">Formal</option>
-          <option value="conversational">Conversational</option>
+        <select value={form.voice_tone} onChange={(e) => setForm({ ...form, voice_tone: e.target.value })} className="input w-full" style={{ backgroundColor: '#1a1a2e', color: '#e2e8f0' }}>
+          <option value="professional" style={{ background: '#1a1a2e', color: '#e2e8f0' }}>Professional</option>
+          <option value="casual" style={{ background: '#1a1a2e', color: '#e2e8f0' }}>Casual</option>
+          <option value="friendly" style={{ background: '#1a1a2e', color: '#e2e8f0' }}>Friendly</option>
+          <option value="enthusiastic" style={{ background: '#1a1a2e', color: '#e2e8f0' }}>Enthusiastic</option>
+          <option value="humorous" style={{ background: '#1a1a2e', color: '#e2e8f0' }}>Humorous</option>
+          <option value="inspirational" style={{ background: '#1a1a2e', color: '#e2e8f0' }}>Inspirational</option>
+          <option value="formal" style={{ background: '#1a1a2e', color: '#e2e8f0' }}>Formal</option>
+          <option value="conversational" style={{ background: '#1a1a2e', color: '#e2e8f0' }}>Conversational</option>
         </select>
       </div>
       <div>
@@ -307,7 +327,7 @@ function BrandStep({ workspaceId, onNext }: { workspaceId: number; onNext: (bran
       </div>
 
       <button type="submit" disabled={!form.brand_name || !form.industry || !form.target_region || loading} className="btn-primary w-full py-3 mt-4">
-        {loading ? 'Creating Brand...' : 'Create Brand & Continue'}
+        {loading ? 'Saving...' : existingBrand ? 'Update Brand & Continue' : 'Create Brand & Continue'}
       </button>
     </form>
   );
@@ -476,9 +496,9 @@ function ConnectPlatformsStep({ onNext }: { onNext: () => void }) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-medium text-text-secondary mb-1">Platform</label>
-              <select value={platform} onChange={(e) => { setPlatform(e.target.value); setCredentials({}); }} className="input w-full text-sm">
+              <select value={platform} onChange={(e) => { setPlatform(e.target.value); setCredentials({}); }} className="input w-full text-sm" style={{ backgroundColor: '#1a1a2e', color: '#e2e8f0' }}>
                 {Object.entries(platformConfigs).map(([key, cfg]) => (
-                  <option key={key} value={key}>{cfg.label}</option>
+                  <option key={key} value={key} style={{ background: '#1a1a2e', color: '#e2e8f0' }}>{cfg.label}</option>
                 ))}
               </select>
             </div>
@@ -919,6 +939,7 @@ export function OnboardingPage() {
       case 1:
         return (
           <WorkspaceStep
+            existingWorkspace={workspace}
             onNext={(ws) => {
               setWorkspace(ws);
               completeStep(1);
@@ -929,6 +950,7 @@ export function OnboardingPage() {
         return (
           <BrandStep
             workspaceId={workspace?.id || 0}
+            existingBrand={brand}
             onNext={(b) => {
               setBrand(b);
               completeStep(2);

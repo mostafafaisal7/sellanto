@@ -88,8 +88,7 @@ class RegisterSerializer(serializers.Serializer):
     email = serializers.EmailField()
     password = serializers.CharField(min_length=6, write_only=True)
     password_confirm = serializers.CharField(write_only=True)
-    phone = serializers.CharField(required=False, allow_blank=True)
-    company = serializers.CharField(required=False, allow_blank=True)
+    phone = serializers.CharField(required=True)
 
     def validate_username(self, value):
         if User.objects.filter(username=value).exists():
@@ -115,7 +114,6 @@ class RegisterSerializer(serializers.Serializer):
         # Update profile (signal already creates it via post_save)
         profile, _ = UserProfile.objects.get_or_create(user=user)
         profile.phone = validated_data.get('phone', '')
-        profile.company = validated_data.get('company', '')
         profile.is_approved = True
         profile.save()
         return user
@@ -292,13 +290,15 @@ class PostSerializer(serializers.ModelSerializer):
             'scheduled_time',
             'timezone',
             'status',
+            'source',
+            'hook',
             'ai_generated',
             'created_at',
             'updated_at',
             'posted_at',
             'platform_results',
         ]
-        read_only_fields = ['id', 'status', 'ai_generated', 'created_at', 'updated_at', 'posted_at']
+        read_only_fields = ['id', 'ai_generated', 'created_at', 'updated_at', 'posted_at']
 
     def get_platforms(self, obj):
         try:
@@ -350,8 +350,17 @@ class CreatePostSerializer(serializers.Serializer):
     """Serializer for creating a new post"""
     caption = serializers.CharField(max_length=5000)
     platforms = serializers.ListField(child=serializers.CharField())
-    scheduled_time = serializers.DateTimeField()
+    scheduled_time = serializers.DateTimeField(required=False, allow_null=True, default=None)
     timezone = serializers.CharField(default='UTC')
+    source = serializers.ChoiceField(
+        choices=[('manual', 'Manual'), ('magic', 'Magic Link'), ('overflow', 'Overflow')],
+        default='manual', required=False,
+    )
+    status = serializers.ChoiceField(
+        choices=[('draft', 'Draft'), ('scheduled', 'Scheduled')],
+        default='scheduled', required=False,
+    )
+    hook = serializers.CharField(max_length=5000, required=False, default='', allow_blank=True)
 
     def validate_platforms(self, value):
         # Ensure value is a list

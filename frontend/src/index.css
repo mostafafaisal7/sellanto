@@ -256,6 +256,18 @@
     box-shadow: 0 0 0 3px rgba(232, 54, 79, 0.15);
   }
 
+  /* Dropdown option styling for dark theme */
+  select.input,
+  .select {
+    background-color: #1a1a2e;
+  }
+
+  select.input option,
+  .select option {
+    background-color: #1a1a2e;
+    color: #e2e8f0;
+  }
+
   /* Form label */
   .label {
     @apply block text-sm font-medium mb-2;
@@ -349,6 +361,11 @@
   .nav-item.active {
     background: rgba(232, 54, 79, 0.15);
     color: rgb(var(--c-coral));
+  }
+
+  /* Subtler active style for child nav items */
+  .nav-item.active.pl-11 {
+    background: rgba(232, 54, 79, 0.07);
   }
 
   /* Tab button */
@@ -659,6 +676,11 @@
 @keyframes pulse-dot {
   0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(232, 54, 79, 0.7); }
   50% { opacity: 0.7; box-shadow: 0 0 0 8px rgba(232, 54, 79, 0); }
+}
+
+@keyframes pulseDot {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(0.5); opacity: 0.3; }
 }
 
 @keyframes glow {

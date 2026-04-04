@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { ArrowLeftIcon } from '@heroicons/react/24/outline';
+import { useMagicModeStore } from '../../store/magicModeStore';
 
 interface Question {
   id: string;
@@ -7,7 +8,6 @@ interface Question {
   question: string;
   subtext: string;
   options: string[];
-  multi?: boolean;
 }
 
 const QUESTIONS: Question[] = [
@@ -34,7 +34,6 @@ const QUESTIONS: Question[] = [
     question: 'Where do you post most? (pick 1-2)',
     subtext: "We'll optimize content for these platforms",
     options: ['LinkedIn', 'Instagram', 'Facebook', 'Twitter / X', 'TikTok'],
-    multi: true,
   },
   {
     id: 'colors', emoji: '🎨',
@@ -44,57 +43,87 @@ const QUESTIONS: Question[] = [
   },
 ];
 
+/** Build a Set from a stored answer value (string or string[]). */
+function answerToSet(val: string | string[] | undefined): Set<string> {
+  if (!val) return new Set();
+  return new Set(Array.isArray(val) ? val : [val]);
+}
+
 interface AIQuestionsScreenProps {
   onComplete: (answers: Record<string, string | string[]>) => void;
   onBack: () => void;
+  skipIndustry?: boolean;
 }
 
-export function AIQuestionsScreen({ onComplete, onBack }: AIQuestionsScreenProps) {
-  const [currentQ, setCurrentQ] = useState(0);
-  const [answers, setAnswers] = useState<Record<string, string | string[]>>({});
-  const [multiSel, setMultiSel] = useState<Set<string>>(new Set());
+export function AIQuestionsScreen({ onComplete, onBack, skipIndustry }: AIQuestionsScreenProps) {
+  const filteredQuestions = skipIndustry
+    ? QUESTIONS.filter((q) => q.id !== 'industry')
+    : QUESTIONS;
+
+  const storeAnswers = useMagicModeStore((s) => s.answers);
+
+  const [currentQ, setCurrentQ] = useState(() => {
+    if (Object.keys(storeAnswers).length > 0) {
+      let lastIdx = -1;
+      for (let i = filteredQuestions.length - 1; i >= 0; i--) {
+        if (storeAnswers[filteredQuestions[i].id] !== undefined) { lastIdx = i; break; }
+      }
+      return lastIdx >= 0 ? lastIdx : 0;
+    }
+    return 0;
+  });
+  const [answers, setAnswers] = useState<Record<string, string | string[]>>(storeAnswers);
+  const [multiSel, setMultiSel] = useState<Set<string>>(() => {
+    let startIdx = 0;
+    if (Object.keys(storeAnswers).length > 0) {
+      for (let i = filteredQuestions.length - 1; i >= 0; i--) {
+        if (storeAnswers[filteredQuestions[i].id] !== undefined) { startIdx = i; break; }
+      }
+    }
+    return answerToSet(storeAnswers[filteredQuestions[startIdx]?.id]);
+  });
   const [animating, setAnimating] = useState(false);
 
-  const question = QUESTIONS[currentQ];
-  const progress = ((currentQ) / QUESTIONS.length) * 100;
+  const question = filteredQuestions[currentQ];
+  const progress = ((currentQ) / filteredQuestions.length) * 100;
 
   const goNext = useCallback(() => {
     if (animating) return;
     setAnimating(true);
 
     const nextQ = currentQ + 1;
-    if (nextQ >= QUESTIONS.length) {
+    if (nextQ >= filteredQuestions.length) {
       onComplete(answers);
     } else {
       setTimeout(() => {
         setCurrentQ(nextQ);
-        setMultiSel(new Set());
+        // Restore previous selections for the next question
+        const nextId = filteredQuestions[nextQ].id;
+        setMultiSel(answerToSet(answers[nextId]));
         setAnimating(false);
       }, 300);
     }
-  }, [currentQ, answers, animating, onComplete]);
+  }, [currentQ, answers, animating, onComplete, filteredQuestions]);
 
   const handleSelect = (option: string) => {
     if (animating) return;
 
-    if (question.multi) {
-      const next = new Set(multiSel);
-      if (next.has(option)) next.delete(option);
-      else next.add(option);
-      setMultiSel(next);
-      setAnswers({ ...answers, [question.id]: Array.from(next) });
-    } else {
-      setAnswers({ ...answers, [question.id]: option });
-      setTimeout(goNext, 400);
-    }
+    const next = new Set(multiSel);
+    if (next.has(option)) next.delete(option);
+    else next.add(option);
+    setMultiSel(next);
+    setAnswers({ ...answers, [question.id]: Array.from(next) });
   };
 
   const goBack = () => {
     if (currentQ === 0) {
       onBack();
     } else {
-      setCurrentQ(currentQ - 1);
-      setMultiSel(new Set());
+      const prevQ = currentQ - 1;
+      setCurrentQ(prevQ);
+      // Restore previous selections for the question we're going back to
+      const prevId = filteredQuestions[prevQ].id;
+      setMultiSel(answerToSet(answers[prevId]));
     }
   };
 
@@ -107,7 +136,7 @@ export function AIQuestionsScreen({ onComplete, onBack }: AIQuestionsScreenProps
       <div className="w-full max-w-[560px] mx-auto mb-2">
         <div className="flex justify-between items-center mb-2">
           <span className="text-[13px] font-semibold text-text-secondary">
-            Question {currentQ + 1} of {QUESTIONS.length}
+            Question {currentQ + 1} of {filteredQuestions.length}
           </span>
           <span className="text-[13px] font-semibold" style={{ color: 'rgb(var(--c-coral))' }}>
             {Math.round(progress)}% done
@@ -137,9 +166,7 @@ export function AIQuestionsScreen({ onComplete, onBack }: AIQuestionsScreenProps
         {/* Options */}
         <div className="w-full max-w-[440px] mx-auto flex flex-col gap-3">
           {question.options.map((option, i) => {
-            const isSelected = question.multi
-              ? multiSel.has(option)
-              : answers[question.id] === option;
+            const isSelected = multiSel.has(option);
 
             return (
               <button
@@ -157,7 +184,7 @@ export function AIQuestionsScreen({ onComplete, onBack }: AIQuestionsScreenProps
                 <div
                   className="w-6 h-6 flex-shrink-0 flex items-center justify-center transition-all duration-200"
                   style={{
-                    borderRadius: question.multi ? 7 : 12,
+                    borderRadius: 7,
                     border: `2px solid ${isSelected ? 'rgb(var(--c-coral))' : 'rgba(255,255,255,0.15)'}`,
                     background: isSelected ? 'rgb(var(--c-coral))' : 'transparent',
                   }}
@@ -179,8 +206,8 @@ export function AIQuestionsScreen({ onComplete, onBack }: AIQuestionsScreenProps
           })}
         </div>
 
-        {/* Continue button for multi-select */}
-        {question.multi && multiSel.size > 0 && (
+        {/* Next button — visible when at least 1 option selected */}
+        {multiSel.size > 0 && (
           <div className="mt-8">
             <button
               onClick={goNext}
@@ -190,7 +217,7 @@ export function AIQuestionsScreen({ onComplete, onBack }: AIQuestionsScreenProps
                 boxShadow: 'var(--shadow-glow-coral)',
               }}
             >
-              Continue →
+              Next →
             </button>
           </div>
         )}

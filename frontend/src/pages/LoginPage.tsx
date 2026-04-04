@@ -25,15 +25,7 @@ const registerSchema = z.object({
   email: z.string().email('Please enter a valid email'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
   password_confirm: z.string(),
-  phone: z.string().optional(),
-  company: z.string().optional(),
-  // Brand fields
-  brand_name: z.string().min(1, 'Brand name is required'),
-  industry: z.string().min(1, 'Industry is required'),
-  target_region: z.string().min(1, 'Target region is required'),
-  website_url: z.string().url('Enter a valid URL').optional().or(z.literal('')),
-  voice_tone: z.string().optional(),
-  products_services: z.string().optional(),
+  phone: z.string().min(1, 'Phone number is required'),
 }).refine((data) => data.password === data.password_confirm, {
   message: "Passwords don't match",
   path: ['password_confirm'],
@@ -57,7 +49,6 @@ export function LoginPage() {
   const navigate = useNavigate();
   const { login, isLoading, error, clearError } = useAuthStore();
   const [registerSuccess, setRegisterSuccess] = useState(false);
-  const [competitors, setCompetitors] = useState<Array<{ platform: string; handle_or_url: string }>>([]);
 
   const loginForm = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
@@ -84,16 +75,14 @@ export function LoginPage() {
 
   const onRegister = async (data: RegisterFormData) => {
     try {
-      const payload = { ...data, competitors: competitors.filter(c => c.handle_or_url.trim()) };
-      const response = await fetch('/api/v1/auth/register-with-brand/', {
+      const response = await fetch('/api/v1/auth/register/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(data),
       });
       if (!response.ok) {
         const err = await response.json();
-        // Handle field-level errors from DRF
-        const msg = err.detail || err.username?.[0] || err.email?.[0] || err.password_confirm?.[0] || err.brand_name?.[0] || 'Registration failed';
+        const msg = err.detail || err.username?.[0] || err.email?.[0] || err.phone?.[0] || err.password_confirm?.[0] || 'Registration failed';
         throw new Error(typeof msg === 'string' ? msg : 'Registration failed');
       }
       const result = await response.json();
@@ -101,9 +90,8 @@ export function LoginPage() {
       if (result.tokens) {
         localStorage.setItem('access_token', result.tokens.access);
         localStorage.setItem('refresh_token', result.tokens.refresh);
-        // Refresh auth state and navigate
         await useAuthStore.getState().fetchUser();
-        navigate('/overflow');
+        navigate('/');
       } else {
         setRegisterSuccess(true);
       }
@@ -216,7 +204,7 @@ export function LoginPage() {
         <motion.div
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
-          className={`w-full ${isRegister ? 'max-w-lg' : 'max-w-md'}`}
+          className="w-full max-w-md"
         >
           {/* Mobile Logo */}
           <div className="lg:hidden text-center mb-8">
@@ -348,18 +336,12 @@ export function LoginPage() {
                   {...registerForm.register('email')}
                 />
 
-                <div className="grid grid-cols-2 gap-4">
-                  <Input
-                    label="Phone (optional)"
-                    placeholder="Phone number"
-                    {...registerForm.register('phone')}
-                  />
-                  <Input
-                    label="Company (optional)"
-                    placeholder="Company name"
-                    {...registerForm.register('company')}
-                  />
-                </div>
+                <Input
+                  label="Phone Number"
+                  placeholder="Enter your phone number"
+                  error={registerForm.formState.errors.phone?.message}
+                  {...registerForm.register('phone')}
+                />
 
                 <Input
                   label="Password"
@@ -394,127 +376,6 @@ export function LoginPage() {
                     </button>
                   }
                 />
-
-                {/* Brand Information Section */}
-                <div className="relative my-2">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-white/10"></div>
-                  </div>
-                  <div className="relative flex justify-center text-sm">
-                    <span className="px-3 bg-dark-700/50 text-text-muted">Brand Information</span>
-                  </div>
-                </div>
-
-                <Input
-                  label="Brand Name"
-                  placeholder="Your brand or business name"
-                  error={registerForm.formState.errors.brand_name?.message}
-                  {...registerForm.register('brand_name')}
-                />
-
-                <div className="grid grid-cols-2 gap-4">
-                  <Input
-                    label="Industry"
-                    placeholder="e.g. E-commerce, SaaS"
-                    error={registerForm.formState.errors.industry?.message}
-                    {...registerForm.register('industry')}
-                  />
-                  <Input
-                    label="Target Region"
-                    placeholder="e.g. Global, US, Asia"
-                    error={registerForm.formState.errors.target_region?.message}
-                    {...registerForm.register('target_region')}
-                  />
-                </div>
-
-                <Input
-                  label="Website URL (optional)"
-                  placeholder="https://yourbrand.com"
-                  error={registerForm.formState.errors.website_url?.message}
-                  {...registerForm.register('website_url')}
-                />
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-text-secondary mb-1.5">Voice Tone</label>
-                    <select
-                      className="w-full bg-dark-600 border border-white/10 rounded-xl px-4 py-2.5 text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-                      {...registerForm.register('voice_tone')}
-                    >
-                      <option value="professional">Professional</option>
-                      <option value="casual">Casual</option>
-                      <option value="friendly">Friendly</option>
-                      <option value="enthusiastic">Enthusiastic</option>
-                      <option value="humorous">Humorous</option>
-                      <option value="inspirational">Inspirational</option>
-                      <option value="formal">Formal</option>
-                      <option value="conversational">Conversational</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-text-secondary mb-1.5">Products/Services</label>
-                    <input
-                      className="w-full bg-dark-600 border border-white/10 rounded-xl px-4 py-2.5 text-text-primary text-sm placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/50"
-                      placeholder="Comma-separated"
-                      {...registerForm.register('products_services')}
-                    />
-                  </div>
-                </div>
-
-                {/* Competitors Section */}
-                <div className="mt-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="block text-sm font-medium text-text-secondary">Competitors (Optional)</label>
-                    {competitors.length < 3 && (
-                      <button
-                        type="button"
-                        onClick={() => setCompetitors([...competitors, { platform: 'website', handle_or_url: '' }])}
-                        className="text-xs text-primary hover:text-primary/80 transition-colors"
-                      >
-                        + Add Competitor
-                      </button>
-                    )}
-                  </div>
-                  {competitors.map((comp, idx) => (
-                    <div key={idx} className="flex gap-2 mb-2">
-                      <select
-                        className="bg-dark-600 border border-white/10 rounded-lg px-2 py-2 text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 w-28"
-                        value={comp.platform}
-                        onChange={(e) => {
-                          const updated = [...competitors];
-                          updated[idx].platform = e.target.value;
-                          setCompetitors(updated);
-                        }}
-                      >
-                        <option value="website">Website</option>
-                        <option value="twitter">Twitter/X</option>
-                        <option value="linkedin">LinkedIn</option>
-                        <option value="facebook">Facebook</option>
-                        <option value="instagram">Instagram</option>
-                      </select>
-                      <input
-                        className="flex-1 bg-dark-600 border border-white/10 rounded-lg px-3 py-2 text-text-primary text-sm placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/50"
-                        placeholder="URL or handle"
-                        value={comp.handle_or_url}
-                        onChange={(e) => {
-                          const updated = [...competitors];
-                          updated[idx].handle_or_url = e.target.value;
-                          setCompetitors(updated);
-                        }}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setCompetitors(competitors.filter((_, i) => i !== idx))}
-                        className="text-red-400 hover:text-red-300 px-1"
-                      >
-                        &times;
-                      </button>
-                    </div>
-                  ))}
-                  {competitors.length === 0 && (
-                    <p className="text-xs text-text-muted">Add up to 3 competitor URLs to get better AI insights.</p>
-                  )}
-                </div>
 
                 <Button
                   type="submit"

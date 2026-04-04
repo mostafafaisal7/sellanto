@@ -32,8 +32,11 @@ export { IdeaHistoryPage } from './IdeaHistoryPage';
 // V2 Redesign pages
 export { ModeSelectPage } from './magic/ModeSelectPage';
 export { MagicModePage } from './magic/MagicModePage';
+export { MagicHistoryPage } from './magic/MagicHistoryPage';
 export { GettingStartedPage } from './GettingStartedPage';
 export { SetupFlowPage } from './SetupFlowPage';
+export { DraftPostsPage } from './DraftPostsPage';
+export { OverflowHistoryPage } from './OverflowHistoryPage';
 
 // Dev / Test
 export { APITestPage } from './APITestPage';

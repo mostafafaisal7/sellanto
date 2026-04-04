@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -7,7 +7,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   PhotoIcon,
   VideoCameraIcon,
-  SparklesIcon,
   CalendarIcon,
   ClockIcon,
   XMarkIcon,
@@ -16,26 +15,13 @@ import {
   PaperAirplaneIcon,
   DocumentDuplicateIcon,
   HashtagIcon,
-  FaceSmileIcon,
-  MegaphoneIcon,
-  BriefcaseIcon,
-  ChatBubbleLeftRightIcon,
-  HeartIcon,
-  FireIcon,
-  LightBulbIcon,
   UserIcon,
   CheckIcon,
 } from '@heroicons/react/24/outline';
 import { format } from 'date-fns';
-import { Button, Card, Input, Textarea, Modal, PlatformIcon, platformColors, platformNames } from '../components/ui';
-import { CaptionEditor } from '../components/CaptionEditor';
-import { HashtagManager } from '../components/HashtagManager';
-import { DraftChecklistWidget } from '../components/DraftChecklistWidget';
-import { PlatformPreviewPanel } from '../components/PlatformPreviewPanel';
-import { CreativeGenerator } from '../components/CreativeGenerator';
+import { Button, Card, Input, Textarea, PlatformIcon, platformColors, platformNames } from '../components/ui';
 import { usePostStore } from '../store';
 import type { PlatformType } from '../types';
-import { authFetch } from '../services/api';
 import api from '../services/api';
 import { postService } from '../services';
 import calendarService from '../services/calendarService';
@@ -47,15 +33,6 @@ const platforms: { id: PlatformType; maxChars: number }[] = [
   { id: 'linkedin', maxChars: 3000 },
   { id: 'tiktok', maxChars: 2200 },
   { id: 'pinterest', maxChars: 500 },
-];
-
-const tones = [
-  { id: 'professional', label: 'Professional', Icon: BriefcaseIcon },
-  { id: 'casual', label: 'Casual', Icon: ChatBubbleLeftRightIcon },
-  { id: 'friendly', label: 'Friendly', Icon: HeartIcon },
-  { id: 'enthusiastic', label: 'Enthusiastic', Icon: FireIcon },
-  { id: 'humorous', label: 'Humorous', Icon: FaceSmileIcon },
-  { id: 'inspirational', label: 'Inspirational', Icon: LightBulbIcon },
 ];
 
 const postSchema = z.object({
@@ -78,29 +55,13 @@ export function CreatePostPage() {
   const [mediaPreviews, setMediaPreviews] = useState<string[]>([]);
   const [existingMedia, setExistingMedia] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSubmittingApproval, setIsSubmittingApproval] = useState(false);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
-  const [showAIModal, setShowAIModal] = useState(false);
-  const [aiTopic, setAiTopic] = useState('');
-  const [aiTone, setAiTone] = useState('professional');
-  const [aiOptions, setAiOptions] = useState({
-    hashtags: true,
-    emojis: true,
-    cta: false,
-  });
-  const [isGenerating, setIsGenerating] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [copied, setCopied] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [contentTab, setContentTab] = useState<'captions' | 'hashtags' | 'creative' | 'preview'>('captions');
-  const [checklistKey, setChecklistKey] = useState(0);
+  const [publishNow, setPublishNow] = useState(false);
+  const [imageReady, setImageReady] = useState(true);
+  const pendingPublish = useRef(false);
 
-  // Brand / Pillar / Goal selectors
-  const [brands, setBrands] = useState<{ id: number; brand_name: string }[]>([]);
-  const [pillarOptions, setPillarOptions] = useState<{ id: number; name: string }[]>([]);
-  const [selectedBrand, setSelectedBrand] = useState<number | ''>('');
-  const [selectedPillar, setSelectedPillar] = useState<number | ''>('');
-  const [selectedGoal, setSelectedGoal] = useState<string>('');
   const [recommendedTimes, setRecommendedTimes] = useState<Array<{ day_of_week: number; hour_utc: number; score: number; platform: string; reason?: string }>>([]);
 
   const {
@@ -152,61 +113,102 @@ export function CreatePostPage() {
     }
   }, [isEditing, id, posts, reset]);
 
-  // Pre-fill caption from AI Caption page
+  // Pre-fill data from AI Caption page or Magic Mode
   useEffect(() => {
-    const state = location.state as { caption?: string } | null;
-    if (state?.caption) {
-      setValue('caption', state.caption);
+    const state = location.state as {
+      caption?: string;
+      platform?: string;
+      title?: string;
+      imageUrl?: string;
+      publishNow?: boolean;
+    } | null;
+    if (!state) return;
+
+    if (state.caption) setValue('caption', state.caption);
+    if (state.platform) setValue('platforms', [state.platform]);
+    if (state.publishNow) setPublishNow(true);
+
+    // Download Magic Mode image and add as file for upload
+    if (state.imageUrl) {
+      // Normalize URL — same as Overflow's toMediaUrl
+      let imgUrl = state.imageUrl;
+      if (!imgUrl.startsWith('http') && !imgUrl.startsWith('blob:') && !imgUrl.startsWith('/media/')) {
+        imgUrl = `/media/${imgUrl}`;
+      }
+
+      setImageReady(false);
+      setExistingMedia([imgUrl]); // Show preview immediately
+      fetch(imgUrl)
+        .then((res) => res.blob())
+        .then((blob) => {
+          const ext = imgUrl.split('.').pop()?.split('?')[0] || 'png';
+          const file = new File([blob], `magic-image.${ext}`, { type: blob.type || 'image/png' });
+          setMediaFiles([file]);
+          setMediaPreviews([URL.createObjectURL(blob)]);
+          setExistingMedia([]); // Switch from existingMedia to mediaPreviews
+          setImageReady(true);
+        })
+        .catch(() => { setImageReady(true); /* no image, but ready to proceed */ });
     }
   }, [location.state, setValue]);
 
-  // Fetch brands on mount
+  // Fetch best times on mount
   useEffect(() => {
-    const fetchBrands = async () => {
+    const fetchBestTimes = async () => {
       try {
         const res = await api.get('/brands/');
         const data = Array.isArray(res.data) ? res.data : res.data.results || [];
-        setBrands(data);
-        // Auto-select primary brand and load best times
         if (data.length > 0) {
           const primary = data.find((b: { is_primary: boolean }) => b.is_primary) || data[0];
-          if (!selectedBrand) setSelectedBrand(primary.id);
           try {
             const times = await calendarService.getBestTimes(primary.id);
             setRecommendedTimes(Array.isArray(times) ? times : []);
           } catch { /* no best times */ }
         }
-      } catch (err) {
-        console.error('Failed to fetch brands:', err);
-      }
+      } catch { /* no brands */ }
     };
-    fetchBrands();
+    fetchBestTimes();
   }, []);
-
-  // Fetch pillars (optionally filtered by brand)
-  useEffect(() => {
-    const fetchPillars = async () => {
-      try {
-        const params: Record<string, unknown> = {};
-        if (selectedBrand) {
-          params.brand_id = selectedBrand;
-        }
-        const res = await api.get('/content-pillars/', { params });
-        const data = Array.isArray(res.data) ? res.data : res.data.results || [];
-        setPillarOptions(data);
-        // Reset pillar selection if the current one is no longer in the list
-        if (selectedPillar && !data.find((p: { id: number }) => p.id === selectedPillar)) {
-          setSelectedPillar('');
-        }
-      } catch (err) {
-        console.error('Failed to fetch pillars:', err);
-      }
-    };
-    fetchPillars();
-  }, [selectedBrand]);
 
   const watchCaption = watch('caption', '');
   const watchPlatforms = watch('platforms', []);
+
+  // Auto-fill AI-suggested best time (replaces static 1hr default)
+  useEffect(() => {
+    if (recommendedTimes.length > 0 && !isEditing) {
+      const state = location.state as { publishNow?: boolean } | null;
+      if (state?.publishNow) return; // Publish Now sets its own time
+      const t = recommendedTimes[0];
+      const now = new Date();
+      const currentDay = now.getDay() === 0 ? 6 : now.getDay() - 1;
+      let daysToAdd = t.day_of_week - currentDay;
+      if (daysToAdd < 0) daysToAdd += 7;
+      if (daysToAdd === 0 && t.hour_utc <= now.getUTCHours()) daysToAdd = 7;
+      const targetDate = new Date(now);
+      targetDate.setDate(targetDate.getDate() + daysToAdd);
+      setValue('scheduled_date', format(targetDate, 'yyyy-MM-dd'));
+      setValue('scheduled_time', `${String(t.hour_utc).padStart(2, '0')}:00`);
+    }
+  }, [recommendedTimes]);
+
+  // Auto-submit for Publish Now from Magic Mode — wait for image to be ready
+  useEffect(() => {
+    if (publishNow && watchCaption && watchPlatforms.length > 0) {
+      const now = new Date();
+      setValue('scheduled_date', format(now, 'yyyy-MM-dd'));
+      setValue('scheduled_time', format(new Date(now.getTime() + 60000), 'HH:mm'));
+      setPublishNow(false);
+      pendingPublish.current = true;
+    }
+  }, [publishNow, watchCaption, watchPlatforms]);
+
+  // Submit once image is ready (for Publish Now)
+  useEffect(() => {
+    if (pendingPublish.current && imageReady) {
+      pendingPublish.current = false;
+      setTimeout(() => handleSubmit(onSubmit)(), 50);
+    }
+  }, [imageReady]);
 
   const handleDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -263,40 +265,6 @@ export function CreatePostPage() {
     }
   };
 
-  const generateAICaption = async () => {
-    if (!aiTopic.trim()) return;
-    setIsGenerating(true);
-    try {
-      const response = await authFetch('/api/v1/ai-caption/generate/', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('access_token')}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          topic: aiTopic,
-          tone: aiTone,
-          length: 'medium',
-          platform: watchPlatforms[0] || 'general',
-          include_hashtags: aiOptions.hashtags,
-          include_emojis: aiOptions.emojis,
-          include_cta: aiOptions.cta,
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setValue('caption', data.caption || data.content || '');
-        setShowAIModal(false);
-        setAiTopic('');
-      }
-    } catch (error) {
-      console.error('Failed to generate caption:', error);
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
   const onSubmit = async (data: PostFormData) => {
     setIsSubmitting(true);
     setSubmitError(null);
@@ -309,9 +277,6 @@ export function CreatePostPage() {
         scheduled_time: scheduledTime.toISOString(),
         timezone: data.timezone,
         media_files: mediaFiles,
-        ...(selectedBrand ? { brand: selectedBrand as number } : {}),
-        ...(selectedPillar ? { pillar: selectedPillar as number } : {}),
-        ...(selectedGoal ? { goal: selectedGoal } : {}),
       };
 
       if (isEditing && id) {
@@ -330,33 +295,6 @@ export function CreatePostPage() {
       }
     } finally {
       setIsSubmitting(false);
-    }
-  };
-
-  const handleSubmitForApproval = async () => {
-    if (!id) return;
-    setIsSubmittingApproval(true);
-    setSubmitError(null);
-    try {
-      // Save post first
-      const data = watch();
-      const scheduledTime = new Date(`${data.scheduled_date}T${data.scheduled_time}`);
-      await updatePost(Number(id), {
-        caption: data.caption,
-        platforms: data.platforms as PlatformType[],
-        scheduled_time: scheduledTime.toISOString(),
-        timezone: data.timezone,
-        media_files: mediaFiles,
-      });
-      // Then submit for approval
-      await api.post(`/drafts/${id}/submit/`, {});
-      setSuccessMsg('Post submitted for approval!');
-      setTimeout(() => navigate('/posts'), 1500);
-    } catch (error: any) {
-      const msg = error?.response?.data?.error || error?.message || 'Failed to submit for approval.';
-      setSubmitError(msg);
-    } finally {
-      setIsSubmittingApproval(false);
     }
   };
 
@@ -465,93 +403,16 @@ export function CreatePostPage() {
               )}
             </Card>
 
-            {/* Brand / Pillar / Goal Selectors */}
-            <Card>
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center">
-                  <BriefcaseIcon className="w-5 h-5 text-emerald-400" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-semibold text-text-primary">Content Strategy</h2>
-                  <p className="text-sm text-text-secondary">Assign brand, pillar, and goal</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {/* Brand Selector */}
-                <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-2">
-                    Brand
-                  </label>
-                  <select
-                    value={selectedBrand}
-                    onChange={(e) => setSelectedBrand(e.target.value ? Number(e.target.value) : '')}
-                    className="w-full px-3 py-2.5 rounded-xl border-2 border-white/10 bg-dark-700/50 text-text-primary text-sm focus:border-primary focus:outline-none transition-colors"
-                  >
-                    <option value="">Select a brand...</option>
-                    {brands.map((b) => (
-                      <option key={b.id} value={b.id}>{b.brand_name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Pillar Selector */}
-                <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-2">
-                    Content Pillar
-                  </label>
-                  <select
-                    value={selectedPillar}
-                    onChange={(e) => setSelectedPillar(e.target.value ? Number(e.target.value) : '')}
-                    className="w-full px-3 py-2.5 rounded-xl border-2 border-white/10 bg-dark-700/50 text-text-primary text-sm focus:border-primary focus:outline-none transition-colors"
-                  >
-                    <option value="">Select a pillar...</option>
-                    {pillarOptions.map((p) => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Goal Selector */}
-                <div>
-                  <label className="block text-sm font-medium text-text-secondary mb-2">
-                    Goal
-                  </label>
-                  <select
-                    value={selectedGoal}
-                    onChange={(e) => setSelectedGoal(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-xl border-2 border-white/10 bg-dark-700/50 text-text-primary text-sm focus:border-primary focus:outline-none transition-colors"
-                  >
-                    <option value="">Select a goal...</option>
-                    <option value="leads">Lead Generation</option>
-                    <option value="growth">Audience Growth</option>
-                    <option value="authority">Thought Leadership</option>
-                  </select>
-                </div>
-              </div>
-            </Card>
-
             {/* Caption Editor */}
             <Card>
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center">
-                    <DocumentDuplicateIcon className="w-5 h-5 text-purple-400" />
-                  </div>
-                  <div>
-                    <h2 className="text-lg font-semibold text-text-primary">Caption</h2>
-                    <p className="text-sm text-text-secondary">Write or generate your message</p>
-                  </div>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center">
+                  <DocumentDuplicateIcon className="w-5 h-5 text-purple-400" />
                 </div>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  leftIcon={<SparklesIcon className="w-4 h-4" />}
-                  onClick={() => setShowAIModal(true)}
-                >
-                  AI Generate
-                </Button>
+                <div>
+                  <h2 className="text-lg font-semibold text-text-primary">Caption</h2>
+                  <p className="text-sm text-text-secondary">Write your message</p>
+                </div>
               </div>
 
               <Textarea
@@ -747,71 +608,10 @@ export function CreatePostPage() {
               </AnimatePresence>
             </Card>
 
-            {/* V1.2.1 — AI Captions / Hashtags / Creative tabs (only when editing) */}
-            {isEditing && id && (
-              <Card>
-                {/* Tab Bar */}
-                <div className="flex border-b border-white/10 mb-4">
-                  {(['captions', 'hashtags', 'creative', 'preview'] as const).map((tab) => (
-                    <button
-                      key={tab}
-                      type="button"
-                      onClick={() => setContentTab(tab)}
-                      className={`px-4 py-2.5 text-sm font-medium capitalize transition-colors border-b-2 -mb-px ${
-                        contentTab === tab
-                          ? 'border-primary-500 text-primary-400'
-                          : 'border-transparent text-text-secondary hover:text-text-primary'
-                      }`}
-                    >
-                      {tab === 'captions' ? 'AI Captions' : tab === 'hashtags' ? 'Hashtags' : tab === 'creative' ? 'Creative' : 'Preview'}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Tab Content */}
-                {contentTab === 'captions' && (
-                  <CaptionEditor
-                    postId={Number(id)}
-                    onCaptionChange={() => setChecklistKey((k) => k + 1)}
-                  />
-                )}
-                {contentTab === 'hashtags' && (
-                  <HashtagManager
-                    postId={Number(id)}
-                    platform={watchPlatforms[0] || 'instagram'}
-                  />
-                )}
-                {contentTab === 'creative' && (
-                  <CreativeGenerator
-                    postId={Number(id)}
-                    onAssetGenerated={() => setChecklistKey((k) => k + 1)}
-                  />
-                )}
-                {contentTab === 'preview' && (
-                  <PlatformPreviewPanel
-                    caption={watchCaption}
-                    mediaUrl={existingMedia[0] || mediaPreviews[0]}
-                    platforms={watchPlatforms}
-                  />
-                )}
-              </Card>
-            )}
           </div>
 
           {/* Sidebar */}
           <div className="space-y-6">
-            {/* Draft Checklist (only when editing) */}
-            {isEditing && id && (
-              <DraftChecklistWidget
-                key={checklistKey}
-                postId={Number(id)}
-                onSubmit={() => {
-                  setSuccessMsg('Post submitted for approval!');
-                  setTimeout(() => navigate('/posts'), 1500);
-                }}
-              />
-            )}
-
             {/* Schedule */}
             <Card>
               <div className="flex items-center gap-3 mb-4">
@@ -962,20 +762,6 @@ export function CreatePostPage() {
 
             {/* Actions */}
             <div className="flex flex-col gap-3">
-              {/* Success Message */}
-              <AnimatePresence>
-                {successMsg && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    className="p-4 bg-green-500/10 border border-green-500/30 rounded-xl"
-                  >
-                    <p className="text-sm font-medium text-green-400">{successMsg}</p>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
               {/* Error Message Display */}
               <AnimatePresence>
                 {submitError && (
@@ -1005,19 +791,6 @@ export function CreatePostPage() {
               >
                 {isEditing ? 'Update Post' : 'Schedule Post'}
               </Button>
-              {isEditing && (
-                <Button
-                  type="button"
-                  fullWidth
-                  size="lg"
-                  variant="secondary"
-                  isLoading={isSubmittingApproval}
-                  leftIcon={<CheckIcon className="w-5 h-5" />}
-                  onClick={handleSubmitForApproval}
-                >
-                  Submit for Approval
-                </Button>
-              )}
               <Button type="button" variant="secondary" fullWidth onClick={() => navigate(-1)}>
                 Cancel
               </Button>
@@ -1026,100 +799,6 @@ export function CreatePostPage() {
         </div>
       </form>
 
-      {/* AI Caption Modal */}
-      <Modal
-        isOpen={showAIModal}
-        onClose={() => setShowAIModal(false)}
-        title="Generate AI Caption"
-        size="lg"
-      >
-        <div className="space-y-6">
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-2">
-              What is your post about?
-            </label>
-            <Textarea
-              placeholder="Describe your post topic, product, or key message..."
-              rows={3}
-              value={aiTopic}
-              onChange={(e) => setAiTopic(e.target.value)}
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-3">Select Tone</label>
-            <div className="grid grid-cols-3 gap-2">
-              {tones.map((tone) => (
-                <button
-                  key={tone.id}
-                  type="button"
-                  onClick={() => setAiTone(tone.id)}
-                  className={`p-3 rounded-xl border-2 text-center transition-all ${
-                    aiTone === tone.id
-                      ? 'border-primary bg-primary/10'
-                      : 'border-white/10 hover:border-white/20'
-                  }`}
-                >
-                  <tone.Icon className="w-6 h-6 mx-auto mb-1 text-text-primary" />
-                  <p className="text-sm text-text-primary">{tone.label}</p>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-3">Options</label>
-            <div className="space-y-3">
-              <label className="flex items-center gap-3 p-3 bg-dark-700/50 rounded-xl cursor-pointer hover:bg-dark-700 transition-colors">
-                <input
-                  type="checkbox"
-                  checked={aiOptions.hashtags}
-                  onChange={(e) => setAiOptions({ ...aiOptions, hashtags: e.target.checked })}
-                  className="w-4 h-4 rounded border-white/20 bg-dark-600 text-primary focus:ring-primary/50"
-                />
-                <HashtagIcon className="w-5 h-5 text-text-muted" />
-                <span className="text-text-primary">Include hashtags</span>
-              </label>
-              <label className="flex items-center gap-3 p-3 bg-dark-700/50 rounded-xl cursor-pointer hover:bg-dark-700 transition-colors">
-                <input
-                  type="checkbox"
-                  checked={aiOptions.emojis}
-                  onChange={(e) => setAiOptions({ ...aiOptions, emojis: e.target.checked })}
-                  className="w-4 h-4 rounded border-white/20 bg-dark-600 text-primary focus:ring-primary/50"
-                />
-                <FaceSmileIcon className="w-5 h-5 text-text-muted" />
-                <span className="text-text-primary">Include emojis</span>
-              </label>
-              <label className="flex items-center gap-3 p-3 bg-dark-700/50 rounded-xl cursor-pointer hover:bg-dark-700 transition-colors">
-                <input
-                  type="checkbox"
-                  checked={aiOptions.cta}
-                  onChange={(e) => setAiOptions({ ...aiOptions, cta: e.target.checked })}
-                  className="w-4 h-4 rounded border-white/20 bg-dark-600 text-primary focus:ring-primary/50"
-                />
-                <MegaphoneIcon className="w-5 h-5 text-text-muted" />
-                <span className="text-text-primary">Include call-to-action</span>
-              </label>
-            </div>
-          </div>
-
-          <div className="flex gap-3 pt-2">
-            <Button
-              type="button"
-              fullWidth
-              onClick={generateAICaption}
-              isLoading={isGenerating}
-              disabled={!aiTopic.trim()}
-              leftIcon={<SparklesIcon className="w-5 h-5" />}
-            >
-              Generate Caption
-            </Button>
-            <Button type="button" variant="secondary" onClick={() => setShowAIModal(false)}>
-              Cancel
-            </Button>
-          </div>
-        </div>
-      </Modal>
     </div>
   );
 }

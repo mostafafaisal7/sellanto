@@ -1,12 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 import { useMagicModeStore, type MagicPost } from '../../store/magicModeStore';
 import { FeedbackModal } from '../../components/redesign/FeedbackModal';
 import captionService from '../../services/captionService';
 import imageService from '../../services/imageService';
-import type { CaptionPlatform } from '../../types';
+import strategyService from '../../services/strategyService';
+import { postService } from '../../services/postService';
+import type { CaptionPlatform, CaptionTone, PlatformType } from '../../types';
 
-function PostCard({ post, index }: { post: MagicPost; index: number }) {
+function PostCard({ post, index, justUpdated }: { post: MagicPost; index: number; justUpdated?: boolean }) {
   const { approvePost, resetPostStatus, openFeedback, generatedPosts, setGeneratedPosts } = useMagicModeStore();
   const navigate = useNavigate();
   const isApproved = post.status === 'approved';
@@ -17,13 +20,25 @@ function PostCard({ post, index }: { post: MagicPost; index: number }) {
     LinkedIn: '💼', Instagram: '📸', Facebook: '📘', Twitter: '🐦', TikTok: '🎵',
   };
 
-  const handleSchedule = () => {
-    // Navigate to calendar with post data pre-filled
+  const handleSchedule = async () => {
+    // Delete draft before navigating to schedule
+    try {
+      const draftMap = JSON.parse(localStorage.getItem('magic_draft_post_ids') || '{}');
+      const entry = draftMap[post.id];
+      const draftId = typeof entry === 'number' ? entry : entry?.draftId;
+      if (draftId) {
+        await postService.delete(draftId);
+        delete draftMap[post.id];
+        localStorage.setItem('magic_draft_post_ids', JSON.stringify(draftMap));
+      }
+    } catch { /* ignore */ }
+
     navigate('/posts/create', {
       state: {
         caption: post.caption,
         platform: post.platform.toLowerCase(),
         title: post.title,
+        imageUrl: post.imageUrl,
       },
     });
   };
@@ -34,7 +49,8 @@ function PostCard({ post, index }: { post: MagicPost; index: number }) {
       const result = await imageService.generate({
         prompt: `Create a professional social media image for: "${post.title}". ${post.imageStyle || ''}`,
         title: post.title,
-        provider: 'openai',
+        // provider: 'openai',  // OpenAI billing limit reached
+        provider: 'gemini',
         style: 'modern',
         enhance_prompt: true,
       });
@@ -55,12 +71,24 @@ function PostCard({ post, index }: { post: MagicPost; index: number }) {
   const handlePublish = async () => {
     setPublishing(true);
     try {
-      // Navigate to create post page with data for immediate publishing
+      // Delete draft before navigating to publish
+      try {
+        const draftMap = JSON.parse(localStorage.getItem('magic_draft_post_ids') || '{}');
+        const entry = draftMap[post.id];
+        const draftId = typeof entry === 'number' ? entry : entry?.draftId;
+        if (draftId) {
+          await postService.delete(draftId);
+          delete draftMap[post.id];
+          localStorage.setItem('magic_draft_post_ids', JSON.stringify(draftMap));
+        }
+      } catch { /* ignore */ }
+
       navigate('/posts/create', {
         state: {
           caption: post.caption,
           platform: post.platform.toLowerCase(),
           title: post.title,
+          imageUrl: post.imageUrl,
           publishNow: true,
         },
       });
@@ -74,7 +102,8 @@ function PostCard({ post, index }: { post: MagicPost; index: number }) {
       className={`rounded-[20px] overflow-hidden transition-all duration-300 au${Math.min(index + 1, 5)}`}
       style={{
         background: 'rgb(var(--c-bg-card))',
-        border: `1px solid ${isApproved ? 'rgba(16,185,129,0.3)' : 'var(--border-color)'}`,
+        border: `1.5px solid ${justUpdated ? 'rgba(16,185,129,0.5)' : isApproved ? 'rgba(16,185,129,0.3)' : 'var(--border-color)'}`,
+        boxShadow: justUpdated ? '0 0 20px rgba(16,185,129,0.15)' : undefined,
       }}
     >
       {/* Header */}
@@ -232,14 +261,18 @@ function PostCard({ post, index }: { post: MagicPost; index: number }) {
 
 interface ResultsScreenProps {
   onGenerateMore: () => void;
+  onGoBack: () => void;
 }
 
-export function ResultsScreen({ onGenerateMore }: ResultsScreenProps) {
-  const { generatedPosts, feedbackModal, closeFeedback, resetPostStatus, setPostCount, postCount, setGeneratedPosts } = useMagicModeStore();
+export function ResultsScreen({ onGenerateMore, onGoBack }: ResultsScreenProps) {
+  const magicStore = useMagicModeStore();
+  const { generatedPosts, feedbackModal, closeFeedback, resetPostStatus, setPostCount, postCount, setGeneratedPosts, answers } = magicStore;
   const allApproved = generatedPosts.length > 0 && generatedPosts.every((p) => p.status === 'approved');
   const approvedCount = generatedPosts.filter((p) => p.status === 'approved').length;
   const [showMore, setShowMore] = useState(false);
-  const [regenerating, setRegenerating] = useState(false);
+  const [regenerating, setRegenerating] = useState<string | null>(null); // null or description text
+  const [regenerateError, setRegenerateError] = useState<string | null>(null);
+  const [justUpdatedId, setJustUpdatedId] = useState<number | null>(null);
 
   useEffect(() => {
     if (allApproved) {
@@ -249,16 +282,108 @@ export function ResultsScreen({ onGenerateMore }: ResultsScreenProps) {
     setShowMore(false);
   }, [allApproved]);
 
+  // Clear error after 4 seconds
+  useEffect(() => {
+    if (regenerateError) {
+      const t = setTimeout(() => setRegenerateError(null), 4000);
+      return () => clearTimeout(t);
+    }
+  }, [regenerateError]);
+
+  // Clear success flash after 2 seconds
+  useEffect(() => {
+    if (justUpdatedId !== null) {
+      const t = setTimeout(() => setJustUpdatedId(null), 2000);
+      return () => clearTimeout(t);
+    }
+  }, [justUpdatedId]);
+
+  // Auto-save all generated posts as drafts (and re-save when images change)
+  const draftSaveInProgress = useRef(false);
+  useEffect(() => {
+    if (generatedPosts.length === 0 || draftSaveInProgress.current) return;
+    draftSaveInProgress.current = true;
+
+    // Format: { [postId]: { draftId, imageUrl } } — migrate from old number format
+    const rawMap = JSON.parse(localStorage.getItem('magic_draft_post_ids') || '{}');
+    const savedMap: Record<number, { draftId: number; imageUrl: string | null }> = {};
+    for (const [k, v] of Object.entries(rawMap)) {
+      if (typeof v === 'number') {
+        savedMap[Number(k)] = { draftId: v, imageUrl: null };
+      } else if (v && typeof v === 'object' && 'draftId' in (v as object)) {
+        savedMap[Number(k)] = v as { draftId: number; imageUrl: string | null };
+      }
+    }
+
+    // Needs save = not saved at all, OR imageUrl changed since last save
+    const needsSave = generatedPosts.filter((p) => {
+      const entry = savedMap[p.id];
+      if (!entry) return true;
+      if (p.imageUrl && p.imageUrl !== entry.imageUrl) return true;
+      return false;
+    });
+    if (needsSave.length === 0) { draftSaveInProgress.current = false; return; }
+
+    (async () => {
+      for (const post of needsSave) {
+        try {
+          const mediaFiles: File[] = [];
+          if (post.imageUrl) {
+            try {
+              const res = await fetch(post.imageUrl);
+              const blob = await res.blob();
+              const ext = post.imageUrl.split('.').pop()?.split('?')[0] || 'png';
+              mediaFiles.push(new File([blob], `generated-image.${ext}`, { type: blob.type || 'image/png' }));
+            } catch { /* skip media */ }
+          }
+
+          // If draft already exists (image changed), delete old one first
+          const existing = savedMap[post.id];
+          if (existing?.draftId) {
+            try { await postService.delete(existing.draftId); } catch { /* ignore */ }
+          }
+
+          const draft = await postService.create({
+            caption: post.caption,
+            media_files: mediaFiles,
+            platforms: [post.platform.toLowerCase() as PlatformType],
+            source: 'magic',
+            status: 'draft',
+            hook: post.title,
+          });
+          savedMap[post.id] = { draftId: draft.id, imageUrl: post.imageUrl || null };
+        } catch { /* silent */ }
+      }
+      localStorage.setItem('magic_draft_post_ids', JSON.stringify(savedMap));
+      draftSaveInProgress.current = false;
+    })();
+  }, [generatedPosts]);
+
+  // Go back — drafts are already auto-saved, just navigate
+  const handleGoBackWithSave = () => {
+    onGoBack();
+  };
+
   const handleFeedbackSubmit = async (feedback: Record<string, string>) => {
     if (!feedbackModal) return;
 
     const post = generatedPosts.find((p) => p.id === feedbackModal.postId);
     if (!post) { closeFeedback(); return; }
 
-    setRegenerating(true);
+    const isTopicFeedback = feedback.what === 'The overall topic';
     const isImageFeedback = feedback.what === 'The image style';
 
-    // Build clean feedback text — use the specific follow-up answer, not the category label
+    const overlayLabel = isTopicFeedback
+      ? `Regenerating entire post "${post.title}"...`
+      : isImageFeedback
+        ? `Regenerating image for "${post.title}"...`
+        : `Regenerating caption for "${post.title}"...`;
+
+    setRegenerating(overlayLabel);
+    setRegenerateError(null);
+    closeFeedback();
+
+    // Build clean feedback text
     const feedbackText = feedback.custom
       || feedback.caption_fix
       || feedback.tone_fix
@@ -269,38 +394,98 @@ export function ResultsScreen({ onGenerateMore }: ResultsScreenProps) {
       || '';
 
     try {
-      if (isImageFeedback) {
-        // Regenerate image based on feedback
+      if (isTopicFeedback && post.ideaId) {
+        // --- Full regeneration: new idea + new caption + new image ---
+        // 1. Regenerate idea
+        const newIdea = await strategyService.regenerateIdea(
+          post.ideaId,
+          `Generate a ${feedbackText} style post. Create a completely new topic and angle.`
+        );
+
+        // 2. Generate new caption for the new idea
+        const toneMap: Record<string, CaptionTone> = {
+          'professional & authoritative': 'professional',
+          'friendly & approachable': 'friendly',
+          'bold & provocative': 'enthusiastic',
+          'educational & helpful': 'formal',
+          'fun & casual': 'casual',
+        };
+        const toneAnswer = answers.tone ? String(answers.tone).toLowerCase() : '';
+        const captionTone: CaptionTone = toneMap[toneAnswer] || 'professional';
+
+        const captionResult = await captionService.generate({
+          topic: newIdea.title + (newIdea.hook ? ': ' + newIdea.hook : ''),
+          tone: captionTone,
+          length: 'medium',
+          platform: post.platform.toLowerCase() as CaptionPlatform,
+          include_hashtags: true,
+          include_emojis: true,
+          include_cta: true,
+        });
+
+        // 3. Generate new image
+        let newImageUrl = '';
+        try {
+          const imgResult = await imageService.generate({
+            prompt: `Create a professional social media image for: "${newIdea.title}". ${newIdea.hook || newIdea.angle || ''}`,
+            title: newIdea.title,
+            // provider: 'openai',  // OpenAI billing limit reached
+            provider: 'gemini',
+            style: 'modern',
+            enhance_prompt: true,
+          });
+          newImageUrl = imgResult.generated_image_with_logo || imgResult.generated_image || imgResult.composited_image || '';
+        } catch {
+          // Non-fatal — post will show without image
+        }
+
+        // 4. Update post with all new data
+        setGeneratedPosts(
+          generatedPosts.map((p) =>
+            p.id === post.id
+              ? {
+                  ...p,
+                  title: newIdea.title,
+                  imageOverlay: newIdea.title,
+                  imageStyle: newIdea.hook || newIdea.angle || '',
+                  caption: captionResult.generated_caption || '',
+                  captionId: captionResult.id,
+                  ideaId: newIdea.id,
+                  imageUrl: newImageUrl || p.imageUrl,
+                  status: 'ready' as const,
+                }
+              : p
+          )
+        );
+      } else if (isImageFeedback) {
         const imgResult = await imageService.generate({
           prompt: `Create a social media image for: "${post.title}". Style feedback: ${feedback.image_fix || feedbackText}`,
           title: post.title,
-          provider: 'openai',
+          // provider: 'openai',  // OpenAI billing limit reached
+          provider: 'gemini',
           style: 'modern',
           enhance_prompt: true,
         });
         const imgUrl = imgResult.generated_image_with_logo || imgResult.generated_image || imgResult.composited_image;
         setGeneratedPosts(
           generatedPosts.map((p) =>
-            p.id === feedbackModal.postId
+            p.id === post.id
               ? { ...p, imageUrl: imgUrl || p.imageUrl, status: 'ready' as const }
               : p
           )
         );
       } else {
-        // Regenerate caption based on feedback
         if (post.captionId) {
-          // Use regenerate endpoint — returns { success, caption, hashtags, id }
           const result = await captionService.regenerate(post.captionId, feedbackText);
           const newCaption = result.caption || '';
           setGeneratedPosts(
             generatedPosts.map((p) =>
-              p.id === feedbackModal.postId
+              p.id === post.id
                 ? { ...p, caption: newCaption, status: 'ready' as const, captionId: result.id || p.captionId }
                 : p
             )
           );
         } else {
-          // No captionId — generate fresh with feedback as custom_instructions
           const result = await captionService.generate({
             topic: post.title,
             tone: 'professional',
@@ -314,19 +499,25 @@ export function ResultsScreen({ onGenerateMore }: ResultsScreenProps) {
           const newCaption = result.generated_caption || '';
           setGeneratedPosts(
             generatedPosts.map((p) =>
-              p.id === feedbackModal.postId
+              p.id === post.id
                 ? { ...p, caption: newCaption, status: 'ready' as const, captionId: result.id }
                 : p
             )
           );
         }
       }
+      setJustUpdatedId(post.id);
     } catch {
-      resetPostStatus(feedbackModal.postId);
+      const label = isTopicFeedback ? 'post' : isImageFeedback ? 'image' : 'caption';
+      setRegenerateError(`Failed to regenerate ${label}. Please try again.`);
+      resetPostStatus(post.id);
     }
-    setRegenerating(false);
-    closeFeedback();
+    setRegenerating(null);
   };
+
+  // Overlay emoji/text based on regeneration type
+  const overlayEmoji = regenerating?.includes('entire') ? '🔄' : regenerating?.includes('image') ? '🎨' : '✍️';
+  const overlayText = regenerating?.includes('entire') ? 'Regenerating post...' : regenerating?.includes('image') ? 'Regenerating image...' : 'Regenerating caption...';
 
   return (
     <div
@@ -334,6 +525,18 @@ export function ResultsScreen({ onGenerateMore }: ResultsScreenProps) {
       style={{ background: 'rgb(var(--c-bg-primary))' }}
     >
       <div className="max-w-[720px] mx-auto">
+        {/* Back to Questions button */}
+        <div className="mb-6">
+          <button
+            onClick={handleGoBackWithSave}
+            className="flex items-center gap-2 text-[13px] font-semibold transition-colors"
+            style={{ color: 'rgb(var(--c-text-secondary))' }}
+          >
+            <ArrowLeftIcon className="w-4 h-4" />
+            Back to Questions
+          </button>
+        </div>
+
         {/* Header */}
         <div className="text-center mb-10">
           <div className="text-[52px] mb-3 pop">🎉</div>
@@ -350,19 +553,38 @@ export function ResultsScreen({ onGenerateMore }: ResultsScreenProps) {
         {/* Posts */}
         <div className="space-y-6">
           {generatedPosts.map((post, i) => (
-            <PostCard key={post.id} post={post} index={i} />
+            <PostCard key={post.id} post={post} index={i} justUpdated={justUpdatedId === post.id} />
           ))}
         </div>
 
         {/* Regenerating overlay */}
         {regenerating && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" style={{ backdropFilter: 'blur(4px)' }}>
             <div
-              className="rounded-[20px] p-8 text-center"
-              style={{ background: 'rgb(var(--c-bg-card))' }}
+              className="rounded-[24px] p-10 text-center max-w-[380px] scale-in"
+              style={{ background: 'rgb(var(--c-bg-elevated))', border: '1px solid var(--border-color)', boxShadow: '0 25px 60px rgba(0,0,0,0.5)' }}
             >
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 mx-auto mb-3" style={{ borderColor: 'rgb(var(--c-coral))' }} />
-              <p className="text-text-secondary text-[14px]">Regenerating post...</p>
+              <div className="relative w-14 h-14 mx-auto mb-4">
+                <div className="absolute inset-0 rounded-full animate-spin" style={{ border: '3px solid rgba(232,54,79,0.15)', borderTopColor: 'rgb(var(--c-coral))' }} />
+                <div className="absolute inset-2 rounded-full flex items-center justify-center text-[20px]">
+                  {overlayEmoji}
+                </div>
+              </div>
+              <p className="text-[15px] font-semibold text-text-primary mb-1">{overlayText}</p>
+              <p className="text-[12px] text-text-muted">This may take a few seconds</p>
+            </div>
+          </div>
+        )}
+
+        {/* Error toast */}
+        {regenerateError && (
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 pop">
+            <div
+              className="px-6 py-3.5 rounded-[16px] flex items-center gap-3"
+              style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', boxShadow: '0 8px 30px rgba(0,0,0,0.3)' }}
+            >
+              <span className="text-[18px]">❌</span>
+              <p className="text-[13px] font-semibold" style={{ color: '#ef4444' }}>{regenerateError}</p>
             </div>
           </div>
         )}
@@ -424,6 +646,8 @@ export function ResultsScreen({ onGenerateMore }: ResultsScreenProps) {
         isOpen={!!feedbackModal}
         onClose={closeFeedback}
         onSubmit={handleFeedbackSubmit}
+        postTitle={feedbackModal ? generatedPosts.find((p) => p.id === feedbackModal.postId)?.title : undefined}
+        postPlatform={feedbackModal ? generatedPosts.find((p) => p.id === feedbackModal.postId)?.platform : undefined}
       />
     </div>
   );

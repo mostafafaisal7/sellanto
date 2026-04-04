@@ -16,8 +16,12 @@ export const postService = {
     const formData = new FormData();
     formData.append('caption', data.caption);
     formData.append('platforms', JSON.stringify(data.platforms));
-    formData.append('scheduled_time', data.scheduled_time);
-    formData.append('timezone', data.timezone);
+    if (data.scheduled_time) {
+      formData.append('scheduled_time', data.scheduled_time);
+    }
+    if (data.timezone) {
+      formData.append('timezone', data.timezone);
+    }
 
     if (data.brand) {
       formData.append('brand', String(data.brand));
@@ -27,6 +31,15 @@ export const postService = {
     }
     if (data.goal) {
       formData.append('goal', data.goal);
+    }
+    if (data.source) {
+      formData.append('source', data.source);
+    }
+    if (data.status) {
+      formData.append('status', data.status);
+    }
+    if (data.hook) {
+      formData.append('hook', data.hook);
     }
 
     data.media_files.forEach((file, index) => {

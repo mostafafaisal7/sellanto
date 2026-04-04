@@ -1,12 +1,21 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronLeftIcon, ChevronRightIcon,
   ClockIcon,
   ArrowsPointingOutIcon,
+  SparklesIcon,
+  CheckCircleIcon,
+  XCircleIcon,
+  PencilIcon,
 } from '@heroicons/react/24/outline';
+import { format } from 'date-fns';
 import calendarService from '../services/calendarService';
+import postService from '../services/postService';
 import { BestTimeSuggestionOverlay } from '../components/BestTimeSuggestionOverlay';
+import { Modal, StatusBadge, PlatformBadge, Button } from '../components/ui';
+import type { Post } from '../types';
 
 interface CalendarEvent {
   id: number;
@@ -36,6 +45,8 @@ export function CalendarPage() {
   const [dragEvent, setDragEvent] = useState<CalendarEvent | null>(null);
   const [dropTargetDate, setDropTargetDate] = useState<string | null>(null);
   const [rescheduling, setRescheduling] = useState(false);
+  const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+  const [postLoading, setPostLoading] = useState(false);
 
   useEffect(() => {
     loadEvents();
@@ -103,6 +114,19 @@ export function CalendarPage() {
 
   const isToday = (date: Date) => date.toDateString() === new Date().toDateString();
   const isCurrentMonth = (date: Date) => date.getMonth() === currentDate.getMonth();
+
+  // --- Event click → fetch full post and show modal ---
+  const handleEventClick = async (event: CalendarEvent) => {
+    setPostLoading(true);
+    setSelectedPost(null);
+    try {
+      const post = await postService.get(event.id);
+      setSelectedPost(post);
+    } catch {
+      // If fetch fails, ignore — modal won't open
+    }
+    setPostLoading(false);
+  };
 
   // --- Drag & Drop Rescheduling ---
   const handleDragStart = (event: CalendarEvent) => {
@@ -249,17 +273,18 @@ export function CalendarPage() {
                       key={eIdx}
                       draggable={event.status === 'scheduled' || event.status === 'draft' || event.status === 'approved'}
                       onDragStart={() => handleDragStart(event)}
-                      className={`text-[10px] px-1 py-0.5 rounded truncate hover:opacity-80 ${
+                      onClick={() => handleEventClick(event)}
+                      className={`text-[10px] px-1 py-0.5 rounded truncate cursor-pointer hover:opacity-80 ${
                         event.status === 'scheduled' || event.status === 'draft' || event.status === 'approved'
-                          ? 'cursor-grab active:cursor-grabbing'
-                          : 'cursor-default'
+                          ? 'active:cursor-grabbing'
+                          : ''
                       }`}
                       style={{
                         backgroundColor: `${event.color || PLATFORM_COLORS[event.platform] || '#6B7280'}20`,
                         color: event.color || PLATFORM_COLORS[event.platform] || '#6B7280',
                         borderLeft: `2px solid ${event.color || PLATFORM_COLORS[event.platform]}`,
                       }}
-                      title={`${event.title} (${event.platform}) — Drag to reschedule`}
+                      title={event.title}
                     >
                       {event.title}
                     </div>
@@ -289,6 +314,117 @@ export function CalendarPage() {
           <span>Drag events to reschedule</span>
         </div>
       </div>
+
+      {/* Post Detail Modal */}
+      <Modal isOpen={!!selectedPost || postLoading} onClose={() => { setSelectedPost(null); setPostLoading(false); }} title="Post Details" size="xl">
+        {postLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: 'rgb(var(--c-coral))' }} />
+          </div>
+        ) : selectedPost ? (
+          <div className="space-y-6">
+            {/* Status and time */}
+            <div className="flex flex-wrap items-center gap-3 p-4 bg-dark-700/50 rounded-xl">
+              <StatusBadge status={selectedPost.status} size="lg" />
+              <div className="flex-1">
+                <p className="text-text-primary font-medium">
+                  {selectedPost.status === 'posted'
+                    ? `Posted on ${format(new Date(selectedPost.posted_at || selectedPost.scheduled_time), 'MMMM d, yyyy')}`
+                    : `Scheduled for ${format(new Date(selectedPost.scheduled_time), 'MMMM d, yyyy')}`}
+                </p>
+                <p className="text-sm text-text-muted">
+                  at {format(new Date(selectedPost.posted_at || selectedPost.scheduled_time), 'HH:mm')} ({selectedPost.timezone || 'UTC'})
+                </p>
+              </div>
+            </div>
+
+            {/* Caption */}
+            <div>
+              <h4 className="text-sm font-medium text-text-secondary mb-2 flex items-center gap-2">
+                Caption
+                {selectedPost.ai_generated && (
+                  <span className="flex items-center gap-1 px-2 py-0.5 bg-purple-500/20 text-purple-400 text-xs rounded-full">
+                    <SparklesIcon className="w-3 h-3" />
+                    AI Generated
+                  </span>
+                )}
+              </h4>
+              <div className="p-4 bg-dark-700/50 rounded-xl">
+                <p className="text-text-primary whitespace-pre-wrap">{selectedPost.caption}</p>
+              </div>
+            </div>
+
+            {/* Media */}
+            {selectedPost.media_files && selectedPost.media_files.length > 0 && (
+              <div>
+                <h4 className="text-sm font-medium text-text-secondary mb-2">
+                  Media ({selectedPost.media_files.length})
+                </h4>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {selectedPost.media_files.map((file, i) => (
+                    <div key={i} className="aspect-square rounded-xl overflow-hidden bg-dark-700">
+                      <img src={file} alt={`Media ${i + 1}`} className="w-full h-full object-cover" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Platforms */}
+            {selectedPost.platforms && selectedPost.platforms.length > 0 && (
+              <div>
+                <h4 className="text-sm font-medium text-text-secondary mb-2">Platforms</h4>
+                <div className="flex flex-wrap gap-2">
+                  {selectedPost.platforms.map((platform) => (
+                    <PlatformBadge key={platform} platform={platform} showLabel />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Publishing Results */}
+            {selectedPost.platform_results && selectedPost.platform_results.length > 0 && (
+              <div>
+                <h4 className="text-sm font-medium text-text-secondary mb-2">Publishing Results</h4>
+                <div className="space-y-2">
+                  {selectedPost.platform_results.map((result, i) => (
+                    <div
+                      key={i}
+                      className={`flex items-center gap-3 p-3 rounded-xl ${
+                        result.success ? 'bg-success/10 border border-success/20' : 'bg-danger/10 border border-danger/20'
+                      }`}
+                    >
+                      {result.success ? (
+                        <CheckCircleIcon className="w-5 h-5 text-success" />
+                      ) : (
+                        <XCircleIcon className="w-5 h-5 text-danger" />
+                      )}
+                      <span className="text-sm capitalize font-medium">{result.platform}</span>
+                      <span className={`text-sm ${result.success ? 'text-success' : 'text-danger'}`}>
+                        {result.success ? 'Published successfully' : result.error || 'Failed to publish'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex gap-3 pt-4 border-t border-white/10">
+              {(selectedPost.status === 'scheduled' || selectedPost.status === 'draft') && (
+                <Link to={`/posts/${selectedPost.id}/edit`} className="flex-1">
+                  <Button fullWidth variant="secondary" leftIcon={<PencilIcon className="w-5 h-5" />}>
+                    Edit Post
+                  </Button>
+                </Link>
+              )}
+              <Button variant="secondary" onClick={() => setSelectedPost(null)}>
+                Close
+              </Button>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
     </div>
   );
 }

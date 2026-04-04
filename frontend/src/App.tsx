@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Layout } from './components/layout';
 import { AdminLayout } from './components/admin/AdminLayout';
 import {
@@ -34,8 +34,11 @@ import {
   // V2 Redesign
   ModeSelectPage,
   MagicModePage,
+  MagicHistoryPage,
   GettingStartedPage,
   SetupFlowPage,
+  DraftPostsPage,
+  OverflowHistoryPage,
   // Dev / Test
   APITestPage,
 } from './pages';
@@ -51,8 +54,9 @@ import { LoadingScreen } from './components/ui';
 import { useAuthStore } from './store';
 
 // Protected route wrapper
-function ProtectedRoute({ children, skipOnboardingCheck }: { children: React.ReactNode; skipOnboardingCheck?: boolean }) {
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading, fetchUser, user } = useAuthStore();
+  const location = useLocation();
 
   useEffect(() => {
     fetchUser();
@@ -66,9 +70,9 @@ function ProtectedRoute({ children, skipOnboardingCheck }: { children: React.Rea
     return <Navigate to="/login" replace />;
   }
 
-  // Redirect to business profile setup if needed (but not if we're already on onboarding/business-profile page)
-  if (!skipOnboardingCheck && user?.onboarding_status?.needs_onboarding) {
-    return <Navigate to="/business-profile" replace />;
+  // Force onboarding for first-time users
+  if (user?.onboarding_status?.needs_onboarding && location.pathname !== '/onboarding') {
+    return <Navigate to="/onboarding" replace />;
   }
 
   return <>{children}</>;
@@ -127,7 +131,7 @@ function App() {
         <Route
           path="/onboarding"
           element={
-            <ProtectedRoute skipOnboardingCheck>
+            <ProtectedRoute>
               <OnboardingPage />
             </ProtectedRoute>
           }
@@ -137,7 +141,7 @@ function App() {
         <Route
           path="/mode-select"
           element={
-            <ProtectedRoute skipOnboardingCheck>
+            <ProtectedRoute>
               <ModeSelectPage />
             </ProtectedRoute>
           }
@@ -147,7 +151,7 @@ function App() {
         <Route
           path="/magic"
           element={
-            <ProtectedRoute skipOnboardingCheck>
+            <ProtectedRoute>
               <MagicModePage />
             </ProtectedRoute>
           }
@@ -156,7 +160,7 @@ function App() {
         {/* Business Profile - accessible even during onboarding (has inline setup wizard) */}
         <Route
           element={
-            <ProtectedRoute skipOnboardingCheck>
+            <ProtectedRoute>
               <Layout />
             </ProtectedRoute>
           }
@@ -174,6 +178,7 @@ function App() {
         >
           <Route path="/" element={<DashboardPage />} />
           <Route path="/posts" element={<MyPostsPage />} />
+          <Route path="/posts/drafts" element={<DraftPostsPage />} />
           <Route path="/posts/create" element={<CreatePostPage />} />
           <Route path="/posts/:id/edit" element={<CreatePostPage />} />
           <Route path="/platforms" element={<ConnectAccountsPage />} />
@@ -201,11 +206,13 @@ function App() {
 
           {/* V1.3 Routes */}
           <Route path="/overflow" element={<OverflowPage />} />
+          <Route path="/overflow/history" element={<OverflowHistoryPage />} />
           <Route path="/ideas/history" element={<IdeaHistoryPage />} />
 
           {/* V2 Redesign Routes */}
           <Route path="/getting-started" element={<GettingStartedPage />} />
           <Route path="/setup/*" element={<SetupFlowPage />} />
+          <Route path="/magic/history" element={<MagicHistoryPage />} />
 
           {/* Dev / Test */}
           <Route path="/test-api" element={<APITestPage />} />
@@ -220,7 +227,7 @@ function App() {
         {/* Admin Panel routes */}
         <Route
           element={
-            <ProtectedRoute skipOnboardingCheck>
+            <ProtectedRoute>
               <AdminRoute>
                 <AdminLayout />
               </AdminRoute>

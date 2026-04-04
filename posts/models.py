@@ -35,6 +35,12 @@ class Post(models.Model):
         ('text', 'Text Only'),
     ]
 
+    SOURCE_CHOICES = [
+        ('manual', 'Manual'),
+        ('magic', 'Magic Link'),
+        ('overflow', 'Overflow'),
+    ]
+
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='posts')
 
     # Content
@@ -45,7 +51,7 @@ class Post(models.Model):
     media_files = models.TextField(default='[]', help_text='JSON array of media file paths')
 
     # Scheduling
-    scheduled_time = models.DateTimeField(help_text='When to post')
+    scheduled_time = models.DateTimeField(null=True, blank=True, help_text='When to post')
     timezone = models.CharField(max_length=50, default='UTC')
 
     # Platforms (JSON array)
@@ -53,6 +59,9 @@ class Post(models.Model):
 
     # Status
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
+
+    # Source — where this post was created from
+    source = models.CharField(max_length=20, choices=SOURCE_CHOICES, default='manual', blank=True)
 
     # V1.2.1 - Draft/Strategy fields
     idea = models.ForeignKey(

@@ -213,18 +213,3 @@ class ApprovalLogView(APIView):
         return Response(serializer.data)
 
 
-class DraftChecklistView(APIView):
-    permission_classes = [IsAuthenticated, IsCreatorOrAbove]
-
-    def get(self, request, post_id):
-        try:
-            post = Post.objects.get(id=post_id, user=request.user)
-        except Post.DoesNotExist:
-            return Response({'error': 'Post not found'}, status=status.HTTP_404_NOT_FOUND)
-
-        checklist = post.update_checklist()
-        return Response({
-            'post_id': post.id,
-            'checklist': checklist,
-            'is_complete': post.is_checklist_complete,
-        })

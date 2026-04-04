@@ -130,7 +130,7 @@ def diamond_gate(user, feature, **kwargs):
 
 @method_decorator(csrf_exempt, name='dispatch')
 class RegisterView(generics.CreateAPIView):
-    """User registration endpoint"""
+    """User registration endpoint — returns JWT tokens for immediate login"""
     permission_classes = [AllowAny]
     serializer_class = RegisterSerializer
 
@@ -138,9 +138,24 @@ class RegisterView(generics.CreateAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
+
+        # Skip onboarding so user lands on dashboard, not /business-profile
+        try:
+            progress = OnboardingProgress.objects.get(user=user)
+            progress.skip_onboarding()
+        except OnboardingProgress.DoesNotExist:
+            pass
+
+        # Generate JWT tokens so user is logged in immediately
+        refresh = RefreshToken.for_user(user)
+
         return Response({
-            'message': 'Registration successful. You can now log in.',
-            'user': UserSerializer(user).data
+            'message': 'Registration successful!',
+            'user': UserSerializer(user).data,
+            'tokens': {
+                'access': str(refresh.access_token),
+                'refresh': str(refresh),
+            },
         }, status=status.HTTP_201_CREATED)
 
 
@@ -382,6 +397,11 @@ class PostViewSet(viewsets.ModelViewSet):
         if platform:
             queryset = queryset.filter(platforms__icontains=platform)
 
+        # Filter by source
+        source = self.request.query_params.get('source')
+        if source:
+            queryset = queryset.filter(source=source)
+
         # Search
         search = self.request.query_params.get('search')
         if search:
@@ -499,10 +519,12 @@ class PostViewSet(viewsets.ModelViewSet):
             user=request.user,
             caption=serializer.validated_data['caption'],
             platforms=json.dumps(serializer.validated_data['platforms']),
-            scheduled_time=serializer.validated_data['scheduled_time'],
+            scheduled_time=serializer.validated_data.get('scheduled_time'),
             timezone=serializer.validated_data.get('timezone', 'UTC'),
             media_files=json.dumps(media_files),
-            status='scheduled',
+            status=serializer.validated_data.get('status', 'scheduled'),
+            source=serializer.validated_data.get('source', 'manual'),
+            hook=serializer.validated_data.get('hook', ''),
         )
 
         return Response(PostSerializer(post, context={'request': request}).data, status=status.HTTP_201_CREATED)
@@ -2703,29 +2725,14 @@ class BrandViewSet(viewsets.ModelViewSet):
         return queryset
 
     def perform_create(self, serializer):
-        from django.utils import timezone
         brand = serializer.save(user=self.request.user)
 
-        # Mark onboarding step 2 complete and skip if minimum requirements met
+        # Mark onboarding step 2 complete (don't auto-skip — user must finish all steps)
         try:
             from onboarding.models import OnboardingProgress
-            from brands.models import Workspace
-
             progress, _ = OnboardingProgress.objects.get_or_create(user=self.request.user)
-
-            if progress.needs_onboarding:
-                # Mark step 2 complete
-                if 2 not in progress.completed_steps:
-                    progress.mark_step_completed(2)
-
-                # Check if user has both workspace and brand (minimum requirements)
-                has_workspace = Workspace.objects.filter(owner=self.request.user).exists()
-
-                # If both exist, mark onboarding as skipped so user can proceed
-                if has_workspace and not progress.is_completed and not progress.is_skipped:
-                    progress.is_skipped = True
-                    progress.skipped_at = timezone.now()
-                    progress.save()
+            if progress.needs_onboarding and 2 not in progress.completed_steps:
+                progress.mark_step_completed(2)
         except Exception:
             pass  # Don't fail brand creation if onboarding update fails
 
@@ -3887,3 +3894,149 @@ class TestClaudeAPIView(APIView):
                 'status': 'error',
                 'error': str(e),
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# ===================== MAGIC MODE HISTORY =====================
+
+class MagicHistoryView(APIView):
+    """Full audit trail of all Magic Mode sessions — captions, ideas, images, DNA, trending"""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from brands.models import Brand, ContentIdea, TrendingCache, BrandDNAHistory, PromptHistory
+
+        user = request.user
+
+        # Get user's brands
+        brands = Brand.objects.filter(user=user).order_by('-created_at')
+        brand_ids = list(brands.values_list('id', flat=True))
+
+        # Fetch all data ordered by newest first
+        captions = list(CaptionGeneration.objects.filter(user=user).order_by('-created_at').values(
+            'id', 'input_text', 'generated_caption', 'generated_hashtags', 'tone', 'platform',
+            'tokens_used', 'processing_time', 'model_used', 'status', 'error_message',
+            'custom_instructions', 'created_at',
+        )[:200])
+
+        images = list(ImageGeneration.objects.filter(user=user).order_by('-created_at').values(
+            'id', 'title', 'prompt', 'enhanced_prompt', 'revised_prompt',
+            'generated_image', 'generated_image_with_logo', 'composited_image',
+            'provider', 'model_used', 'processing_time', 'status', 'error_message',
+            'style', 'size', 'quality', 'created_at',
+        )[:200])
+
+        ideas = list(ContentIdea.objects.filter(user=user).order_by('-created_at').values(
+            'id', 'title', 'hook', 'angle', 'platform', 'content_format',
+            'goal', 'status', 'batch_id', 'source', 'trending_topic_ref', 'created_at',
+        )[:200])
+
+        trending = list(TrendingCache.objects.filter(brand_id__in=brand_ids).order_by('-fetched_at').values(
+            'id', 'topic', 'volume_score', 'relevance_explanation', 'platform', 'region', 'fetched_at',
+        )[:100])
+
+        dna_history = list(BrandDNAHistory.objects.filter(brand_id__in=brand_ids).order_by('-generated_at').values(
+            'id', 'brand_id', 'dna_data', 'website_url', 'source', 'is_active', 'generated_at',
+        )[:50])
+
+        prompt_history = list(PromptHistory.objects.filter(brand_id__in=brand_ids).order_by('-created_at').values(
+            'id', 'brand_id', 'feature', 'prompt_text', 'created_at',
+        )[:100])
+
+        # Build brand name map
+        brand_map = {b.id: b.brand_name for b in brands}
+
+        # Group everything into sessions (10-minute windows based on caption/idea creation)
+        # Collect all timestamps
+        all_events = []
+        for c in captions:
+            all_events.append(('caption', c['created_at'], c))
+        for img in images:
+            all_events.append(('image', img['created_at'], img))
+        for idea in ideas:
+            all_events.append(('idea', idea['created_at'], idea))
+        for t in trending:
+            all_events.append(('trending', t['fetched_at'], t))
+        for d in dna_history:
+            all_events.append(('dna', d['generated_at'], d))
+        for p in prompt_history:
+            all_events.append(('prompt', p['created_at'], p))
+
+        # Sort by timestamp desc
+        all_events.sort(key=lambda x: x[1] if x[1] else timezone.now(), reverse=True)
+
+        # Cluster into sessions (15-min gap = new session)
+        sessions = []
+        current_session = None
+        session_gap = timedelta(minutes=15)
+
+        for event_type, ts, data in all_events:
+            if ts is None:
+                continue
+            if current_session is None or (current_session['_last_ts'] - ts) > session_gap:
+                current_session = {
+                    'id': ts.isoformat(),
+                    'date': ts.isoformat(),
+                    'captions': [],
+                    'images': [],
+                    'ideas': [],
+                    'trending_topics': [],
+                    'dna': None,
+                    'prompts': [],
+                    '_last_ts': ts,
+                }
+                sessions.append(current_session)
+            else:
+                current_session['_last_ts'] = ts
+
+            if event_type == 'caption':
+                data['created_at'] = data['created_at'].isoformat() if data['created_at'] else None
+                current_session['captions'].append(data)
+            elif event_type == 'image':
+                data['created_at'] = data['created_at'].isoformat() if data['created_at'] else None
+                # Convert image fields to URLs
+                for field in ('generated_image', 'generated_image_with_logo', 'composited_image'):
+                    if data.get(field):
+                        data[field] = request.build_absolute_uri('/media/' + str(data[field]))
+                    else:
+                        data[field] = None
+                current_session['images'].append(data)
+            elif event_type == 'idea':
+                data['created_at'] = data['created_at'].isoformat() if data['created_at'] else None
+                current_session['ideas'].append(data)
+            elif event_type == 'trending':
+                data['fetched_at'] = data['fetched_at'].isoformat() if data['fetched_at'] else None
+                current_session['trending_topics'].append(data)
+            elif event_type == 'dna':
+                data['generated_at'] = data['generated_at'].isoformat() if data['generated_at'] else None
+                data['brand_name'] = brand_map.get(data.get('brand_id'), '')
+                if current_session['dna'] is None:
+                    current_session['dna'] = data
+            elif event_type == 'prompt':
+                data['created_at'] = data['created_at'].isoformat() if data['created_at'] else None
+                current_session['prompts'].append(data)
+
+        # Add stats and clean up internal fields
+        for s in sessions:
+            s.pop('_last_ts', None)
+            total_tokens = sum(c.get('tokens_used', 0) or 0 for c in s['captions'])
+            total_time = (
+                sum(c.get('processing_time', 0) or 0 for c in s['captions'])
+                + sum(i.get('processing_time', 0) or 0 for i in s['images'])
+            )
+            s['stats'] = {
+                'total_captions': len(s['captions']),
+                'total_images': len(s['images']),
+                'total_ideas': len(s['ideas']),
+                'total_trending': len(s['trending_topics']),
+                'total_tokens': total_tokens,
+                'total_time': round(total_time, 1),
+            }
+            # Brand name from DNA
+            if s['dna']:
+                s['brand_name'] = s['dna'].get('brand_name', '')
+                s['website_url'] = s['dna'].get('website_url', '')
+            else:
+                s['brand_name'] = ''
+                s['website_url'] = ''
+
+        return Response({'sessions': sessions})

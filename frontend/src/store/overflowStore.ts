@@ -101,6 +101,8 @@ interface OverflowState {
   setCreatedPost: (postId: number) => void;
   setSelectedCaptions: (captions: SelectedCaption[]) => void;
   setCaptionMedia: (captionId: string, mediaUrl: string | null, mediaId: number | null) => void;
+  removeIdea: (ideaId: number) => void;
+  removeCaption: (captionId: string) => void;
   complete: () => void;
   skip: () => void;
   reset: () => void;
@@ -221,6 +223,22 @@ export const useOverflowStore = create<OverflowState>()(
         set({ captionMediaMap: map, generatedMediaUrl: firstUrl });
       },
 
+      removeIdea: (ideaId) => {
+        const s = get();
+        set({
+          ideasData: s.ideasData.filter((i) => i.id !== ideaId),
+          selectedIdeaIds: s.selectedIdeaIds.filter((id) => id !== ideaId),
+          selectedCaptions: s.selectedCaptions.filter((c) => c.ideaId !== ideaId),
+        });
+      },
+      removeCaption: (captionId) => {
+        const s = get();
+        const newCaptions = s.selectedCaptions.filter((c) => c.id !== captionId);
+        const newMap = { ...s.captionMediaMap };
+        delete newMap[captionId];
+        set({ selectedCaptions: newCaptions, captionMediaMap: newMap });
+      },
+
       complete: () => {
         set({ isCompleted: true });
         get().saveToServer();
@@ -231,19 +249,22 @@ export const useOverflowStore = create<OverflowState>()(
           await strategyService.skipOverflow();
         } catch { /* ignore */ }
       },
-      reset: () => set({
-        currentStep: 1, subStep: 1, brandId: null,
-        dnaCompleted: false, pillarsCompleted: false,
-        competitorsCompleted: false, trendingCompleted: false,
-        selectedTrendingTopics: [], brandContext: null,
-        ideasData: [], selectedIdeaIds: [], ideaMediaPreferences: {}, ideasUsedPrompt: '', trendingUsedPrompt: '',
-        dnaProvider: '', dnaModelUsed: '', pillarsProvider: '', pillarsModelUsed: '',
-        compProvider: '', compModelUsed: '', trendProvider: '', trendModelUsed: '',
-        ideasProvider: '', ideasModelUsed: '', captionProvider: '', captionModelUsed: '',
-        selectedCaptionIds: [], generatedMediaIds: [], generatedMediaUrl: null,
-        createdPostId: null, selectedCaptions: [], captionMediaMap: {},
-        isCompleted: false, isSkipped: false,
-      }),
+      reset: () => {
+        localStorage.removeItem('overflow_draft_post_ids');
+        set({
+          currentStep: 1, subStep: 1, brandId: null,
+          dnaCompleted: false, pillarsCompleted: false,
+          competitorsCompleted: false, trendingCompleted: false,
+          selectedTrendingTopics: [], brandContext: null,
+          ideasData: [], selectedIdeaIds: [], ideaMediaPreferences: {}, ideasUsedPrompt: '', trendingUsedPrompt: '',
+          dnaProvider: '', dnaModelUsed: '', pillarsProvider: '', pillarsModelUsed: '',
+          compProvider: '', compModelUsed: '', trendProvider: '', trendModelUsed: '',
+          ideasProvider: '', ideasModelUsed: '', captionProvider: '', captionModelUsed: '',
+          selectedCaptionIds: [], generatedMediaIds: [], generatedMediaUrl: null,
+          createdPostId: null, selectedCaptions: [], captionMediaMap: {},
+          isCompleted: false, isSkipped: false,
+        });
+      },
 
       initFromIdeasHub: ({ brandId, idea }) => set({
         currentStep: 3, subStep: 1, brandId,

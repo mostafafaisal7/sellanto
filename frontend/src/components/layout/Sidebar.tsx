@@ -21,6 +21,8 @@ import {
   CalendarDaysIcon,
   ChevronDownIcon,
   ClockIcon,
+  DocumentDuplicateIcon,
+  ArrowPathIcon,
 } from '@heroicons/react/24/outline';
 import { useAuthStore } from '../../store';
 
@@ -56,9 +58,22 @@ const mainNavItems: NavItem[] = [
     ],
   },
   {
+    name: 'Magic Link', href: '/magic', icon: SparklesIcon,
+    children: [
+      { name: 'Magic History', href: '/magic/history', icon: ClockIcon },
+    ],
+  },
+  {
+    name: 'Overflow', href: '/overflow', icon: ArrowPathIcon,
+    children: [
+      { name: 'Overflow History', href: '/overflow/history', icon: ClockIcon },
+    ],
+  },
+  {
     name: 'Create Post', href: '/posts/create', icon: PlusCircleIcon,
     children: [
       { name: 'My Posts', href: '/posts', icon: DocumentTextIcon },
+      { name: 'Draft Posts', href: '/posts/drafts', icon: DocumentDuplicateIcon },
     ],
   },
   { name: 'Calendar', href: '/calendar', icon: CalendarDaysIcon },
@@ -127,7 +142,7 @@ function NavItemWithChildren({ item, onClose }: { item: NavItem; onClose: () => 
                   key={child.name}
                   to={child.href}
                   onClick={onClose}
-                  className={`nav-item pl-11 text-[12.5px] ${isActive ? 'active' : ''}`}
+                  className={`nav-item pl-11 text-[12.5px] !py-[6px] !rounded-[8px] ${isActive ? 'active' : ''}`}
                 >
                   <child.icon className="w-4 h-4" />
                   <span className="flex-1">{child.name}</span>

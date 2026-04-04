@@ -207,6 +207,8 @@ export interface APIUsageLog {
 // POST TYPES
 // ============================================
 
+export type PostSource = 'manual' | 'magic' | 'overflow';
+
 export interface Post {
   id: number;
   user: number;
@@ -217,6 +219,8 @@ export interface Post {
   timezone: string;
   platforms: PlatformType[];
   status: PostStatus;
+  source?: PostSource;
+  hook?: string;
   // Platform-specific post IDs
   facebook_post_id?: string;
   twitter_post_id?: string;
@@ -256,11 +260,14 @@ export interface CreatePostData {
   caption: string;
   media_files: File[];
   platforms: PlatformType[];
-  scheduled_time: string;
-  timezone: string;
+  scheduled_time?: string;
+  timezone?: string;
   brand?: number;
   pillar?: number;
   goal?: string;
+  source?: PostSource;
+  status?: PostStatus;
+  hook?: string;
 }
 
 export interface UpdatePostData {
@@ -1005,6 +1012,7 @@ export interface PaginatedResponse<T> {
 export interface PostFilters {
   status?: PostStatus;
   platform?: PlatformType;
+  source?: PostSource;
   search?: string;
   page?: number;
   page_size?: number;

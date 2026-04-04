@@ -26,12 +26,16 @@ import {
   EyeIcon,
   XMarkIcon,
   CloudArrowUpIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline';
 import { useOverflowStore } from '../store';
 import strategyService from '../services/strategyService';
 import captionService from '../services/captionService';
 import { imageService } from '../services/imageService';
 import postService from '../services/postService';
+import calendarService from '../services/calendarService';
 import api, { authFetch } from '../services/api';
 import type { ContentIdea, TrendingTopic, PlatformType } from '../types';
 import { PromptInfoButton } from '../components/ui/PromptInfoButton';
@@ -80,6 +84,34 @@ function formatModel(m?: string): string {
   return parts.join(' ').replace(/\b\w/g, c => c.toUpperCase()).replace(/\s+/g, ' ').trim();
 }
 
+// ─── Delete Confirm Popup ────────────────────────────────
+function DeleteConfirmPopup({ isOpen, itemName, onConfirm, onCancel }: {
+  isOpen: boolean; itemName: string; onConfirm: () => void; onCancel: () => void;
+}) {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onCancel}>
+      <div className="card w-full max-w-sm mx-4 p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center flex-shrink-0">
+            <ExclamationTriangleIcon className="w-5 h-5 text-red-400" />
+          </div>
+          <div>
+            <h3 className="text-sm font-semibold text-text-primary">Delete this {itemName}?</h3>
+            <p className="text-xs text-text-muted mt-0.5">This action cannot be undone.</p>
+          </div>
+        </div>
+        <div className="flex items-center justify-end gap-3">
+          <button onClick={onCancel} className="btn-secondary text-sm">Cancel</button>
+          <button onClick={onConfirm} className="px-4 py-2 rounded-lg text-sm font-medium bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors">
+            Yes, delete
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Component ──────────────────────────────────────
 export function OverflowPage() {
   const navigate = useNavigate();
@@ -88,17 +120,36 @@ export function OverflowPage() {
 
   const [brandId, setBrandIdLocal] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showResumePrompt, setShowResumePrompt] = useState(false);
+  const [resumeStep, setResumeStep] = useState(1);
+
+  const doFreshStart = useCallback(() => {
+    localStorage.removeItem('overflow_selected_caption');
+    localStorage.removeItem('overflow_caption_groups');
+    localStorage.removeItem('overflow_has_upload');
+    overflow.reset();
+  }, [overflow]);
 
   // Fresh start on normal visit; skip reset if coming from Ideas Hub
   useEffect(() => {
     const fromIdeas = (location.state as any)?.fromIdeas === true;
 
+    // Read persisted step directly from localStorage (store may not be rehydrated yet)
+    let persistedStep = 1;
+    try {
+      const saved = JSON.parse(localStorage.getItem('overflow-storage') || '{}');
+      persistedStep = saved?.state?.currentStep || 1;
+    } catch { /* ignore */ }
+
     if (!fromIdeas) {
-      // Normal entry — full reset and fresh start
-      overflow.reset();
-      localStorage.removeItem('overflow_selected_caption');
-      localStorage.removeItem('overflow_caption_groups');
-      localStorage.removeItem('overflow_has_upload');
+      const hasProgress = persistedStep > 1;
+      if (hasProgress) {
+        setResumeStep(persistedStep);
+        setShowResumePrompt(true);
+        // Don't reset — wait for user choice
+      } else {
+        doFreshStart();
+      }
     }
 
     const init = async () => {
@@ -108,7 +159,7 @@ export function OverflowPage() {
         if (brands.length > 0) {
           const primary = brands.find((b: any) => b.is_primary) || brands[0];
           setBrandIdLocal(primary.id);
-          if (!fromIdeas) {
+          if (!fromIdeas && persistedStep <= 1) {
             overflow.setBrandId(primary.id);
           }
         }
@@ -117,6 +168,22 @@ export function OverflowPage() {
     };
     init();
   }, []);
+
+  const handleResume = () => {
+    setShowResumePrompt(false);
+  };
+
+  const handleStartFresh = () => {
+    setShowResumePrompt(false);
+    localStorage.removeItem('overflow_selected_caption');
+    localStorage.removeItem('overflow_caption_groups');
+    localStorage.removeItem('overflow_has_upload');
+    overflow.reset();
+    // Restore brandId so Step 1 components work immediately
+    if (brandId) {
+      overflow.setBrandId(brandId);
+    }
+  };
 
   const handleSkip = async () => {
     await overflow.skip();
@@ -162,8 +229,64 @@ export function OverflowPage() {
     );
   }
 
+  const stepNames: Record<number, string> = {
+    1: 'Strategy', 2: 'Ideas', 3: 'Captions', 4: 'Media', 5: 'Post', 6: 'Calendar',
+  };
+
   return (
     <div className="max-w-5xl mx-auto space-y-6">
+      {/* Resume Prompt */}
+      {showResumePrompt && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center px-4"
+          style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }}
+        >
+          <div
+            className="w-full max-w-[440px] rounded-[24px] overflow-hidden scale-in"
+            style={{
+              background: 'rgb(var(--c-bg-elevated))',
+              border: '1px solid var(--border-color)',
+              boxShadow: '0 25px 60px rgba(0,0,0,0.5)',
+            }}
+          >
+            <div className="p-8 text-center">
+              <div className="text-[48px] mb-4">🔄</div>
+              <h3 className="text-[22px] font-extrabold text-text-primary mb-2">Welcome back!</h3>
+              <p className="text-[14px] text-text-secondary leading-relaxed mb-2">
+                You were on <span className="font-bold text-text-primary">Step {resumeStep}: {stepNames[resumeStep]}</span> last time.
+              </p>
+              <p className="text-[14px] text-text-secondary mb-8">
+                Pick up where you left off, or start fresh?
+              </p>
+
+              <div className="flex flex-col gap-3">
+                <button
+                  onClick={handleResume}
+                  className="w-full py-3.5 rounded-[14px] text-[15px] font-bold text-white transition-all"
+                  style={{
+                    background: 'linear-gradient(135deg, rgb(var(--c-coral)), rgb(var(--c-coral-hover)))',
+                    boxShadow: 'var(--shadow-glow-coral)',
+                  }}
+                >
+                  Resume from Step {resumeStep}: {stepNames[resumeStep]}
+                </button>
+                <button
+                  onClick={handleStartFresh}
+                  className="w-full py-3.5 rounded-[14px] text-[15px] font-semibold transition-all"
+                  style={{
+                    background: 'rgba(255,255,255,0.06)',
+                    border: '1px solid var(--border-color)',
+                    color: 'rgb(var(--c-text-secondary))',
+                  }}
+                >
+                  Start Fresh
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -1655,6 +1778,7 @@ function IdeasStep({ brandId }: { brandId: number | null }) {
   );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
   const ideasUsedPrompt = overflow.ideasUsedPrompt;
   const [ideasRegenerating, setIdeasRegenerating] = useState(false);
   const ideasHistory = usePromptHistory(brandId, 'ideas');
@@ -1776,8 +1900,15 @@ function IdeasStep({ brandId }: { brandId: number | null }) {
                   </div>
                 )}
                 {/* Idea summary */}
-                <div className="p-4">
-                  <h4 className="font-semibold text-sm">{idea.title}</h4>
+                <div className="p-4 relative">
+                  <button
+                    onClick={() => setDeleteConfirmId(idea.id)}
+                    className="absolute top-3 right-3 p-1.5 rounded-lg text-red-400/60 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                    title="Delete idea"
+                  >
+                    <TrashIcon className="w-3.5 h-3.5" />
+                  </button>
+                  <h4 className="font-semibold text-sm pr-8">{idea.title}</h4>
                   <p className="text-xs text-white mt-1">{idea.hook}</p>
                   {idea.angle && <p className="text-xs text-white/70 mt-0.5 italic">Angle: {idea.angle}</p>}
                   <div className="flex flex-wrap items-center gap-2 mt-2">
@@ -1790,6 +1921,19 @@ function IdeasStep({ brandId }: { brandId: number | null }) {
           })}
         </div>
       )}
+
+      <DeleteConfirmPopup
+        isOpen={deleteConfirmId !== null}
+        itemName="idea"
+        onCancel={() => setDeleteConfirmId(null)}
+        onConfirm={() => {
+          if (deleteConfirmId !== null) {
+            overflow.removeIdea(deleteConfirmId);
+            setIdeas((prev) => prev.filter((i) => i.id !== deleteConfirmId));
+            setDeleteConfirmId(null);
+          }
+        }}
+      />
     </div>
   );
 }
@@ -1799,6 +1943,7 @@ function IdeasStep({ brandId }: { brandId: number | null }) {
 // ═══════════════════════════════════════════════════════════
 function CaptionsStep() {
   const overflow = useOverflowStore();
+  const [deleteConfirmCaption, setDeleteConfirmCaption] = useState<{ ideaId: number; captionId: string } | null>(null);
   // Restore saved captions from localStorage so back/forward doesn't re-generate
   const [captionGroups, setCaptionGroups] = useState<Record<number, CaptionVariant[]>>(() => {
     try {
@@ -2099,6 +2244,13 @@ Output the caption ONLY — no labels, no preamble, no explanation.${customInstr
                       </div>
                       <p className="text-white whitespace-pre-wrap leading-relaxed mt-0.5">{caption.text}</p>
                     </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setDeleteConfirmCaption({ ideaId, captionId: caption.id }); }}
+                      className="p-1.5 rounded-lg text-red-400/60 hover:text-red-400 hover:bg-red-500/10 transition-colors flex-shrink-0"
+                      title="Delete caption"
+                    >
+                      <TrashIcon className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 </div>
               ))}
@@ -2176,6 +2328,30 @@ Output the caption ONLY — no labels, no preamble, no explanation.${customInstr
           </div>
         </div>
       )}
+
+      <DeleteConfirmPopup
+        isOpen={deleteConfirmCaption !== null}
+        itemName="caption"
+        onCancel={() => setDeleteConfirmCaption(null)}
+        onConfirm={() => {
+          if (deleteConfirmCaption) {
+            const { ideaId, captionId } = deleteConfirmCaption;
+            // Remove from local captionGroups
+            setCaptionGroups((prev) => {
+              const group = prev[ideaId]?.filter((c) => c.id !== captionId) || [];
+              if (group.length === 0) {
+                const next = { ...prev };
+                delete next[ideaId];
+                return next;
+              }
+              return { ...prev, [ideaId]: group };
+            });
+            // Remove from store if it was selected
+            overflow.removeCaption(captionId);
+            setDeleteConfirmCaption(null);
+          }
+        }}
+      />
     </div>
   );
 }
@@ -2185,6 +2361,7 @@ Output the caption ONLY — no labels, no preamble, no explanation.${customInstr
 // ═══════════════════════════════════════════════════════════
 function MediaStep() {
   const overflow = useOverflowStore();
+  const [deleteConfirmCaption, setDeleteConfirmCaption] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [modes, setModes] = useState<Record<string, 'upload' | 'generate'>>({});
   const [prompts, setPrompts] = useState<Record<string, string>>({});
@@ -2584,36 +2761,45 @@ function MediaStep() {
         return (
           <div key={cap.id} className="card overflow-hidden">
             {/* Accordion Header */}
-            <button
-              onClick={() => setExpandedId(isExpanded ? null : cap.id)}
-              className="w-full flex items-center gap-3 p-4 hover:bg-white/5 transition-colors text-left"
-            >
-              {/* Thumbnail / status */}
-              <div className={`w-12 h-12 rounded-lg flex-shrink-0 flex items-center justify-center border ${
-                mediaUrl ? 'border-green-500/30' : 'border-white/10 bg-white/5'
-              }`}>
-                {mediaUrl ? (
-                  <img src={mediaUrl} alt="" className="w-full h-full rounded-lg object-cover" />
-                ) : (
-                  <PhotoIcon className="w-5 h-5 text-text-muted" />
-                )}
-              </div>
-
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-text-muted">Post {idx + 1}</span>
-                  {idea && <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary-500/10 text-primary-400 truncate">{idea.title}</span>}
+            <div className="flex items-center">
+              <button
+                onClick={() => setExpandedId(isExpanded ? null : cap.id)}
+                className="flex-1 flex items-center gap-3 p-4 hover:bg-white/5 transition-colors text-left"
+              >
+                {/* Thumbnail / status */}
+                <div className={`w-12 h-12 rounded-lg flex-shrink-0 flex items-center justify-center border ${
+                  mediaUrl ? 'border-green-500/30' : 'border-white/10 bg-white/5'
+                }`}>
                   {mediaUrl ? (
-                    <CheckCircleIcon className="w-4 h-4 text-green-400 flex-shrink-0" />
+                    <img src={mediaUrl} alt="" className="w-full h-full rounded-lg object-cover" />
                   ) : (
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-yellow-500/10 text-yellow-400">Needs media</span>
+                    <PhotoIcon className="w-5 h-5 text-text-muted" />
                   )}
                 </div>
-                <p className="text-xs text-white mt-0.5 truncate">{cap.text.substring(0, 80)}...</p>
-              </div>
 
-              <ChevronDownIcon className={`w-4 h-4 text-text-muted transition-transform flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`} />
-            </button>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-text-muted">Post {idx + 1}</span>
+                    {idea && <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary-500/10 text-primary-400 truncate">{idea.title}</span>}
+                    {mediaUrl ? (
+                      <CheckCircleIcon className="w-4 h-4 text-green-400 flex-shrink-0" />
+                    ) : (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-yellow-500/10 text-yellow-400">Needs media</span>
+                    )}
+                  </div>
+                  <p className="text-xs text-white mt-0.5 truncate">{cap.text.substring(0, 80)}...</p>
+                </div>
+
+                <ChevronDownIcon className={`w-4 h-4 text-text-muted transition-transform flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`} />
+              </button>
+              <button
+                onClick={() => setDeleteConfirmCaption(cap.id)}
+                className="p-2 mr-2 rounded-lg text-red-400/60 hover:text-red-400 hover:bg-red-500/10 transition-colors flex-shrink-0"
+                title="Delete this entry"
+              >
+                <TrashIcon className="w-3.5 h-3.5" />
+              </button>
+            </div>
 
             {/* Accordion Body */}
             {isExpanded && (
@@ -3133,6 +3319,18 @@ function MediaStep() {
           />
         </div>
       )}
+
+      <DeleteConfirmPopup
+        isOpen={deleteConfirmCaption !== null}
+        itemName="caption & media"
+        onCancel={() => setDeleteConfirmCaption(null)}
+        onConfirm={() => {
+          if (deleteConfirmCaption) {
+            overflow.removeCaption(deleteConfirmCaption);
+            setDeleteConfirmCaption(null);
+          }
+        }}
+      />
     </div>
   );
 }
@@ -3143,6 +3341,7 @@ function MediaStep() {
 function CreatePostStep({ brandId }: { brandId: number | null }) {
   const overflow = useOverflowStore();
   const captions = overflow.selectedCaptions;
+  const [deleteConfirmPost, setDeleteConfirmPost] = useState<{ captionId: string; postId?: number } | null>(null);
 
   // Shared settings
   const [platforms, setPlatforms] = useState<PlatformType[]>(['instagram']);
@@ -3158,6 +3357,7 @@ function CreatePostStep({ brandId }: { brandId: number | null }) {
   const [postErrors, setPostErrors] = useState<Record<string, string | null>>({});
   const [expandedPost, setExpandedPost] = useState<string | null>(null);
   const [creatingAll, setCreatingAll] = useState(false);
+  const draftPostIds = useRef<Record<string, number>>({});
 
   // Init captions text + date
   useEffect(() => {
@@ -3168,6 +3368,47 @@ function CreatePostStep({ brandId }: { brandId: number | null }) {
     tomorrow.setDate(tomorrow.getDate() + 1);
     setScheduledDate(tomorrow.toISOString().split('T')[0]);
     if (captions.length > 0) setExpandedPost(captions[0].id);
+  }, []);
+
+  // Auto-save all captions as drafts on mount
+  useEffect(() => {
+    const saved: Record<string, number> = JSON.parse(localStorage.getItem('overflow_draft_post_ids') || '{}');
+    draftPostIds.current = saved;
+
+    const autoSaveDrafts = async () => {
+      for (const cap of captions) {
+        if (saved[cap.id]) continue; // already saved as draft
+        try {
+          const captionText = cap.text?.trim();
+          if (!captionText) continue;
+
+          const mediaFiles: File[] = [];
+          const rawUrl = overflow.captionMediaMap[cap.id]?.mediaUrl;
+          const mediaUrl = rawUrl ? (rawUrl.startsWith('http') || rawUrl.startsWith('blob:') || rawUrl.startsWith('/media/') ? rawUrl : `/media/${rawUrl}`) : null;
+          if (mediaUrl) {
+            try {
+              const res = await fetch(mediaUrl);
+              const blob = await res.blob();
+              const ext = mediaUrl.split('.').pop()?.split('?')[0] || 'png';
+              mediaFiles.push(new File([blob], `generated-image.${ext}`, { type: blob.type || 'image/png' }));
+            } catch { /* skip media */ }
+          }
+
+          const idea = overflow.ideasData.find((i) => i.id === cap.ideaId);
+          const post = await postService.create({
+            caption: captionText,
+            media_files: mediaFiles,
+            platforms: ['instagram'],
+            source: 'overflow',
+            status: 'draft',
+            hook: idea?.title || '',
+          });
+          draftPostIds.current[cap.id] = post.id;
+        } catch { /* silent */ }
+      }
+      localStorage.setItem('overflow_draft_post_ids', JSON.stringify(draftPostIds.current));
+    };
+    autoSaveDrafts();
   }, []);
 
   const togglePlatform = (p: PlatformType) => {
@@ -3201,6 +3442,14 @@ function CreatePostStep({ brandId }: { brandId: number | null }) {
     setPostErrors((p) => ({ ...p, [captionId]: null }));
 
     try {
+      // Delete existing draft before creating scheduled post
+      const draftId = draftPostIds.current[captionId];
+      if (draftId) {
+        try { await postService.delete(draftId); } catch { /* ignore */ }
+        delete draftPostIds.current[captionId];
+        localStorage.setItem('overflow_draft_post_ids', JSON.stringify(draftPostIds.current));
+      }
+
       const mediaFiles: File[] = [];
       const mediaUrl = toMediaUrl(overflow.captionMediaMap[captionId]?.mediaUrl);
       if (mediaUrl) {
@@ -3218,6 +3467,7 @@ function CreatePostStep({ brandId }: { brandId: number | null }) {
         platforms,
         scheduled_time: getScheduledISO(),
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        source: 'overflow',
         ...(brandId ? { brand: brandId } : {}),
       });
       setCreatedPosts((p) => ({ ...p, [captionId]: post.id }));
@@ -3324,31 +3574,40 @@ function CreatePostStep({ brandId }: { brandId: number | null }) {
         return (
           <div key={cap.id} className={`card overflow-hidden ${isCreated ? 'ring-1 ring-green-500/30' : ''}`}>
             {/* Header */}
-            <button
-              onClick={() => setExpandedPost(isExpanded ? null : cap.id)}
-              className="w-full flex items-center gap-3 p-4 hover:bg-white/5 transition-colors text-left"
-            >
-              {mediaUrl ? (
-                <img src={mediaUrl} alt="" className="w-10 h-10 rounded-lg object-cover flex-shrink-0 border border-white/10" />
-              ) : (
-                <div className="w-10 h-10 rounded-lg bg-white/5 flex items-center justify-center flex-shrink-0 border border-white/10">
-                  <PhotoIcon className="w-4 h-4 text-text-muted" />
+            <div className="flex items-center">
+              <button
+                onClick={() => setExpandedPost(isExpanded ? null : cap.id)}
+                className="flex-1 flex items-center gap-3 p-4 hover:bg-white/5 transition-colors text-left"
+              >
+                {mediaUrl ? (
+                  <img src={mediaUrl} alt="" className="w-10 h-10 rounded-lg object-cover flex-shrink-0 border border-white/10" />
+                ) : (
+                  <div className="w-10 h-10 rounded-lg bg-white/5 flex items-center justify-center flex-shrink-0 border border-white/10">
+                    <PhotoIcon className="w-4 h-4 text-text-muted" />
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-text-muted">Post {idx + 1}</span>
+                    {idea && <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary-500/10 text-primary-400 truncate">{idea.title}</span>}
+                    {isCreated ? (
+                      <CheckCircleIcon className="w-4 h-4 text-green-400 flex-shrink-0" />
+                    ) : (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-yellow-500/10 text-yellow-400">Pending</span>
+                    )}
+                  </div>
+                  <p className="text-xs text-white mt-0.5 truncate">{(postCaptions[cap.id] || cap.text).substring(0, 80)}...</p>
                 </div>
-              )}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-text-muted">Post {idx + 1}</span>
-                  {idea && <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary-500/10 text-primary-400 truncate">{idea.title}</span>}
-                  {isCreated ? (
-                    <CheckCircleIcon className="w-4 h-4 text-green-400 flex-shrink-0" />
-                  ) : (
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-yellow-500/10 text-yellow-400">Pending</span>
-                  )}
-                </div>
-                <p className="text-xs text-white mt-0.5 truncate">{(postCaptions[cap.id] || cap.text).substring(0, 80)}...</p>
-              </div>
-              <ChevronDownIcon className={`w-4 h-4 text-text-muted transition-transform flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`} />
-            </button>
+                <ChevronDownIcon className={`w-4 h-4 text-text-muted transition-transform flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`} />
+              </button>
+              <button
+                onClick={() => setDeleteConfirmPost({ captionId: cap.id, postId: isCreated ? createdPosts[cap.id] : undefined })}
+                className="p-2 mr-2 rounded-lg text-red-400/60 hover:text-red-400 hover:bg-red-500/10 transition-colors flex-shrink-0"
+                title="Delete this post"
+              >
+                <TrashIcon className="w-3.5 h-3.5" />
+              </button>
+            </div>
 
             {/* Body */}
             {isExpanded && (
@@ -3417,6 +3676,34 @@ function CreatePostStep({ brandId }: { brandId: number | null }) {
           {creatingAll ? 'Creating all posts...' : `Create All ${captions.length - createdCount} Posts`}
         </button>
       )}
+
+      <DeleteConfirmPopup
+        isOpen={deleteConfirmPost !== null}
+        itemName="post"
+        onCancel={() => setDeleteConfirmPost(null)}
+        onConfirm={async () => {
+          if (deleteConfirmPost) {
+            const { captionId, postId } = deleteConfirmPost;
+            // If post was already created, delete via API
+            if (postId) {
+              try { await postService.delete(postId); } catch { /* ignore */ }
+              setCreatedPosts((p) => {
+                const next = { ...p };
+                delete next[captionId];
+                return next;
+              });
+            }
+            // Remove from store and local state
+            overflow.removeCaption(captionId);
+            setPostCaptions((p) => {
+              const next = { ...p };
+              delete next[captionId];
+              return next;
+            });
+            setDeleteConfirmPost(null);
+          }
+        }}
+      />
     </div>
   );
 }
@@ -3424,9 +3711,71 @@ function CreatePostStep({ brandId }: { brandId: number | null }) {
 // ═══════════════════════════════════════════════════════════
 // STEP 6 — Calendar
 // ═══════════════════════════════════════════════════════════
+const CAL_PLATFORM_COLORS: Record<string, string> = {
+  twitter: '#1DA1F2', linkedin: '#0A66C2',
+  facebook: '#1877F2', instagram: '#E4405F',
+};
+const CAL_DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+interface CalEvent {
+  id: number; title: string; start: string;
+  platform: string; status: string; color: string;
+}
+
 function CalendarStep() {
   const overflow = useOverflowStore();
   const navigate = useNavigate();
+  const [events, setEvents] = useState<CalEvent[]>([]);
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => { loadEvents(); }, [currentDate]);
+
+  const loadEvents = async () => {
+    setLoading(true);
+    try {
+      const start = getGridStart(currentDate);
+      const end = new Date(start);
+      end.setDate(end.getDate() + 42);
+      const data = await calendarService.getCalendarEvents(start.toISOString(), end.toISOString());
+      setEvents(data);
+    } catch { /* ignore */ }
+    setLoading(false);
+  };
+
+  const getGridStart = (date: Date) => {
+    const d = new Date(date);
+    d.setDate(1);
+    d.setDate(d.getDate() - d.getDay());
+    d.setHours(0, 0, 0, 0);
+    return d;
+  };
+
+  const getDays = () => {
+    const start = getGridStart(currentDate);
+    const days: Date[] = [];
+    for (let i = 0; i < 42; i++) {
+      const d = new Date(start);
+      d.setDate(d.getDate() + i);
+      days.push(d);
+    }
+    return days;
+  };
+
+  const getEventsForDay = (date: Date) =>
+    events.filter((e) => new Date(e.start).toDateString() === date.toDateString());
+
+  const isToday = (d: Date) => d.toDateString() === new Date().toDateString();
+  const isCurrentMonth = (d: Date) => d.getMonth() === currentDate.getMonth();
+
+  const navMonth = (dir: number) => {
+    const d = new Date(currentDate);
+    d.setMonth(d.getMonth() + dir);
+    setCurrentDate(d);
+  };
+
+  const monthLabel = currentDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  const days = getDays();
 
   return (
     <div className="space-y-4">
@@ -3435,34 +3784,95 @@ function CalendarStep() {
           <CalendarDaysIcon className="w-5 h-5 text-blue-400" />
           Content Calendar
         </h3>
-        <p className="text-sm text-white">Your post has been scheduled. You can view it on the full calendar.</p>
+        <p className="text-sm text-text-secondary">Your scheduled posts are shown below.</p>
       </div>
 
-      <div className="card p-12 text-center">
-        {overflow.createdPostId ? (
-          <>
-            <CheckCircleIcon className="w-16 h-16 mx-auto text-green-400 mb-4" />
-            <h3 className="text-xl font-bold mb-2">All Set!</h3>
-            <p className="text-sm text-white mb-6">Your content pipeline is ready. You've set up your strategy, generated ideas, written captions, and scheduled your first post.</p>
-            <div className="flex gap-3 justify-center">
-              <button onClick={() => navigate('/calendar')} className="btn-secondary">
-                View Calendar
-              </button>
-              <button onClick={() => { overflow.complete(); navigate('/'); }} className="btn-primary flex items-center gap-2">
-                <CheckCircleIcon className="w-4 h-4" /> Complete & Go to Dashboard
-              </button>
-            </div>
-          </>
+      {/* Mini Calendar */}
+      <div className="card overflow-hidden">
+        {/* Month nav */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+          <button onClick={() => navMonth(-1)} className="btn-icon p-1">
+            <ChevronLeftIcon className="w-4 h-4" />
+          </button>
+          <span className="text-sm font-semibold">{monthLabel}</span>
+          <button onClick={() => navMonth(1)} className="btn-icon p-1">
+            <ChevronRightIcon className="w-4 h-4" />
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2" style={{ borderColor: 'rgb(var(--c-coral))' }} />
+          </div>
         ) : (
           <>
-            <CalendarDaysIcon className="w-16 h-16 mx-auto text-text-secondary mb-4" />
-            <h3 className="text-lg font-semibold mb-2">No Post Created Yet</h3>
-            <p className="text-sm text-text-secondary mb-6">Go back to Step 5 to create and schedule your first post, or complete the setup now.</p>
-            <button onClick={() => { overflow.complete(); navigate('/'); }} className="btn-primary flex items-center gap-2">
-              <CheckCircleIcon className="w-4 h-4" /> Complete Setup
-            </button>
+            {/* Day headers */}
+            <div className="grid grid-cols-7 border-b border-white/10">
+              {CAL_DAY_NAMES.map((d) => (
+                <div key={d} className="p-1.5 text-center text-[10px] font-medium text-text-muted">{d}</div>
+              ))}
+            </div>
+
+            {/* Day cells */}
+            <div className="grid grid-cols-7">
+              {days.map((day, idx) => {
+                const dayEvents = getEventsForDay(day);
+                return (
+                  <div
+                    key={idx}
+                    className={`min-h-[60px] p-1 border-b border-r border-white/5 ${
+                      !isCurrentMonth(day) ? 'opacity-30' : ''
+                    } ${isToday(day) ? 'bg-primary-500/5' : ''}`}
+                  >
+                    <div className={`text-[10px] font-medium mb-0.5 px-0.5 ${
+                      isToday(day) ? 'text-primary-400' : 'text-text-muted'
+                    }`}>
+                      {day.getDate()}
+                    </div>
+                    <div className="space-y-0.5">
+                      {dayEvents.slice(0, 2).map((ev, eIdx) => (
+                        <div
+                          key={eIdx}
+                          className="text-[9px] px-1 py-0.5 rounded truncate"
+                          style={{
+                            backgroundColor: `${ev.color || CAL_PLATFORM_COLORS[ev.platform] || '#6B7280'}20`,
+                            color: ev.color || CAL_PLATFORM_COLORS[ev.platform] || '#6B7280',
+                            borderLeft: `2px solid ${ev.color || CAL_PLATFORM_COLORS[ev.platform]}`,
+                          }}
+                        >
+                          {ev.title}
+                        </div>
+                      ))}
+                      {dayEvents.length > 2 && (
+                        <div className="text-[9px] text-text-muted px-0.5">+{dayEvents.length - 2}</div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </>
         )}
+      </div>
+
+      {/* Legend */}
+      <div className="flex flex-wrap gap-3 text-[11px] text-text-muted">
+        {Object.entries(CAL_PLATFORM_COLORS).map(([platform, color]) => (
+          <div key={platform} className="flex items-center gap-1">
+            <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: color }} />
+            <span className="capitalize">{platform}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Actions */}
+      <div className="flex gap-3 justify-center pt-2">
+        <button onClick={() => navigate('/calendar')} className="btn-secondary">
+          View Full Calendar
+        </button>
+        <button onClick={() => { overflow.complete(); navigate('/'); }} className="btn-primary flex items-center gap-2">
+          <CheckCircleIcon className="w-4 h-4" /> Complete & Go to Dashboard
+        </button>
       </div>
     </div>
   );

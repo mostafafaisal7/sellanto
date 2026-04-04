@@ -31,7 +31,7 @@ const actions: QuickAction[] = [
   {
     name: 'Setup V2',
     description: 'Brand & strategy',
-    href: '/setup/brand-dna',
+    href: '/overflow',
     icon: RocketLaunchIcon,
     color: 'from-warning to-accent',
   },
