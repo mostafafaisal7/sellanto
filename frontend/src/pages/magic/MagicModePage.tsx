@@ -30,11 +30,20 @@ function mapIndustryToOption(industry: string): string {
 
 export function MagicModePage() {
   const store = useMagicModeStore();
-  const { screen, setScreen, setUrl, setAnswer, setBrandId, setSkipInitialQuestions } = store;
+  const { screen, setScreen, setUrl, setLogoFile, setAnswer, setBrandId, setSkipInitialQuestions } = store;
 
   const [existingBrand, setExistingBrand] = useState<ExistingBrand | null>(null);
   const [showPopup, setShowPopup] = useState(false);
+  const [showResumeWarning, setShowResumeWarning] = useState(false);
   const [checked, setChecked] = useState(false);
+
+  // Show resume warning if pipeline was completed and there are unfinished posts
+  useEffect(() => {
+    if (store.pipelineCompleted && store.generatedPosts.length > 0 && store.screen !== 'results') {
+      setShowResumeWarning(true);
+      setChecked(true);
+    }
+  }, []);
 
   // On mount, check for existing brand with DNA
   useEffect(() => {
@@ -87,10 +96,11 @@ export function MagicModePage() {
     setScreen('url');
   }, [setSkipInitialQuestions, setScreen]);
 
-  const handleURLSubmit = useCallback((url: string) => {
+  const handleURLSubmit = useCallback((url: string, logoFile?: File) => {
     setUrl(url);
+    if (logoFile) setLogoFile(logoFile);
     setScreen('questions');
-  }, [setUrl, setScreen]);
+  }, [setUrl, setLogoFile, setScreen]);
 
   const handleURLSkip = useCallback(() => {
     setUrl('');
@@ -129,6 +139,60 @@ export function MagicModePage() {
     useMagicModeStore.getState().setGeneratedPosts([]);
     setScreen('working');
   }, [setScreen]);
+
+  // Show resume warning for unfinished posts
+  if (showResumeWarning && store.generatedPosts.length > 0) {
+    const unfinished = store.generatedPosts.filter((p) => p.status !== 'published' && p.status !== 'scheduled').length;
+    return (
+      <div
+        className="min-h-screen flex items-center justify-center px-4"
+        style={{ background: 'rgb(var(--c-bg-primary))' }}
+      >
+        <div
+          className="w-full max-w-[460px] rounded-[24px] p-8 scale-in"
+          style={{
+            background: 'rgb(var(--c-bg-elevated))',
+            border: '1px solid var(--border-color)',
+            boxShadow: '0 25px 60px rgba(0,0,0,0.5)',
+          }}
+        >
+          <div className="text-center mb-6">
+            <div className="text-[48px] mb-3">📝</div>
+            <h2 className="text-[24px] font-extrabold text-text-primary mb-2">
+              Unfinished posts found
+            </h2>
+            <p className="text-[15px] text-text-secondary">
+              You have {unfinished} unfinished post{unfinished !== 1 ? 's' : ''} from your last session.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-3">
+            <button
+              onClick={() => { setShowResumeWarning(false); setScreen('results'); }}
+              className="w-full py-3.5 rounded-[14px] text-[15px] font-bold text-white transition-all"
+              style={{
+                background: 'linear-gradient(135deg, rgb(var(--c-coral)), rgb(var(--c-coral-hover)))',
+                boxShadow: 'var(--shadow-glow-coral)',
+              }}
+            >
+              Resume where I left off
+            </button>
+            <button
+              onClick={() => { setShowResumeWarning(false); store.reset(); setScreen('url'); }}
+              className="w-full py-3.5 rounded-[14px] text-[15px] font-semibold transition-all"
+              style={{
+                background: 'rgba(255,255,255,0.06)',
+                border: '1px solid var(--border-color)',
+                color: 'rgb(var(--c-text-secondary))',
+              }}
+            >
+              Start fresh
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Show returning-user popup
   if (showPopup && existingBrand) {

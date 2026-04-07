@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { normalizeUrl, isValidUrl } from '../utils/url';
 import {
   CheckCircleIcon,
   ArrowRightIcon,
@@ -492,10 +493,11 @@ function DNASubStep({ brandId }: { brandId: number | null }) {
 
   const handleGenerate = async () => {
     if (!brandId || !url.trim()) return;
+    if (!isValidUrl(url)) { setError('Please enter a valid website URL (e.g. example.com)'); return; }
     setLoading(true);
     setError(null);
     try {
-      const result = await strategyService.generateDNA(brandId, url.trim());
+      const result = await strategyService.generateDNA(brandId, normalizeUrl(url));
       if (result.brand_dna) {
         setDnaData(result.brand_dna);
         overflow.markDNAComplete();
@@ -512,7 +514,7 @@ function DNASubStep({ brandId }: { brandId: number | null }) {
     if (!brandId || !url.trim()) return;
     setDnaRegenerating(true);
     try {
-      const result = await strategyService.generateDNA(brandId, url.trim(), editedPrompt);
+      const result = await strategyService.generateDNA(brandId, normalizeUrl(url), editedPrompt);
       if (result.brand_dna) {
         setDnaData(result.brand_dna);
         if (result.used_prompt) setDnaUsedPrompt(result.used_prompt);
@@ -555,7 +557,7 @@ function DNASubStep({ brandId }: { brandId: number | null }) {
     setSaving(true);
     setError(null);
     try {
-      const merged = { ...dnaInputs };
+      const merged: Record<string, any> = { ...dnaInputs, website_url: normalizeUrl(dnaInputs.website_url || '') };
       customFields.forEach((cf) => {
         if (cf.key.trim()) {
           merged[cf.key.trim()] = cf.type === 'list'
@@ -633,7 +635,7 @@ function DNASubStep({ brandId }: { brandId: number | null }) {
           Enter your website URL and we'll analyze it to extract your brand's identity, tone, products, values, and more.
         </p>
         <div className="flex gap-3">
-          <input type="url" className="input flex-1" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://your-website.com" />
+          <input type="text" className="input flex-1" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="your-website.com" />
           <button onClick={handleGenerate} disabled={loading || !url.trim()} className="btn-primary flex items-center gap-2 px-6">
             {loading ? <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" /> : <SparklesIcon className="w-4 h-4" />}
             {loading ? 'Generating...' : dnaData ? 'Reanalyze' : 'Generate DNA'}
@@ -774,7 +776,7 @@ function DNASubStep({ brandId }: { brandId: number | null }) {
           {/* Website URL */}
           <div className="card p-5">
             <label className="text-xs font-medium text-text-secondary uppercase tracking-wide">Website URL</label>
-            <input type="url" className="input w-full mt-1" value={dnaInputs.website_url || ''} onChange={(e) => setField('website_url', e.target.value)} />
+            <input type="text" className="input w-full mt-1" value={dnaInputs.website_url || ''} onChange={(e) => setField('website_url', e.target.value)} placeholder="your-website.com" />
           </div>
 
           {/* Save Buttons */}

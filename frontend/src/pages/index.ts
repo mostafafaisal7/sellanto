@@ -33,6 +33,7 @@ export { IdeaHistoryPage } from './IdeaHistoryPage';
 export { ModeSelectPage } from './magic/ModeSelectPage';
 export { MagicModePage } from './magic/MagicModePage';
 export { MagicHistoryPage } from './magic/MagicHistoryPage';
+export { MagicDraftPage } from './magic/MagicDraftPage';
 export { GettingStartedPage } from './GettingStartedPage';
 export { SetupFlowPage } from './SetupFlowPage';
 export { DraftPostsPage } from './DraftPostsPage';

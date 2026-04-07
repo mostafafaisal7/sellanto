@@ -59,10 +59,11 @@ class UserSerializer(serializers.ModelSerializer):
     profile = UserProfileSerializer(read_only=True)
     onboarding_status = serializers.SerializerMethodField()
     overflow_status = serializers.SerializerMethodField()
+    has_brand = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'is_staff', 'profile', 'onboarding_status', 'overflow_status']
+        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'is_staff', 'profile', 'onboarding_status', 'overflow_status', 'has_brand']
         read_only_fields = ['id', 'is_staff']
 
     def get_onboarding_status(self, obj):
@@ -80,6 +81,9 @@ class UserSerializer(serializers.ModelSerializer):
             }
         except Exception:
             return {'is_completed': False, 'current_step': 1}
+
+    def get_has_brand(self, obj):
+        return Brand.objects.filter(workspace__owner=obj).exists()
 
 
 class RegisterSerializer(serializers.Serializer):
@@ -133,13 +137,27 @@ class RegisterWithBrandSerializer(serializers.Serializer):
     brand_name = serializers.CharField(max_length=200)
     industry = serializers.CharField(max_length=200)
     target_region = serializers.CharField(max_length=200)
-    website_url = serializers.URLField(required=False, allow_blank=True)
+    website_url = serializers.CharField(max_length=2000, required=False, allow_blank=True)
     voice_tone = serializers.CharField(max_length=100, required=False, default='professional')
     products_services = serializers.CharField(required=False, allow_blank=True,
         help_text='Comma-separated list of products/services')
     competitors = serializers.ListField(
         child=serializers.DictField(), required=False, default=list,
         help_text='List of competitor objects with platform and handle_or_url')
+
+    def validate_website_url(self, value):
+        if not value:
+            return value
+        value = value.strip()
+        if not value.startswith(('http://', 'https://')):
+            value = f'https://{value}'
+        from django.core.validators import URLValidator
+        from django.core.exceptions import ValidationError as DjangoValidationError
+        try:
+            URLValidator()(value)
+        except DjangoValidationError:
+            raise serializers.ValidationError("Please enter a valid website URL (e.g. example.com)")
+        return value
 
     def validate_username(self, value):
         if User.objects.filter(username=value).exists():
@@ -988,6 +1006,7 @@ class WorkspaceSerializer(serializers.ModelSerializer):
 
 class BrandSerializer(serializers.ModelSerializer):
     """Serializer for Brand model"""
+    website_url = serializers.CharField(max_length=2000, required=False, allow_blank=True, allow_null=True)
 
     class Meta:
         model = Brand
@@ -999,6 +1018,20 @@ class BrandSerializer(serializers.ModelSerializer):
             'is_primary', 'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'brand_dna_generated_at', 'created_at', 'updated_at']
+
+    def validate_website_url(self, value):
+        if not value:
+            return value
+        value = value.strip()
+        if not value.startswith(('http://', 'https://')):
+            value = f'https://{value}'
+        from django.core.validators import URLValidator
+        from django.core.exceptions import ValidationError as DjangoValidationError
+        try:
+            URLValidator()(value)
+        except DjangoValidationError:
+            raise serializers.ValidationError("Please enter a valid website URL")
+        return value
 
 
 class BrandAssetSerializer(serializers.ModelSerializer):
@@ -1155,7 +1188,7 @@ class BrandDNAStatusSerializer(serializers.Serializer):
     """Serializer for Brand DNA status response"""
     brand_id = serializers.IntegerField()
     brand_name = serializers.CharField()
-    website_url = serializers.URLField(allow_blank=True, allow_null=True)
+    website_url = serializers.CharField(allow_blank=True, allow_null=True)
     brand_dna = serializers.DictField()
     brand_dna_generated_at = serializers.DateTimeField(allow_null=True)
     brand_dna_source = serializers.CharField(allow_blank=True)

@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 
 interface URLInputScreenProps {
-  onSubmit: (url: string) => void;
+  onSubmit: (url: string, logoFile?: File) => void;
   onSkip: () => void;
 }
 
@@ -10,11 +10,34 @@ export function URLInputScreen({ onSubmit, onSkip }: URLInputScreenProps) {
   const [loading, setLoading] = useState(false);
   const [showMessage, setShowMessage] = useState(false);
   const [error, setError] = useState('');
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  const handleLogoSelect = (file: File) => {
+    if (!file.type.startsWith('image/')) return;
+    setLogoFile(file);
+    const reader = new FileReader();
+    reader.onload = (e) => setLogoPreview(e.target?.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  const handleLogoDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    if (file) handleLogoSelect(file);
+  };
+
+  const clearLogo = () => {
+    setLogoFile(null);
+    setLogoPreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
 
   const isValidURL = (input: string): boolean => {
     try {
@@ -50,7 +73,7 @@ export function URLInputScreen({ onSubmit, onSkip }: URLInputScreenProps) {
     setShowMessage(true);
     // Brief UX transition so the user sees the analyzing state
     setTimeout(() => {
-      onSubmit(finalUrl);
+      onSubmit(finalUrl, logoFile || undefined);
     }, 400);
   };
 
@@ -73,7 +96,7 @@ export function URLInputScreen({ onSubmit, onSkip }: URLInputScreenProps) {
       <div className="relative w-full max-w-[480px] au3">
         <input
           ref={inputRef}
-          type="url"
+          type="text"
           value={url}
           onChange={(e) => { setUrl(e.target.value); setError(''); }}
           placeholder="https://yourbusiness.com"
@@ -110,6 +133,82 @@ export function URLInputScreen({ onSubmit, onSkip }: URLInputScreenProps) {
             'Analyze →'
           )}
         </button>
+      </div>
+
+      {/* Logo upload (optional) */}
+      <div className="w-full max-w-[480px] mt-5 au3">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/svg+xml"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) handleLogoSelect(file);
+          }}
+        />
+        {logoPreview ? (
+          <div
+            className="flex items-center gap-4 p-4 rounded-[16px] transition-all"
+            style={{
+              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(232,54,79,0.2)',
+            }}
+          >
+            <img
+              src={logoPreview}
+              alt="Logo preview"
+              className="w-12 h-12 rounded-[10px] object-contain"
+              style={{ background: 'rgba(255,255,255,0.06)' }}
+            />
+            <div className="flex-1 min-w-0">
+              <p className="text-[14px] font-semibold text-text-primary truncate">
+                {logoFile?.name}
+              </p>
+              <p className="text-[12px] text-text-muted">
+                {logoFile ? `${(logoFile.size / 1024).toFixed(0)} KB` : ''}
+              </p>
+            </div>
+            <button
+              onClick={clearLogo}
+              className="p-2 rounded-[10px] text-text-muted hover:text-text-primary hover:bg-white/5 transition-colors"
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <path d="M4 4l8 8M12 4l-8 8" />
+              </svg>
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={handleLogoDrop}
+            disabled={loading}
+            className="w-full flex items-center gap-3 p-4 rounded-[16px] text-left transition-all hover:border-[rgba(232,54,79,0.3)]"
+            style={{
+              background: 'rgba(255,255,255,0.02)',
+              border: '1px dashed rgba(255,255,255,0.12)',
+              opacity: loading ? 0.5 : 1,
+            }}
+          >
+            <div
+              className="w-10 h-10 rounded-[10px] flex items-center justify-center flex-shrink-0"
+              style={{ background: 'rgba(232,54,79,0.08)' }}
+            >
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="rgb(var(--c-coral))" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10 4v12M4 10h12" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-[14px] font-semibold text-text-secondary">
+                Brand Logo <span className="text-text-muted font-normal">(Optional)</span>
+              </p>
+              <p className="text-[12px] text-text-muted">
+                Upload your logo to include it in generated images
+              </p>
+            </div>
+          </button>
+        )}
       </div>
 
       {/* Error message */}

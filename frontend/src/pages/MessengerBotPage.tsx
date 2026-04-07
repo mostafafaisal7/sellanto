@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { normalizeUrl, isValidUrl } from '../utils/url';
 import {
   ChatBubbleLeftRightIcon,
   Cog6ToothIcon,
@@ -425,10 +426,14 @@ export function MessengerBotPage() {
       alert('Please enter a website URL.');
       return;
     }
+    if (!isValidUrl(websiteUrlInput)) {
+      alert('Please enter a valid website URL (e.g. example.com)');
+      return;
+    }
     if (!confirm('This will crawl your website and extract knowledge for the AI chatbot. Continue?')) return;
     setCrawlingWebsite(true);
     try {
-      const result = await messengerService.crawlWebsite(selectedConnection.id, websiteUrlInput);
+      const result = await messengerService.crawlWebsite(selectedConnection.id, normalizeUrl(websiteUrlInput));
       if (result.success) {
         alert(result.message || `Website crawled! ${result.pages_crawled} pages, ${result.total_chunks} knowledge chunks.`);
         await fetchWebsiteStatus();
@@ -470,6 +475,7 @@ export function MessengerBotPage() {
     try {
       // Only send consumer_key/secret if user actually entered values
       const payload: Partial<ECommerceSettings> = { ...ecomSettings };
+      if (payload.store_url) payload.store_url = normalizeUrl(payload.store_url);
       if (!payload.consumer_key) delete payload.consumer_key;
       if (!payload.consumer_secret) delete payload.consumer_secret;
       console.log('Saving ecom payload:', payload);
@@ -1268,8 +1274,8 @@ export function MessengerBotPage() {
 
         <div className="flex items-center gap-3 mb-4">
           <input
-            type="url"
-            placeholder="https://yourwebsite.com"
+            type="text"
+            placeholder="yourwebsite.com"
             value={websiteUrlInput}
             onChange={(e) => setWebsiteUrlInput(e.target.value)}
             className="input flex-1"
@@ -1761,10 +1767,10 @@ export function MessengerBotPage() {
                       <div>
                         <label className="text-text-secondary text-sm">Store URL</label>
                         <input
-                          type="url"
+                          type="text"
                           value={ecomSettings.store_url || ''}
                           onChange={(e) => setEcomSettings({ ...ecomSettings, store_url: e.target.value })}
-                          placeholder="https://yourstore.com"
+                          placeholder="yourstore.com"
                           className="input mt-2"
                         />
                       </div>
@@ -2247,7 +2253,7 @@ export function MessengerBotPage() {
                     </div>
                     <div>
                       <label className="text-text-secondary text-sm mb-2 block">Website URL (Optional)</label>
-                      <input type="url" value={connectForm.website_url} onChange={(e) => setConnectForm({ ...connectForm, website_url: e.target.value })} placeholder="https://yourwebsite.com" className="input" />
+                      <input type="text" value={connectForm.website_url} onChange={(e) => setConnectForm({ ...connectForm, website_url: e.target.value })} placeholder="yourwebsite.com" className="input" />
                       <p className="text-text-muted text-xs mt-1">Your business website - AI will extract knowledge from it</p>
                     </div>
                   </div>
@@ -2437,7 +2443,7 @@ export function MessengerBotPage() {
                             page_id: connectForm.page_id,
                             page_access_token: connectForm.page_access_token,
                             greeting_text: connectForm.greeting_text,
-                            website_url: connectForm.website_url || undefined,
+                            website_url: normalizeUrl(connectForm.website_url) || undefined,
                           });
                           await messengerService.createOrUpdateConfig(connection.id, {
                             openai_api_key: connectForm.openai_api_key,
@@ -2464,7 +2470,7 @@ export function MessengerBotPage() {
                           // Crawl website if URL provided
                           if (connectForm.website_url) {
                             try {
-                              await messengerService.crawlWebsite(connection.id, connectForm.website_url);
+                              await messengerService.crawlWebsite(connection.id, normalizeUrl(connectForm.website_url));
                             } catch (crawlErr) {
                               console.warn('Website crawl failed (can retry later):', crawlErr);
                             }

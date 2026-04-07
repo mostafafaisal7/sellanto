@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { normalizeUrl, isValidUrl } from '../utils/url';
 import {
   BuildingOfficeIcon,
   SparklesIcon,
@@ -164,6 +165,10 @@ function BrandStep({ workspaceId, existingBrand, onNext }: { workspaceId: number
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (form.website_url && !isValidUrl(form.website_url)) {
+      setError('Please enter a valid website URL (e.g. example.com)');
+      return;
+    }
     setLoading(true);
     setError('');
     try {
@@ -182,6 +187,7 @@ function BrandStep({ workspaceId, existingBrand, onNext }: { workspaceId: number
 
       const brandData = {
         ...form,
+        website_url: normalizeUrl(form.website_url),
         workspace: workspaceId,
         goals,
         audiences,
@@ -239,7 +245,7 @@ function BrandStep({ workspaceId, existingBrand, onNext }: { workspaceId: number
         </div>
         <div>
           <label className="block text-sm font-medium text-text-secondary mb-2">Website URL</label>
-          <input type="url" value={form.website_url} onChange={(e) => setForm({ ...form, website_url: e.target.value })} placeholder="https://yourbrand.com" className="input w-full" />
+          <input type="text" value={form.website_url} onChange={(e) => setForm({ ...form, website_url: e.target.value })} placeholder="yourbrand.com" className="input w-full" />
         </div>
       </div>
 

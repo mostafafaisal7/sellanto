@@ -8,11 +8,14 @@ export interface MagicPost {
   imageOverlay: string;
   imageStyle: string;
   caption: string;
-  status: 'ready' | 'approved';
+  status: 'ready' | 'approved' | 'published' | 'scheduled';
   feedback?: Record<string, string>;
   imageUrl?: string;
   captionId?: number;
   ideaId?: number;
+  scheduledTime?: string;
+  approvedPlatforms?: string[];
+  platformCaptions?: Record<string, string>;
 }
 
 export interface MagicIdeaData {
@@ -43,6 +46,9 @@ interface MagicModeState {
   loading: boolean;
   error: string | null;
 
+  // Logo (not persisted — File objects can't be serialized)
+  logoFile: File | null;
+
   // Intermediate pipeline data (for Overflow bridge)
   trendingTopics: string[];
   ideasData: MagicIdeaData[];
@@ -51,6 +57,7 @@ interface MagicModeState {
 
   setScreen: (screen: MagicModeState['screen']) => void;
   setUrl: (url: string) => void;
+  setLogoFile: (file: File | null) => void;
   setAnswer: (questionId: string, answer: string | string[]) => void;
   setGeneratedPosts: (posts: MagicPost[]) => void;
   approvePost: (id: number) => void;
@@ -83,6 +90,7 @@ export const useMagicModeStore = create<MagicModeState>()(
       skipInitialQuestions: false,
       loading: false,
       error: null,
+      logoFile: null,
       trendingTopics: [],
       ideasData: [],
       captionsData: [],
@@ -90,6 +98,7 @@ export const useMagicModeStore = create<MagicModeState>()(
 
       setScreen: (screen) => set({ screen }),
       setUrl: (websiteUrl) => set({ websiteUrl }),
+      setLogoFile: (logoFile) => set({ logoFile }),
       setAnswer: (questionId, answer) =>
         set((state) => ({ answers: { ...state.answers, [questionId]: answer } })),
       setGeneratedPosts: (generatedPosts) => set({ generatedPosts }),
@@ -137,6 +146,7 @@ export const useMagicModeStore = create<MagicModeState>()(
           feedbackModal: null,
           postCount: 2,
           brandId: null,
+          logoFile: null,
           skipInitialQuestions: false,
           loading: false,
           error: null,

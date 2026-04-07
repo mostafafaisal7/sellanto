@@ -148,6 +148,7 @@ export interface User {
   profile: UserProfile;
   onboarding_status?: OnboardingStatus;
   overflow_status?: OverflowStatus;
+  has_brand?: boolean;
 }
 
 export interface UserProfile {

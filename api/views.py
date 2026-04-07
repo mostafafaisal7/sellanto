@@ -139,13 +139,6 @@ class RegisterView(generics.CreateAPIView):
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
 
-        # Skip onboarding so user lands on dashboard, not /business-profile
-        try:
-            progress = OnboardingProgress.objects.get(user=user)
-            progress.skip_onboarding()
-        except OnboardingProgress.DoesNotExist:
-            pass
-
         # Generate JWT tokens so user is logged in immediately
         refresh = RefreshToken.for_user(user)
 

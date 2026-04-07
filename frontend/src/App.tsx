@@ -35,6 +35,7 @@ import {
   ModeSelectPage,
   MagicModePage,
   MagicHistoryPage,
+  MagicDraftPage,
   GettingStartedPage,
   SetupFlowPage,
   DraftPostsPage,
@@ -72,6 +73,11 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
   // Force onboarding for first-time users
   if (user?.onboarding_status?.needs_onboarding && location.pathname !== '/onboarding') {
+    return <Navigate to="/onboarding" replace />;
+  }
+
+  // Force onboarding if user has no brand (business profile empty)
+  if (user && user.has_brand === false && location.pathname !== '/onboarding') {
     return <Navigate to="/onboarding" replace />;
   }
 
@@ -213,6 +219,7 @@ function App() {
           <Route path="/getting-started" element={<GettingStartedPage />} />
           <Route path="/setup/*" element={<SetupFlowPage />} />
           <Route path="/magic/history" element={<MagicHistoryPage />} />
+          <Route path="/magic/draft" element={<MagicDraftPage />} />
 
           {/* Dev / Test */}
           <Route path="/test-api" element={<APITestPage />} />

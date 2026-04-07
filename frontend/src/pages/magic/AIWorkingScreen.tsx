@@ -77,6 +77,29 @@ export function AIWorkingScreen({ onComplete, onStop }: AIWorkingScreenProps) {
       }
       if (cancelledRef.current) return;
 
+      // Upload logo if provided (non-blocking — best effort)
+      let brandLogoId: number | null = null;
+      if (store.logoFile) {
+        try {
+          // 1. PATCH brand with logo
+          const logoForm = new FormData();
+          logoForm.append('logo', store.logoFile);
+          await api.patch(`/brands/${brandId}/`, logoForm);
+
+          // 2. Create BrandAsset for image generation
+          const assetForm = new FormData();
+          assetForm.append('brand', String(brandId));
+          assetForm.append('file', store.logoFile);
+          assetForm.append('asset_type', 'logo');
+          assetForm.append('name', 'Brand Logo');
+          const assetRes = await api.post('/brand-assets/', assetForm);
+          brandLogoId = assetRes.data?.id || null;
+        } catch {
+          // Non-fatal — continue without logo
+        }
+      }
+      if (cancelledRef.current) return;
+
       // Step 1: Generate DNA (if URL provided)
       setStep(1);
       if (store.websiteUrl) {
@@ -203,14 +226,18 @@ export function AIWorkingScreen({ onComplete, onStop }: AIWorkingScreenProps) {
         if (cancelledRef.current) return;
         try {
           const post = posts[i];
-          const imgResult = await imageService.generate({
+          const imgReq: Parameters<typeof imageService.generate>[0] = {
             prompt: `Create a professional social media image for: "${post.title}". ${post.imageStyle}`,
             title: post.title,
-            // provider: 'openai',  // OpenAI billing limit reached
             provider: 'gemini',
             style: 'modern',
             enhance_prompt: true,
-          });
+          };
+          if (brandLogoId) {
+            imgReq.brand_logo_id = brandLogoId;
+            imgReq.logo_position = 'bottom_right';
+          }
+          const imgResult = await imageService.generate(imgReq);
           const imgUrl = imgResult.generated_image_with_logo || imgResult.generated_image || imgResult.composited_image;
           if (imgUrl) {
             posts[i] = { ...post, imageUrl: imgUrl };

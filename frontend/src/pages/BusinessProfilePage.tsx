@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { normalizeUrl, isValidUrl } from '../utils/url';
 import {
   BuildingOfficeIcon,
   SparklesIcon,
@@ -117,10 +118,15 @@ export function BusinessProfilePage() {
       alert('Create a workspace first');
       return;
     }
+    if (brandForm.website_url && !isValidUrl(brandForm.website_url)) {
+      alert('Please enter a valid website URL (e.g. example.com)');
+      return;
+    }
     setBrandSubmitting(true);
     try {
       await onboardingService.createBrand({
         ...brandForm,
+        website_url: normalizeUrl(brandForm.website_url),
         workspace: workspaces[0].id,
         goals: brandGoals,
         audiences: brandAudiences,
@@ -301,7 +307,7 @@ export function BusinessProfilePage() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-text-secondary mb-2">Website URL</label>
-                  <input type="url" value={brandForm.website_url} onChange={(e) => setBrandForm({ ...brandForm, website_url: e.target.value })} placeholder="https://yourbrand.com" className="input w-full" />
+                  <input type="text" value={brandForm.website_url} onChange={(e) => setBrandForm({ ...brandForm, website_url: e.target.value })} placeholder="yourbrand.com" className="input w-full" />
                 </div>
               </div>
 
@@ -541,7 +547,7 @@ export function BusinessProfilePage() {
               <input type="text" value={brandForm.brand_name} onChange={(e) => setBrandForm({ ...brandForm, brand_name: e.target.value })} placeholder="Brand name" className="input" required />
               <input type="text" value={brandForm.industry} onChange={(e) => setBrandForm({ ...brandForm, industry: e.target.value })} placeholder="Industry" className="input" required />
               <input type="text" value={brandForm.target_region} onChange={(e) => setBrandForm({ ...brandForm, target_region: e.target.value })} placeholder="Target region" className="input" required />
-              <input type="url" value={brandForm.website_url} onChange={(e) => setBrandForm({ ...brandForm, website_url: e.target.value })} placeholder="Website URL" className="input" />
+              <input type="text" value={brandForm.website_url} onChange={(e) => setBrandForm({ ...brandForm, website_url: e.target.value })} placeholder="yourbrand.com" className="input" />
             </div>
             <select value={brandForm.voice_tone} onChange={(e) => setBrandForm({ ...brandForm, voice_tone: e.target.value })} className="input w-full md:w-48">
               <option value="professional">Professional</option>
