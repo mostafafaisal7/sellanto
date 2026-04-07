@@ -7,10 +7,6 @@ import {
   DocumentTextIcon,
   LinkIcon,
   SparklesIcon,
-  PhotoIcon,
-  VideoCameraIcon,
-  SpeakerWaveIcon,
-  ChatBubbleBottomCenterTextIcon,
   UserIcon,
   Cog6ToothIcon,
   XMarkIcon,
@@ -70,23 +66,15 @@ const mainNavItems: NavItem[] = [
     ],
   },
   {
-    name: 'Create Post', href: '/posts/create', icon: PlusCircleIcon,
+    name: 'Post', href: '#posts', icon: DocumentTextIcon,
     children: [
-      { name: 'My Posts', href: '/posts', icon: DocumentTextIcon },
-      { name: 'Draft Posts', href: '/posts/drafts', icon: DocumentDuplicateIcon },
+      { name: 'All Post', href: '/posts', icon: DocumentTextIcon },
+      { name: 'Post', href: '/posts/create', icon: PlusCircleIcon },
+      { name: 'Draft Post', href: '/posts/drafts', icon: DocumentDuplicateIcon },
     ],
   },
   { name: 'Calendar', href: '/calendar', icon: CalendarDaysIcon },
   { name: 'Connect Account', href: '/platforms', icon: LinkIcon },
-  { name: 'Analytics', href: '/analytics', icon: ChartBarIcon },
-];
-
-const aiNavItems: NavItem[] = [
-  { name: 'AI Caption', href: '/ai-caption', icon: SparklesIcon },
-  { name: 'AI Image', href: '/ai-image', icon: PhotoIcon },
-  { name: 'AI Video', href: '/ai-video', icon: VideoCameraIcon },
-  { name: 'AI Voice', href: '/ai-voice', icon: SpeakerWaveIcon },
-  { name: 'Messenger Bot', href: '/messenger', icon: ChatBubbleBottomCenterTextIcon },
 ];
 
 const settingsNavItems: NavItem[] = [
@@ -98,8 +86,9 @@ const settingsNavItems: NavItem[] = [
 function NavItemWithChildren({ item, onClose }: { item: NavItem; onClose: () => void }) {
   const location = useLocation();
   const currentPath = location.pathname + location.search;
-  const isOnParentPath = location.pathname === item.href;
-  const isChildActive = item.children?.some((c) => currentPath === c.href) || false;
+  const isNonNavigable = item.href.startsWith('#');
+  const isOnParentPath = !isNonNavigable && location.pathname === item.href;
+  const isChildActive = item.children?.some((c) => currentPath === c.href || location.pathname === c.href) || false;
   const [expanded, setExpanded] = useState(isOnParentPath || isChildActive);
 
   useEffect(() => {
@@ -109,14 +98,24 @@ function NavItemWithChildren({ item, onClose }: { item: NavItem; onClose: () => 
   return (
     <div>
       <div className="flex items-center">
-        <NavLink
-          to={item.href}
-          onClick={onClose}
-          className={`nav-item flex-1 ${isOnParentPath ? 'active' : ''}`}
-        >
-          <item.icon className="w-[18px] h-[18px]" />
-          <span className="flex-1">{item.name}</span>
-        </NavLink>
+        {isNonNavigable ? (
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className={`nav-item flex-1 text-left ${isChildActive ? 'active' : ''}`}
+          >
+            <item.icon className="w-[18px] h-[18px]" />
+            <span className="flex-1">{item.name}</span>
+          </button>
+        ) : (
+          <NavLink
+            to={item.href}
+            onClick={onClose}
+            className={`nav-item flex-1 ${isOnParentPath ? 'active' : ''}`}
+          >
+            <item.icon className="w-[18px] h-[18px]" />
+            <span className="flex-1">{item.name}</span>
+          </NavLink>
+        )}
         <button
           onClick={() => setExpanded(!expanded)}
           className="p-1.5 mr-2 rounded-md text-text-muted hover:text-text-primary hover:bg-white/5 transition-colors"
@@ -232,7 +231,6 @@ export function Sidebar({ isOpen, onClose, isImpersonating }: SidebarProps) {
       {/* Navigation */}
       <div className="flex-1 overflow-y-auto py-4 px-3 no-scrollbar">
         <NavSection items={mainNavItems} />
-        <NavSection items={aiNavItems} title="AI Tools" />
         <NavSection items={settingsNavItems} title="Settings" />
       </div>
 

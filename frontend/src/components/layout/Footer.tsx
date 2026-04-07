@@ -21,14 +21,6 @@ const footerSections: FooterSection[] = [
     ],
   },
   {
-    title: 'AI Tools',
-    links: [
-      { label: 'AI Caption', href: '/ai-caption' },
-      { label: 'AI Image', href: '/ai-image' },
-      { label: 'AI Video', href: '/ai-video' },
-    ],
-  },
-  {
     title: 'Company',
     links: [
       { label: 'About', href: '/about' },

@@ -5,10 +5,6 @@ import {
   LinkIcon,
   SparklesIcon,
   DocumentTextIcon,
-  PhotoIcon,
-  VideoCameraIcon,
-  SpeakerWaveIcon,
-  ChatBubbleLeftRightIcon,
   RocketLaunchIcon,
 } from '@heroicons/react/24/outline';
 
@@ -50,46 +46,11 @@ const actions: QuickAction[] = [
     color: 'from-info to-primary',
   },
   {
-    name: 'AI Caption',
-    description: 'Generate captions',
-    href: '/ai-caption',
-    icon: SparklesIcon,
-    color: 'from-secondary to-accent',
-  },
-  {
     name: 'My Posts',
     description: 'View all posts',
     href: '/posts',
     icon: DocumentTextIcon,
     color: 'from-success to-info',
-  },
-  {
-    name: 'AI Image',
-    description: 'Create images',
-    href: '/ai-image',
-    icon: PhotoIcon,
-    color: 'from-accent to-warning',
-  },
-  {
-    name: 'AI Video',
-    description: 'Generate videos',
-    href: '/ai-video',
-    icon: VideoCameraIcon,
-    color: 'from-danger to-secondary',
-  },
-  {
-    name: 'AI Voice',
-    description: 'Text to speech',
-    href: '/ai-voice',
-    icon: SpeakerWaveIcon,
-    color: 'from-info to-success',
-  },
-  {
-    name: 'Messenger Bot',
-    description: 'AI chatbot',
-    href: '/messenger',
-    icon: ChatBubbleLeftRightIcon,
-    color: 'from-[#006AFF] to-[#00B2FF]',
   },
 ];
 

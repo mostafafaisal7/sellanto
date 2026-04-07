@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   HomeIcon,
   UsersIcon,
-  ChartBarIcon,
   Cog6ToothIcon,
   XMarkIcon,
   ArrowTopRightOnSquareIcon,
@@ -34,7 +33,6 @@ const FacebookIcon = ({ className }: { className?: string }) => (
 const mainNavItems: NavItem[] = [
   { name: 'Dashboard',          href: '/admin-panel',                  icon: HomeIcon },
   { name: 'Users',              href: '/admin-panel/users',            icon: UsersIcon },
-  { name: 'Analytics',          href: '/admin-panel/analytics',        icon: ChartBarIcon },
   { name: 'Global API Keys',    href: '/admin-panel/api-keys',         icon: KeyIcon },
   { name: 'Facebook Settings',  href: '/admin-panel/facebook-settings', icon: FacebookIcon },
 ];

@@ -21,10 +21,11 @@ import {
 import { format } from 'date-fns';
 import { Button, Card, Input, Textarea, PlatformIcon, platformColors, platformNames } from '../components/ui';
 import { usePostStore } from '../store';
-import type { PlatformType } from '../types';
+import type { PlatformType, SocialAccount } from '../types';
 import api from '../services/api';
-import { postService } from '../services';
+import { postService, platformService } from '../services';
 import calendarService from '../services/calendarService';
+import ConnectAccountModal from '../components/ConnectAccountModal';
 
 const platforms: { id: PlatformType; maxChars: number }[] = [
   { id: 'facebook', maxChars: 63206 },
@@ -58,6 +59,8 @@ export function CreatePostPage() {
   const [dragActive, setDragActive] = useState(false);
   const [copied, setCopied] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [connectedAccounts, setConnectedAccounts] = useState<SocialAccount[]>([]);
+  const [disconnectedPlatforms, setDisconnectedPlatforms] = useState<string[]>([]);
   const [publishNow, setPublishNow] = useState(false);
   const [imageReady, setImageReady] = useState(true);
   const pendingPublish = useRef(false);
@@ -98,12 +101,21 @@ export function CreatePostPage() {
           }
         }
         if (post) {
-          const scheduledDate = new Date(post.scheduled_time);
+          let dateStr = '';
+          let timeStr = format(new Date(Date.now() + 3600000), 'HH:mm');
+          if (post.scheduled_time) {
+            const scheduledDate = new Date(post.scheduled_time);
+            if (!isNaN(scheduledDate.getTime())) {
+              dateStr = format(scheduledDate, 'yyyy-MM-dd');
+              timeStr = format(scheduledDate, 'HH:mm');
+            }
+          }
+          const plats = Array.isArray(post.platforms) ? post.platforms : [];
           reset({
             caption: post.caption || '',
-            platforms: post.platforms || [],
-            scheduled_date: format(scheduledDate, 'yyyy-MM-dd'),
-            scheduled_time: format(scheduledDate, 'HH:mm'),
+            platforms: plats,
+            scheduled_date: dateStr,
+            scheduled_time: timeStr,
             timezone: post.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
           });
           setExistingMedia(post.media_files || []);
@@ -112,6 +124,11 @@ export function CreatePostPage() {
       loadPost();
     }
   }, [isEditing, id, posts, reset]);
+
+  // Fetch connected social accounts
+  useEffect(() => {
+    platformService.list().then(setConnectedAccounts).catch(() => {});
+  }, []);
 
   // Pre-fill data from AI Caption page or Magic Mode
   useEffect(() => {
@@ -266,8 +283,22 @@ export function CreatePostPage() {
   };
 
   const onSubmit = async (data: PostFormData) => {
-    setIsSubmitting(true);
     setSubmitError(null);
+    setDisconnectedPlatforms([]);
+
+    // Check if selected platforms have connected accounts
+    const activePlatforms = connectedAccounts
+      .filter((a) => a.is_active)
+      .map((a) => a.platform);
+    const missing = data.platforms.filter((p) => !activePlatforms.includes(p as PlatformType));
+    if (missing.length > 0) {
+      const names = missing.map((p) => platformNames[p as PlatformType] || p);
+      setDisconnectedPlatforms(names);
+      setSubmitError(`No connected account for: ${names.join(', ')}. Please connect your accounts first.`);
+      return;
+    }
+
+    setIsSubmitting(true);
     try {
       const scheduledTime = new Date(`${data.scheduled_date}T${data.scheduled_time}`);
 
@@ -344,11 +375,17 @@ export function CreatePostPage() {
               <Controller
                 name="platforms"
                 control={control}
-                render={({ field }) => (
+                render={({ field }) => {
+                  const val = Array.isArray(field.value) ? field.value : [];
+                  const accounts = Array.isArray(connectedAccounts) ? connectedAccounts : [];
+                  return (
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                     {platforms.map((platform) => {
-                      const isSelected = field.value.includes(platform.id);
+                      const isSelected = val.includes(platform.id);
                       const colors = platformColors[platform.id];
+                      const isConnected = accounts.some(
+                        (a) => a.platform === platform.id && a.is_active
+                      );
                       return (
                         <motion.button
                           key={platform.id}
@@ -357,8 +394,8 @@ export function CreatePostPage() {
                           whileTap={{ scale: 0.98 }}
                           onClick={() => {
                             const newValue = isSelected
-                              ? field.value.filter((p) => p !== platform.id)
-                              : [...field.value, platform.id];
+                              ? val.filter((p) => p !== platform.id)
+                              : [...val, platform.id];
                             field.onChange(newValue);
                           }}
                           className={`relative p-4 rounded-xl border-2 transition-all ${
@@ -375,8 +412,8 @@ export function CreatePostPage() {
                               <span className="font-medium text-text-primary block">
                                 {platformNames[platform.id]}
                               </span>
-                              <span className="text-xs text-text-muted">
-                                {platform.maxChars.toLocaleString()} chars
+                              <span className={`text-xs ${!isConnected ? 'text-amber-400' : 'text-text-muted'}`}>
+                                {isConnected ? `${platform.maxChars.toLocaleString()} chars` : 'Not connected'}
                               </span>
                             </div>
                           </div>
@@ -393,7 +430,8 @@ export function CreatePostPage() {
                       );
                     })}
                   </div>
-                )}
+                  );
+                }}
               />
               {errors.platforms && (
                 <p className="mt-3 text-sm text-danger flex items-center gap-2">
@@ -764,7 +802,7 @@ export function CreatePostPage() {
             <div className="flex flex-col gap-3">
               {/* Error Message Display */}
               <AnimatePresence>
-                {submitError && (
+                {submitError && disconnectedPlatforms.length === 0 && (
                   <motion.div
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -773,7 +811,7 @@ export function CreatePostPage() {
                   >
                     <div className="flex items-start gap-3">
                       <XMarkIcon className="w-5 h-5 text-danger flex-shrink-0 mt-0.5" />
-                      <div>
+                      <div className="flex-1">
                         <p className="text-sm font-medium text-danger">Failed to save post</p>
                         <p className="text-xs text-danger/80 mt-1">{submitError}</p>
                       </div>
@@ -781,6 +819,12 @@ export function CreatePostPage() {
                   </motion.div>
                 )}
               </AnimatePresence>
+
+              <ConnectAccountModal
+                open={disconnectedPlatforms.length > 0}
+                message={submitError || 'Please connect your accounts first.'}
+                onClose={() => { setDisconnectedPlatforms([]); setSubmitError(null); }}
+              />
 
               <Button
                 type="submit"

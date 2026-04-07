@@ -100,7 +100,25 @@ export function FacebookSettingsPanel() {
     );
   }
 
-  const s = settings!;
+  if (!settings) {
+    return (
+      <div className="p-6 rounded-xl border border-red-500/20 bg-red-500/5 space-y-3">
+        <div className="flex items-center gap-2">
+          <XCircleIcon className="w-5 h-5 text-red-400" />
+          <p className="text-sm font-semibold text-red-400">Failed to load Facebook settings</p>
+        </div>
+        <p className="text-xs text-slate-400">{error || 'Could not connect to the server. Make sure the backend is running.'}</p>
+        <button
+          onClick={load}
+          className="px-4 py-2 rounded-lg text-xs font-semibold bg-slate-700 hover:bg-slate-600 text-white transition-colors flex items-center gap-1.5"
+        >
+          <ArrowPathIcon className="w-3.5 h-3.5" /> Retry
+        </button>
+      </div>
+    );
+  }
+
+  const s = settings;
 
   const fields = [
     {

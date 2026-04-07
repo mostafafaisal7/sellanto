@@ -10,12 +10,6 @@ import {
   ConnectAccountsPage,
   ProfilePage,
   SettingsPage,
-  AICaptionPage,
-  AIImagePage,
-  AIVideoPage,
-  AIVoicePage,
-  MessengerBotPage,
-  AnalyticsPage,
   OnboardingPage,
   BusinessProfilePage,
   AboutPage,
@@ -47,7 +41,6 @@ import {
   AdminDashboardPage,
   AdminUsersPage,
   AdminUserDetailPage,
-  AdminAnalyticsPage,
   AdminAPIKeysPage,
   AdminFacebookSettingsPage,
 } from './pages/admin';
@@ -191,18 +184,6 @@ function App() {
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/settings" element={<SettingsPage />} />
 
-          {/* AI Features */}
-          <Route path="/ai-caption" element={<AICaptionPage />} />
-          <Route path="/ai-image" element={<AIImagePage />} />
-          <Route path="/ai-video" element={<AIVideoPage />} />
-          <Route path="/ai-voice" element={<AIVoicePage />} />
-
-          {/* Messenger Bot */}
-          <Route path="/messenger" element={<MessengerBotPage />} />
-
-          {/* Analytics */}
-          <Route path="/analytics" element={<AnalyticsPage />} />
-
           {/* V1.2.1 Routes */}
           <Route path="/strategy" element={<StrategyHubPage />} />
           <Route path="/ideas" element={<IdeasHubPage />} />
@@ -244,7 +225,6 @@ function App() {
           <Route path="/admin-panel" element={<AdminDashboardPage />} />
           <Route path="/admin-panel/users" element={<AdminUsersPage />} />
           <Route path="/admin-panel/users/:id" element={<AdminUserDetailPage />} />
-          <Route path="/admin-panel/analytics" element={<AdminAnalyticsPage />} />
           <Route path="/admin-panel/api-keys" element={<AdminAPIKeysPage />} />
           <Route path="/admin-panel/facebook-settings" element={<AdminFacebookSettingsPage />} />
         </Route>

@@ -44,14 +44,16 @@ class PostsConfig(AppConfig):
         # gunicorn / wsgi: use a file lock so only ONE worker starts the scheduler.
         # flock is released automatically by the OS when the process dies,
         # so restarts always recover correctly.
-        import fcntl
-        try:
-            lock_file = open('/tmp/sellanto_scheduler.lock', 'w')
-            fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            # Keep reference so the lock is held for the life of this worker
-            PostsConfig._scheduler_lock = lock_file
-        except (IOError, OSError):
-            return  # Another worker already holds the lock
+        import platform as _platform
+        if _platform.system() != 'Windows':
+            import fcntl
+            try:
+                lock_file = open('/tmp/sellanto_scheduler.lock', 'w')
+                fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                # Keep reference so the lock is held for the life of this worker
+                PostsConfig._scheduler_lock = lock_file
+            except (IOError, OSError):
+                return  # Another worker already holds the lock
 
         if PostsConfig.scheduler_started:
             return

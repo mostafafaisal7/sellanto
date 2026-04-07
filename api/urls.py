@@ -5,7 +5,6 @@ from . import views
 from platforms.oauth_views import (
     facebook_oauth_initiate,
     facebook_oauth_callback,
-    facebook_setup_messenger,
     facebook_connection_status,
 )
 from . import admin_views
@@ -14,7 +13,6 @@ from . import caption_views
 from . import hashtag_views
 from . import approval_views
 from . import scheduling_views
-from . import analytics_views as v2_analytics_views
 from . import notification_views
 from . import creative_views
 from . import rbac_views
@@ -25,24 +23,6 @@ router = DefaultRouter()
 router.register(r'posts', views.PostViewSet, basename='post')
 router.register(r'platforms', views.SocialAccountViewSet, basename='platform')
 router.register(r'platforms-detail', views.SocialAccountDetailViewSet, basename='platform-detail')
-
-# AI Caption routers
-router.register(r'ai-caption/templates', views.CaptionTemplateViewSet, basename='caption-template')
-router.register(r'ai-caption/saved', views.SavedCaptionViewSet, basename='saved-caption')
-
-# AI Image routers
-router.register(r'ai-image/logos', views.UserLogoViewSet, basename='user-logo')
-router.register(r'ai-image/saved', views.SavedImageViewSet, basename='saved-image')
-router.register(r'ai-image/templates', views.ImagePromptTemplateViewSet, basename='image-template')
-
-# AI Video routers
-router.register(r'ai-video/logos', views.VideoLogoViewSet, basename='video-logo')
-router.register(r'ai-video/saved', views.SavedVideoViewSet, basename='saved-video')
-router.register(r'ai-video/templates', views.VideoPromptTemplateViewSet, basename='video-template')
-
-# Messenger routers
-router.register(r'messenger/connections', views.MessengerConnectionViewSet, basename='messenger-connection')
-router.register(r'messenger/notifications', views.NotificationViewSet, basename='notification')
 
 # Onboarding & Brands routers
 router.register(r'workspaces', views.WorkspaceViewSet, basename='workspace')
@@ -64,7 +44,6 @@ urlpatterns = [
     # ── Facebook OAuth & Connection Status ───────────────────────────────────
     path('platforms/facebook/initiate/',        facebook_oauth_initiate,    name='fb-oauth-initiate'),
     path('platforms/facebook/callback/',        facebook_oauth_callback,    name='fb-oauth-callback'),
-    path('platforms/facebook/setup-messenger/', facebook_setup_messenger,   name='fb-setup-messenger'),
     path('platforms/facebook/status/',          facebook_connection_status, name='fb-conn-status'),
 
     # Auth endpoints
@@ -98,83 +77,16 @@ urlpatterns = [
     # AI Caption endpoints
     path('ai-caption/generate/', views.generate_caption, name='api-generate-caption'),
     path('ai-caption/regenerate/<int:pk>/', views.regenerate_caption, name='api-regenerate-caption'),
-    path('ai-caption/history/', views.CaptionHistoryView.as_view(), name='api-caption-history'),
-    path('ai-caption/settings/', views.CaptionAPISettingsView.as_view(), name='api-caption-settings'),
 
     # AI Image endpoints
     path('ai-image/generate/', views.generate_image, name='api-generate-image'),
     path('ai-image/refine-prompt/', views.refine_image_prompt, name='api-refine-image-prompt'),
-    path('ai-image/history/', views.ImageGenerationHistoryView.as_view(), name='api-image-history'),
-    path('ai-image/settings/', views.ImageSettingsView.as_view(), name='api-image-settings'),
 
-    # AI Video endpoints
-    path('ai-video/generate/', views.generate_video, name='api-generate-video'),
-    path('ai-video/history/', views.VideoGenerationHistoryView.as_view(), name='api-video-history'),
-    path('ai-video/settings/', views.VideoSettingsView.as_view(), name='api-video-settings'),
-
-    # AI Voice endpoints
-    path('ai-voice/generate/', views.generate_voice, name='api-generate-voice'),
-    path('ai-voice/preview/', views.preview_voice, name='api-preview-voice'),
-    path('ai-voice/history/', views.VoiceGenerationHistoryView.as_view(), name='api-voice-history'),
-    path('ai-voice/settings/', views.VoiceSettingsView.as_view(), name='api-voice-settings'),
-    path('ai-voice/generation/<int:generation_id>/', views.get_voice_generation, name='api-voice-generation'),
-    path('ai-voice/generation/<int:generation_id>/delete/', views.delete_voice_generation, name='api-voice-delete'),
-    path('ai-voice/generation/<int:generation_id>/regenerate/', views.regenerate_voice, name='api-voice-regenerate'),
-
-    # Messenger Bot endpoints
-    path('messenger/dashboard/', views.MessengerDashboardView.as_view(), name='api-messenger-dashboard'),
-    path('messenger/connections/<int:connection_id>/config/', views.AIConfigurationView.as_view(), name='api-ai-config'),
-    path('messenger/connections/<int:connection_id>/pdfs/', views.PDFKnowledgeBaseViewSet.as_view({
-        'get': 'list',
-        'post': 'create',
-    }), name='api-pdf-list'),
-    path('messenger/connections/<int:connection_id>/pdfs/<int:pk>/', views.PDFKnowledgeBaseViewSet.as_view({
-        'get': 'retrieve',
-        'delete': 'destroy',
-    }), name='api-pdf-detail'),
-    path('messenger/connections/<int:connection_id>/conversations/', views.ConversationViewSet.as_view({
-        'get': 'list',
-    }), name='api-conversations'),
-    path('messenger/connections/<int:connection_id>/conversations/<int:pk>/', views.ConversationViewSet.as_view({
-        'get': 'retrieve',
-    }), name='api-conversation-detail'),
-    path('messenger/connections/<int:connection_id>/conversations/<int:pk>/toggle-takeover/', views.ConversationViewSet.as_view({
-        'post': 'toggle_takeover',
-    }), name='api-conversation-takeover'),
-    path('messenger/connections/<int:connection_id>/conversations/<int:pk>/send-message/', views.ConversationViewSet.as_view({
-        'post': 'send_message',
-    }), name='api-conversation-send'),
-    path('messenger/connections/<int:connection_id>/prompts/', views.CustomPromptViewSet.as_view({
-        'get': 'list',
-        'post': 'create',
-    }), name='api-prompts'),
-    path('messenger/connections/<int:connection_id>/prompts/<int:pk>/', views.CustomPromptViewSet.as_view({
-        'get': 'retrieve',
-        'put': 'update',
-        'delete': 'destroy',
-    }), name='api-prompt-detail'),
-    path('messenger/connections/<int:connection_id>/prompts/<int:pk>/activate/', views.CustomPromptViewSet.as_view({
-        'post': 'activate',
-    }), name='api-prompt-activate'),
-    path('messenger/connections/<int:connection_id>/crawl-website/', views.CrawlWebsiteView.as_view(), name='api-crawl-website'),
-
-    # E-Commerce endpoints
-    path('messenger/connections/<int:connection_id>/ecommerce/', views.ECommerceSettingsView.as_view(), name='api-ecommerce-settings'),
-    path('messenger/connections/<int:connection_id>/ecommerce/test/', views.TestECommerceConnectionView.as_view(), name='api-ecommerce-test'),
-    path('messenger/connections/<int:connection_id>/ecommerce/sync/', views.SyncProductsView.as_view(), name='api-ecommerce-sync'),
-    path('messenger/connections/<int:connection_id>/ecommerce/embeddings/', views.RegenerateEmbeddingsView.as_view(), name='api-ecommerce-embeddings'),
-    path('messenger/connections/<int:connection_id>/ecommerce/products/', views.ProductListView.as_view(), name='api-ecommerce-products'),
 
     # Brand DNA endpoints
     path('brands/<int:brand_id>/generate-dna/', views.GenerateBrandDNAView.as_view(), name='api-generate-brand-dna'),
     path('brands/<int:brand_id>/dna-status/', views.BrandDNAStatusView.as_view(), name='api-brand-dna-status'),
     path('brands/<int:brand_id>/regenerate-dna-inputs/', views.RegenerateBrandDNAFromInputsView.as_view(), name='api-regenerate-dna-inputs'),
-
-    # Analytics endpoints (V1.1)
-    path('analytics/summary/', views.AnalyticsSummaryView.as_view(), name='api-analytics-summary'),
-    path('analytics/platforms/', views.PlatformAnalyticsView.as_view(), name='api-analytics-platforms'),
-    path('analytics/trends/', views.AnalyticsTrendView.as_view(), name='api-analytics-trends'),
-    path('analytics/top-posts/', views.TopPostsView.as_view(), name='api-top-posts'),
 
     # Support Chat
     path('support-chat/', views.SupportChatView.as_view(), name='api-support-chat'),
@@ -242,20 +154,6 @@ urlpatterns = [
     path('brands/<int:brand_id>/best-times/', scheduling_views.BestTimeSuggestionsView.as_view(), name='api-best-times'),
     path('schedule/conflict-check/', scheduling_views.ConflictCheckView.as_view(), name='api-conflict-check'),
 
-    # Post Analytics (V1.2.1)
-    path('posts/<int:post_id>/stats/', v2_analytics_views.PostQuickStatsView.as_view(), name='api-post-stats'),
-    path('posts/<int:post_id>/comments/', v2_analytics_views.PostCommentsView.as_view(), name='api-post-comments'),
-    path('comments/<int:comment_id>/reply/', v2_analytics_views.ReplyToCommentView.as_view(), name='api-reply-comment'),
-    path('comments/<int:comment_id>/ai-reply/', v2_analytics_views.AIReplyToCommentView.as_view(), name='api-ai-reply-comment'),
-    path('brands/<int:brand_id>/weekly-report/', v2_analytics_views.WeeklyReportView.as_view(), name='api-weekly-report-v2'),
-    path('brands/<int:brand_id>/analytics/dashboard/', v2_analytics_views.AnalyticsDashboardView.as_view(), name='api-analytics-dashboard'),
-    path('brands/<int:brand_id>/ab-results/', v2_analytics_views.ABTestResultsView.as_view(), name='api-ab-results'),
-
-    # Learning & Repurposing
-    path('brands/<int:brand_id>/learning-signals/', v2_analytics_views.LearningSignalsView.as_view(), name='api-learning-signals'),
-    path('brands/<int:brand_id>/winners/', v2_analytics_views.WinnerPostsView.as_view(), name='api-winner-posts'),
-    path('posts/<int:post_id>/repurpose/', v2_analytics_views.RepurposePostView.as_view(), name='api-repurpose-post'),
-
     # Creative Assets (V1.2.1)
     path('assets/<int:asset_id>/alt-text/', creative_views.GenerateAltTextView.as_view(), name='api-generate-alt-text'),
     path('assets/<int:asset_id>/resize/', creative_views.ResizeAssetView.as_view(), name='api-resize-asset'),
@@ -298,11 +196,11 @@ urlpatterns = [
 
     # Admin Panel API
     path('admin/facebook-settings/',    admin_views.FacebookSettingsView.as_view(),        name='api-admin-fb-settings'),
-    path('admin/messenger-webhooks/',   admin_views.AdminMessengerWebhooksView.as_view(),  name='api-admin-messenger-webhooks'),
     path('admin/facebook-accounts/',    admin_views.AdminFacebookAccountsView.as_view(),   name='api-admin-facebook-accounts'),
+    path('admin/messenger-webhooks/',   admin_views.AdminMessengerWebhooksView.as_view(),  name='api-admin-messenger-webhooks'),
     path('admin/setup-messenger/',      admin_views.AdminSetupMessengerView.as_view(),     name='api-admin-setup-messenger'),
-    path('admin/test-webhook/',         admin_views.AdminTestWebhookView.as_view(),        name='api-admin-test-webhook'),
     path('admin/check-subscription/',   admin_views.AdminCheckSubscriptionView.as_view(),  name='api-admin-check-subscription'),
+    path('admin/test-webhook/',         admin_views.AdminTestWebhookView.as_view(),        name='api-admin-test-webhook'),
     path('admin/dashboard/', admin_views.AdminDashboardView.as_view(), name='api-admin-dashboard'),
     path('admin/users/', admin_views.AdminUserListView.as_view(), name='api-admin-users'),
     path('admin/users/<int:user_id>/', admin_views.AdminUserDetailView.as_view(), name='api-admin-user-detail'),
@@ -314,10 +212,6 @@ urlpatterns = [
     path('admin/users/<int:user_id>/accounts/', admin_views.AdminUserAccountsView.as_view(), name='api-admin-user-accounts'),
     path('admin/users/<int:user_id>/captions/', admin_views.AdminUserCaptionsView.as_view(), name='api-admin-user-captions'),
     path('admin/users/<int:user_id>/images/', admin_views.AdminUserImagesView.as_view(), name='api-admin-user-images'),
-    path('admin/users/<int:user_id>/videos/', admin_views.AdminUserVideosView.as_view(), name='api-admin-user-videos'),
-    path('admin/users/<int:user_id>/messenger/', admin_views.AdminUserMessengerView.as_view(), name='api-admin-user-messenger'),
-    path('admin/conversations/<int:conv_id>/messages/', admin_views.AdminConversationMessagesView.as_view(), name='api-admin-conv-messages'),
-    path('admin/analytics/', admin_views.AdminAnalyticsView.as_view(), name='api-admin-analytics'),
     path('admin/bulk-approve/', admin_views.AdminBulkApproveView.as_view(), name='api-admin-bulk-approve'),
 
     # Diamond Token endpoints

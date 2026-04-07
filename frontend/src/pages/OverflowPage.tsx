@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { normalizeUrl, isValidUrl } from '../utils/url';
+import ConnectAccountModal from '../components/ConnectAccountModal';
 import {
   CheckCircleIcon,
   ArrowRightIcon,
@@ -143,7 +144,7 @@ export function OverflowPage() {
     } catch { /* ignore */ }
 
     if (!fromIdeas) {
-      const hasProgress = persistedStep > 1;
+      const hasProgress = persistedStep > 1 && persistedStep < 6;
       if (hasProgress) {
         setResumeStep(persistedStep);
         setShowResumePrompt(true);
@@ -3358,6 +3359,7 @@ function CreatePostStep({ brandId }: { brandId: number | null }) {
   const [postLoading, setPostLoading] = useState<Record<string, boolean>>({});
   const [postErrors, setPostErrors] = useState<Record<string, string | null>>({});
   const [expandedPost, setExpandedPost] = useState<string | null>(null);
+  const [connectModalError, setConnectModalError] = useState<string | null>(null);
   const [creatingAll, setCreatingAll] = useState(false);
   const draftPostIds = useRef<Record<string, number>>({});
 
@@ -3474,7 +3476,12 @@ function CreatePostStep({ brandId }: { brandId: number | null }) {
       });
       setCreatedPosts((p) => ({ ...p, [captionId]: post.id }));
     } catch (err: any) {
-      setPostErrors((p) => ({ ...p, [captionId]: err?.response?.data?.error || err?.message || 'Failed to create post.' }));
+      const msg = err?.response?.data?.error || err?.message || 'Failed to create post.';
+      if (msg.toLowerCase().includes('no connected account')) {
+        setConnectModalError(msg);
+      } else {
+        setPostErrors((p) => ({ ...p, [captionId]: msg }));
+      }
     }
     setPostLoading((p) => ({ ...p, [captionId]: false }));
   };
@@ -3705,6 +3712,11 @@ function CreatePostStep({ brandId }: { brandId: number | null }) {
             setDeleteConfirmPost(null);
           }
         }}
+      />
+      <ConnectAccountModal
+        open={!!connectModalError}
+        message={connectModalError || 'Please connect your account first.'}
+        onClose={() => setConnectModalError(null)}
       />
     </div>
   );

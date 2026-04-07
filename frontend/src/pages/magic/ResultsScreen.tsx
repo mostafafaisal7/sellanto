@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 import { useMagicModeStore, type MagicPost } from '../../store/magicModeStore';
 import { FeedbackModal } from '../../components/redesign/FeedbackModal';
@@ -6,104 +7,151 @@ import captionService from '../../services/captionService';
 import imageService from '../../services/imageService';
 import strategyService from '../../services/strategyService';
 import { postService } from '../../services/postService';
+import ConnectAccountModal from '../../components/ConnectAccountModal';
 import type { CaptionPlatform, CaptionTone, PlatformType } from '../../types';
 
 const platformEmojiMap: Record<string, string> = {
   LinkedIn: '💼', Instagram: '📸', Facebook: '📘', 'Twitter / X': '🐦', TikTok: '🎵',
 };
 
-function PlatformCaptionEditor({ platform, caption, onSave, onFeedback, onDelete }: {
+function ApprovedPlatformCard({
+  platform,
+  caption,
+  imageUrl,
+  imageOverlay,
+  isEditable,
+  isFinal,
+  onSave,
+  onFeedback,
+  onDelete,
+}: {
   platform: string;
   caption: string;
-  onSave: (text: string) => void;
-  onFeedback: () => void;
+  imageUrl?: string;
+  imageOverlay?: string;
+  isEditable: boolean;
+  isFinal: boolean;
+  onSave?: (text: string) => void;
+  onFeedback?: () => void;
   onDelete: () => void;
 }) {
   const [editing, setEditing] = useState(false);
-  const [expanded, setExpanded] = useState(false);
   const [text, setText] = useState(caption);
+  const [expanded, setExpanded] = useState(false);
 
   return (
     <div
-      className="rounded-[12px] p-3"
-      style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}
+      className="rounded-[16px] overflow-hidden flex flex-col"
+      style={{
+        background: 'rgba(255,255,255,0.03)',
+        border: '1px solid rgba(255,255,255,0.06)',
+        opacity: isFinal ? 0.7 : 1,
+      }}
     >
-      <div className="flex items-center gap-2 mb-2">
-        <span className="text-[14px]">{platformEmojiMap[platform] || '📱'}</span>
-        <span className="text-[12px] font-bold text-text-secondary">{platform}</span>
-        <button
-          onClick={onDelete}
-          className="ml-auto p-1 rounded-[6px] transition-colors hover:bg-white/5"
-          title="Remove platform"
-        >
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="rgb(239,68,68)" strokeWidth="1.5" strokeLinecap="round">
-            <path d="M3.5 3.5l7 7M10.5 3.5l-7 7" />
-          </svg>
-        </button>
+      {/* Platform badge header */}
+      <div
+        className="flex items-center justify-between px-3 py-2"
+        style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-[14px]">{platformEmojiMap[platform] || '📱'}</span>
+          <span className="text-[12px] font-bold text-text-secondary">{platform}</span>
+        </div>
+        {!isFinal && (
+          <button
+            onClick={onDelete}
+            className="p-1 rounded-[6px] transition-colors hover:bg-white/5"
+            title="Remove platform"
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="rgb(239,68,68)" strokeWidth="1.5" strokeLinecap="round">
+              <path d="M3.5 3.5l7 7M10.5 3.5l-7 7" />
+            </svg>
+          </button>
+        )}
       </div>
-      {editing ? (
-        <>
-          <textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            className="w-full text-[12px] leading-relaxed rounded-[8px] p-2 resize-none min-h-[100px] focus:outline-none"
-            style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(232,54,79,0.2)', color: 'rgb(var(--c-text-primary))' }}
-          />
-          <div className="flex gap-2 mt-2">
-            <button
-              onClick={() => { onSave(text); setEditing(false); }}
-              className="px-3 py-1.5 rounded-[8px] text-[11px] font-bold text-white"
-              style={{ background: 'linear-gradient(135deg, rgb(var(--c-coral)), rgb(var(--c-coral-hover)))' }}
-            >
-              Save
-            </button>
-            <button
-              onClick={() => { setText(caption); setEditing(false); }}
-              className="px-3 py-1.5 rounded-[8px] text-[11px] font-semibold"
-              style={{ background: 'rgba(255,255,255,0.06)', color: 'rgb(var(--c-text-muted))' }}
-            >
-              Cancel
-            </button>
+
+      {/* Image thumbnail */}
+      <div className="px-3 pt-2">
+        {imageUrl ? (
+          <img src={imageUrl} alt={platform} className="w-full h-[120px] object-cover rounded-[8px]" />
+        ) : (
+          <div
+            className="w-full h-[120px] rounded-[8px] flex items-center justify-center"
+            style={{ background: 'linear-gradient(135deg, #1a1a3e, #0d0d2a)' }}
+          >
+            <span className="text-[11px] text-text-muted text-center px-2">{imageOverlay}</span>
           </div>
-        </>
-      ) : (
-        <>
-          <p className={`text-[12px] text-text-secondary leading-relaxed whitespace-pre-line ${expanded ? '' : 'line-clamp-4'} mb-1`}>
-            {caption}
-          </p>
-          {caption.length > 200 && (
-            <button
-              onClick={() => setExpanded(!expanded)}
-              className="text-[11px] font-semibold mb-2"
-              style={{ color: 'rgb(var(--c-coral))' }}
-            >
-              {expanded ? 'Show less' : 'See more...'}
-            </button>
-          )}
-          <div className="flex gap-2">
-            <button
-              onClick={() => { setText(caption); setEditing(true); }}
-              className="px-3 py-1.5 rounded-[8px] text-[11px] font-semibold"
-              style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border-color)', color: 'rgb(var(--c-text-primary))' }}
-            >
-              ✏️ Edit
-            </button>
-            <button
-              onClick={onFeedback}
-              className="px-3 py-1.5 rounded-[8px] text-[11px] font-semibold"
-              style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border-color)', color: 'rgb(var(--c-text-primary))' }}
-            >
-              💬 Give feedback
-            </button>
-          </div>
-        </>
-      )}
+        )}
+      </div>
+
+      {/* Caption area */}
+      <div className="px-3 py-2 flex-1">
+        {editing && isEditable ? (
+          <>
+            <textarea
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              className="w-full text-[11px] leading-relaxed rounded-[8px] p-2 resize-none min-h-[80px] focus:outline-none"
+              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(232,54,79,0.2)', color: 'rgb(var(--c-text-primary))' }}
+            />
+            <div className="flex gap-2 mt-1">
+              <button
+                onClick={() => { onSave?.(text); setEditing(false); }}
+                className="px-2 py-1 rounded-[6px] text-[10px] font-bold text-white"
+                style={{ background: 'linear-gradient(135deg, rgb(var(--c-coral)), rgb(var(--c-coral-hover)))' }}
+              >
+                Save
+              </button>
+              <button
+                onClick={() => { setText(caption); setEditing(false); }}
+                className="px-2 py-1 rounded-[6px] text-[10px] font-semibold"
+                style={{ background: 'rgba(255,255,255,0.06)', color: 'rgb(var(--c-text-muted))' }}
+              >
+                Cancel
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <p className={`text-[11px] text-text-secondary leading-relaxed whitespace-pre-line ${expanded ? '' : 'line-clamp-4'} mb-1`}>
+              {caption}
+            </p>
+            {caption.length > 150 && (
+              <button
+                onClick={() => setExpanded(!expanded)}
+                className="text-[10px] font-semibold mb-1"
+                style={{ color: 'rgb(var(--c-coral))' }}
+              >
+                {expanded ? 'Show less' : 'See more...'}
+              </button>
+            )}
+            {isEditable && !isFinal && (
+              <div className="flex gap-1.5 mt-1.5">
+                <button
+                  onClick={() => { setText(caption); setEditing(true); }}
+                  className="px-2 py-1 rounded-[6px] text-[10px] font-semibold"
+                  style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border-color)', color: 'rgb(var(--c-text-primary))' }}
+                >
+                  ✏️ Edit
+                </button>
+                <button
+                  onClick={onFeedback}
+                  className="px-2 py-1 rounded-[6px] text-[10px] font-semibold"
+                  style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border-color)', color: 'rgb(var(--c-text-primary))' }}
+                >
+                  💬 Feedback
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
 
-function PostCard({ post, index, justUpdated, onApproveClick }: { post: MagicPost; index: number; justUpdated?: boolean; onApproveClick: (postId: number) => void }) {
-  const { resetPostStatus, openFeedback, generatedPosts, setGeneratedPosts } = useMagicModeStore();
+function PostCard({ post, index, justUpdated, onApproveClick, onConnectError }: { post: MagicPost; index: number; justUpdated?: boolean; onApproveClick: (postId: number) => void; onConnectError: (msg: string) => void }) {
+  const { openFeedback, generatedPosts, setGeneratedPosts } = useMagicModeStore();
   const isApproved = post.status === 'approved';
   const isPublished = post.status === 'published';
   const isScheduled = post.status === 'scheduled';
@@ -116,6 +164,13 @@ function PostCard({ post, index, justUpdated, onApproveClick }: { post: MagicPos
   const [schedDate, setSchedDate] = useState('');
   const [schedTime, setSchedTime] = useState('');
   const [scheduling, setScheduling] = useState(false);
+  const [postError, setPostError] = useState<string | null>(null);
+
+  // Computed: active platforms (approved minus deleted)
+  const activePlatforms = post.approvedPlatforms?.length
+    ? post.approvedPlatforms
+    : isApproved || isFinal ? [post.platform] : [];
+  const hasDifferentCaptions = post.platformCaptions && Object.keys(post.platformCaptions).length > 0;
 
   const platformEmoji: Record<string, string> = {
     LinkedIn: '💼', Instagram: '📸', Facebook: '📘', Twitter: '🐦', TikTok: '🎵',
@@ -147,21 +202,48 @@ function PostCard({ post, index, justUpdated, onApproveClick }: { post: MagicPos
   };
 
   // Get platforms to publish to
-  const publishPlatforms = post.approvedPlatforms?.length
-    ? post.approvedPlatforms.map((p) => p.toLowerCase().replace(' / x', '').replace('twitter', 'twitter'))
-    : [post.platform.toLowerCase()];
+  const publishPlatforms = activePlatforms.map((p) => p.toLowerCase().replace(' / x', '').replace('twitter', 'twitter'));
+
+  // Delete a single platform from the approved list
+  const handleDeletePlatform = async (platform: string) => {
+    const remaining = activePlatforms.filter((p) => p !== platform);
+    const updatedCaptions = post.platformCaptions ? { ...post.platformCaptions } : undefined;
+    if (updatedCaptions) delete updatedCaptions[platform];
+
+    if (remaining.length === 0) {
+      // All platforms removed — clean up draft and remove post entirely
+      await deleteDraft();
+      setGeneratedPosts(generatedPosts.filter((p) => p.id !== post.id));
+    } else {
+      setGeneratedPosts(
+        generatedPosts.map((p) =>
+          p.id === post.id
+            ? {
+                ...p,
+                approvedPlatforms: remaining,
+                platformCaptions: updatedCaptions && Object.keys(updatedCaptions).length > 0
+                  ? updatedCaptions
+                  : undefined,
+                deletedPlatforms: [...(p.deletedPlatforms || []), platform],
+              }
+            : p
+        )
+      );
+    }
+  };
 
   const handleScheduleConfirm = async () => {
-    if (!schedDate || !schedTime) return;
+    if (!schedDate || !schedTime || activePlatforms.length === 0) return;
     setScheduling(true);
+    setPostError(null);
     try {
       const mediaFiles = await downloadImageAsFile();
       const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
       const scheduledTime = new Date(`${schedDate}T${schedTime}`).toISOString();
 
-      // Create posts for each platform (or one with multiple platforms)
-      if (post.platformCaptions && Object.keys(post.platformCaptions).length > 1) {
+      if (hasDifferentCaptions && post.platformCaptions) {
         for (const [plat, caption] of Object.entries(post.platformCaptions)) {
+          if (!activePlatforms.includes(plat)) continue;
           const platKey = plat.toLowerCase().replace(' / x', '').replace('twitter', 'twitter') as import('../../types').PlatformType;
           await postService.create({
             caption,
@@ -192,7 +274,14 @@ function PostCard({ post, index, justUpdated, onApproveClick }: { post: MagicPos
         )
       );
       setShowScheduler(false);
-    } catch { /* silent */ }
+    } catch (err: any) {
+      const msg = err?.response?.data?.error || err?.message || 'Failed to schedule post.';
+      if (msg.toLowerCase().includes('no connected account')) {
+        onConnectError(msg);
+      } else {
+        setPostError(msg);
+      }
+    }
     setScheduling(false);
   };
 
@@ -222,7 +311,9 @@ function PostCard({ post, index, justUpdated, onApproveClick }: { post: MagicPos
   };
 
   const handlePublish = async () => {
+    if (activePlatforms.length === 0) return;
     setPublishing(true);
+    setPostError(null);
     try {
       const mediaFiles = await downloadImageAsFile();
       const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -231,8 +322,9 @@ function PostCard({ post, index, justUpdated, onApproveClick }: { post: MagicPos
       now.setMinutes(now.getMinutes() + 1);
       const scheduledTime = now.toISOString();
 
-      if (post.platformCaptions && Object.keys(post.platformCaptions).length > 1) {
+      if (hasDifferentCaptions && post.platformCaptions) {
         for (const [plat, caption] of Object.entries(post.platformCaptions)) {
+          if (!activePlatforms.includes(plat)) continue;
           const platKey = plat.toLowerCase().replace(' / x', '').replace('twitter', 'twitter') as import('../../types').PlatformType;
           await postService.create({
             caption,
@@ -262,7 +354,14 @@ function PostCard({ post, index, justUpdated, onApproveClick }: { post: MagicPos
           p.id === post.id ? { ...p, status: 'published' as const } : p
         )
       );
-    } catch { /* silent */ }
+    } catch (err: any) {
+      const msg = err?.response?.data?.error || err?.message || 'Failed to publish post.';
+      if (msg.toLowerCase().includes('no connected account')) {
+        onConnectError(msg);
+      } else {
+        setPostError(msg);
+      }
+    }
     setPublishing(false);
   };
 
@@ -325,70 +424,32 @@ function PostCard({ post, index, justUpdated, onApproveClick }: { post: MagicPos
         </div>
       </div>
 
-      {/* Content grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-0">
-        {/* Image preview */}
-        <div
-          className="flex flex-col items-center justify-center p-8 min-h-[300px]"
-          style={{
-            background: post.imageUrl
-              ? undefined
-              : 'linear-gradient(135deg, #1a1a3e, #0d0d2a, #1e1e4a)',
-            borderRight: '1px solid var(--border-color)',
-          }}
-        >
-          {post.imageUrl ? (
-            <img
-              src={post.imageUrl}
-              alt={post.title}
-              className="w-full h-full object-cover rounded-lg"
-              style={{ maxHeight: 300 }}
-            />
-          ) : (
-            <>
-              {generatingImage ? (
-                <>
-                  <div
-                    className="animate-spin rounded-full h-10 w-10 border-b-2 mb-4"
-                    style={{ borderColor: 'rgb(var(--c-coral))' }}
-                  />
-                  <p className="text-[13px] text-text-muted">Generating image...</p>
-                </>
-              ) : (
-                <>
-                  <span className="text-[40px] opacity-60 mb-3">🎨</span>
-                  <p className="text-[13px] text-text-muted mb-4 text-center max-w-[220px]">
-                    {post.imageOverlay}
-                  </p>
-                  <button
-                    onClick={handleGenerateImage}
-                    className="px-5 py-2.5 rounded-[12px] text-[13px] font-bold text-white transition-all duration-200"
-                    style={{
-                      background: 'linear-gradient(135deg, rgb(var(--c-coral)), rgb(var(--c-coral-hover)))',
-                      boxShadow: '0 2px 10px rgba(232,54,79,0.3)',
-                    }}
-                  >
-                    🖼️ Generate Image
-                  </button>
-                </>
-              )}
-            </>
-          )}
-        </div>
-
-        {/* Caption */}
-        <div className="p-6 flex flex-col">
+      {/* Content area */}
+      {isApproved || isFinal ? (
+        /* Approved: per-platform card grid */
+        <div className="p-4">
           <h3 className="text-[16px] font-bold text-text-primary mb-3">{post.title}</h3>
-          {post.platformCaptions && Object.keys(post.platformCaptions).length > 1 ? (
-            /* Per-platform captions view */
-            <div className="flex-1 space-y-4 overflow-y-auto max-h-[320px] no-scrollbar">
-              {Object.entries(post.platformCaptions).map(([plat, caption]) => (
-                <PlatformCaptionEditor
+          {activePlatforms.length === 0 ? (
+            <div className="py-6 text-center">
+              <p className="text-[14px] text-text-muted">All platforms removed.</p>
+            </div>
+          ) : (
+            <div className={`grid gap-3 ${
+              activePlatforms.length === 1 ? 'grid-cols-1 max-w-[320px]' :
+              activePlatforms.length === 2 ? 'grid-cols-2' :
+              'grid-cols-2 lg:grid-cols-3'
+            }`}>
+              {activePlatforms.map((plat) => (
+                <ApprovedPlatformCard
                   key={plat}
                   platform={plat}
-                  caption={caption}
-                  onSave={(newCaption) => {
-                    const updated = { ...post.platformCaptions, [plat]: newCaption };
+                  caption={hasDifferentCaptions ? (post.platformCaptions![plat] || post.caption) : post.caption}
+                  imageUrl={post.imageUrl}
+                  imageOverlay={post.imageOverlay}
+                  isEditable={!!hasDifferentCaptions}
+                  isFinal={isFinal}
+                  onSave={(text) => {
+                    const updated = { ...post.platformCaptions, [plat]: text };
                     setGeneratedPosts(
                       generatedPosts.map((p) =>
                         p.id === post.id ? { ...p, platformCaptions: updated } : p
@@ -396,83 +457,113 @@ function PostCard({ post, index, justUpdated, onApproveClick }: { post: MagicPos
                     );
                   }}
                   onFeedback={() => openFeedback(post.id)}
-                  onDelete={() => {
-                    const remaining = { ...post.platformCaptions };
-                    delete remaining[plat];
-                    const remainingPlatforms = (post.approvedPlatforms || []).filter((ap) => ap !== plat);
-                    const entries = Object.entries(remaining);
-                    if (entries.length <= 1) {
-                      // Collapse to single-caption mode
-                      setGeneratedPosts(
-                        generatedPosts.map((p) =>
-                          p.id === post.id
-                            ? {
-                                ...p,
-                                platformCaptions: undefined,
-                                approvedPlatforms: remainingPlatforms.length > 0 ? remainingPlatforms : undefined,
-                                caption: entries.length === 1 ? entries[0][1] : p.caption,
-                              }
-                            : p
-                        )
-                      );
-                    } else {
-                      setGeneratedPosts(
-                        generatedPosts.map((p) =>
-                          p.id === post.id
-                            ? { ...p, platformCaptions: remaining, approvedPlatforms: remainingPlatforms }
-                            : p
-                        )
-                      );
-                    }
-                  }}
+                  onDelete={() => handleDeletePlatform(plat)}
                 />
               ))}
             </div>
-          ) : editingCaption ? (
-            <div className="flex-1 flex flex-col">
-              <textarea
-                value={editedText}
-                onChange={(e) => setEditedText(e.target.value)}
-                className="flex-1 text-[13px] text-text-primary leading-relaxed rounded-[10px] p-3 resize-none min-h-[180px] focus:outline-none"
-                style={{
-                  background: 'rgba(255,255,255,0.04)',
-                  border: '1.5px solid rgba(232,54,79,0.3)',
-                  color: 'rgb(var(--c-text-primary))',
-                }}
-              />
-              <div className="flex gap-2 mt-3">
-                <button
-                  onClick={() => {
-                    setGeneratedPosts(
-                      generatedPosts.map((p) =>
-                        p.id === post.id ? { ...p, caption: editedText } : p
-                      )
-                    );
-                    setEditingCaption(false);
-                  }}
-                  className="px-4 py-2 rounded-[10px] text-[13px] font-bold text-white"
-                  style={{ background: 'linear-gradient(135deg, rgb(var(--c-coral)), rgb(var(--c-coral-hover)))' }}
-                >
-                  Save
-                </button>
-                <button
-                  onClick={() => { setEditedText(post.caption); setEditingCaption(false); }}
-                  className="px-4 py-2 rounded-[10px] text-[13px] font-semibold"
-                  style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border-color)', color: 'rgb(var(--c-text-secondary))' }}
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div
-              className="flex-1 text-[13px] text-text-secondary leading-relaxed overflow-y-auto max-h-[220px] whitespace-pre-line no-scrollbar"
-            >
-              {post.caption}
-            </div>
           )}
         </div>
-      </div>
+      ) : (
+        /* Ready: original 2-column image + caption layout */
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-0">
+          {/* Image preview */}
+          <div
+            className="flex flex-col items-center justify-center p-8 min-h-[300px]"
+            style={{
+              background: post.imageUrl
+                ? undefined
+                : 'linear-gradient(135deg, #1a1a3e, #0d0d2a, #1e1e4a)',
+              borderRight: '1px solid var(--border-color)',
+            }}
+          >
+            {post.imageUrl ? (
+              <img
+                src={post.imageUrl}
+                alt={post.title}
+                className="w-full h-full object-cover rounded-lg"
+                style={{ maxHeight: 300 }}
+              />
+            ) : (
+              <>
+                {generatingImage ? (
+                  <>
+                    <div
+                      className="animate-spin rounded-full h-10 w-10 border-b-2 mb-4"
+                      style={{ borderColor: 'rgb(var(--c-coral))' }}
+                    />
+                    <p className="text-[13px] text-text-muted">Generating image...</p>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-[40px] opacity-60 mb-3">🎨</span>
+                    <p className="text-[13px] text-text-muted mb-4 text-center max-w-[220px]">
+                      {post.imageOverlay}
+                    </p>
+                    <button
+                      onClick={handleGenerateImage}
+                      className="px-5 py-2.5 rounded-[12px] text-[13px] font-bold text-white transition-all duration-200"
+                      style={{
+                        background: 'linear-gradient(135deg, rgb(var(--c-coral)), rgb(var(--c-coral-hover)))',
+                        boxShadow: '0 2px 10px rgba(232,54,79,0.3)',
+                      }}
+                    >
+                      🖼️ Generate Image
+                    </button>
+                  </>
+                )}
+              </>
+            )}
+          </div>
+
+          {/* Caption */}
+          <div className="p-6 flex flex-col">
+            <h3 className="text-[16px] font-bold text-text-primary mb-3">{post.title}</h3>
+            {editingCaption ? (
+              <div className="flex-1 flex flex-col">
+                <textarea
+                  value={editedText}
+                  onChange={(e) => setEditedText(e.target.value)}
+                  className="flex-1 text-[13px] text-text-primary leading-relaxed rounded-[10px] p-3 resize-none min-h-[180px] focus:outline-none"
+                  style={{
+                    background: 'rgba(255,255,255,0.04)',
+                    border: '1.5px solid rgba(232,54,79,0.3)',
+                    color: 'rgb(var(--c-text-primary))',
+                  }}
+                />
+                <div className="flex gap-2 mt-3">
+                  <button
+                    onClick={() => {
+                      setGeneratedPosts(
+                        generatedPosts.map((p) =>
+                          p.id === post.id ? { ...p, caption: editedText } : p
+                        )
+                      );
+                      setEditingCaption(false);
+                    }}
+                    className="px-4 py-2 rounded-[10px] text-[13px] font-bold text-white"
+                    style={{ background: 'linear-gradient(135deg, rgb(var(--c-coral)), rgb(var(--c-coral-hover)))' }}
+                  >
+                    Save
+                  </button>
+                  <button
+                    onClick={() => { setEditedText(post.caption); setEditingCaption(false); }}
+                    className="px-4 py-2 rounded-[10px] text-[13px] font-semibold"
+                    style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border-color)', color: 'rgb(var(--c-text-secondary))' }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div
+                className="flex-1 text-[13px] text-text-secondary leading-relaxed overflow-y-auto max-h-[220px] whitespace-pre-line no-scrollbar"
+              >
+                {post.caption}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Inline schedule picker */}
       {showScheduler && (
@@ -504,7 +595,7 @@ function PostCard({ post, index, justUpdated, onApproveClick }: { post: MagicPos
               opacity: !schedDate || !schedTime || scheduling ? 0.5 : 1,
             }}
           >
-            {scheduling ? 'Scheduling...' : 'Confirm'}
+            {scheduling ? 'Scheduling...' : 'Schedule Post'}
           </button>
           <button
             onClick={() => setShowScheduler(false)}
@@ -513,6 +604,17 @@ function PostCard({ post, index, justUpdated, onApproveClick }: { post: MagicPos
           >
             Cancel
           </button>
+        </div>
+      )}
+
+      {/* Error message */}
+      {postError && (
+        <div
+          className="flex items-center gap-3 px-6 py-3"
+          style={{ borderTop: '1px solid rgba(239,68,68,0.2)', background: 'rgba(239,68,68,0.06)' }}
+        >
+          <span className="text-[13px]">⚠️</span>
+          <span className="text-[13px] text-red-400 flex-1">{postError}</span>
         </div>
       )}
 
@@ -570,35 +672,27 @@ function PostCard({ post, index, justUpdated, onApproveClick }: { post: MagicPos
           <>
             <button
               onClick={() => setShowScheduler(!showScheduler)}
+              disabled={activePlatforms.length === 0}
               className="px-4 py-2.5 rounded-[14px] text-[14px] font-semibold text-text-secondary"
               style={{
                 background: 'rgba(255,255,255,0.06)',
                 border: '1px solid var(--border-color)',
+                opacity: activePlatforms.length === 0 ? 0.5 : 1,
               }}
             >
-              {post.platformCaptions && Object.keys(post.platformCaptions).length > 1 ? '📅 Schedule All' : '📅 Schedule'}
-            </button>
-            <button
-              onClick={() => resetPostStatus(post.id)}
-              className="px-4 py-2.5 rounded-[14px] text-[14px] font-semibold text-text-secondary"
-              style={{
-                background: 'rgba(255,255,255,0.06)',
-                border: '1px solid var(--border-color)',
-              }}
-            >
-              ✏️ Edit
+              📅 Schedule
             </button>
             <button
               onClick={handlePublish}
-              disabled={publishing}
+              disabled={publishing || activePlatforms.length === 0}
               className="px-5 py-2.5 rounded-[14px] text-[14px] font-bold text-white"
               style={{
                 background: 'linear-gradient(135deg, rgb(var(--c-coral)), rgb(var(--c-coral-hover)))',
                 boxShadow: 'var(--shadow-glow-coral)',
-                opacity: publishing ? 0.6 : 1,
+                opacity: publishing || activePlatforms.length === 0 ? 0.6 : 1,
               }}
             >
-              {publishing ? '...' : post.platformCaptions && Object.keys(post.platformCaptions).length > 1 ? '🚀 Publish All' : '🚀 Publish Now'}
+              {publishing ? '...' : '🚀 Post All'}
             </button>
           </>
         )}
@@ -613,14 +707,20 @@ interface ResultsScreenProps {
 }
 
 export function ResultsScreen({ onGenerateMore, onGoBack }: ResultsScreenProps) {
+  const navigate = useNavigate();
   const magicStore = useMagicModeStore();
-  const { generatedPosts, feedbackModal, closeFeedback, resetPostStatus, setPostCount, postCount, setGeneratedPosts, approvePost, answers } = magicStore;
+  const { generatedPosts, feedbackModal, closeFeedback, resetPostStatus, setPostCount, postCount, setGeneratedPosts, answers } = magicStore;
   const allApproved = generatedPosts.length > 0 && generatedPosts.every((p) => p.status === 'approved' || p.status === 'published' || p.status === 'scheduled');
   const approvedCount = generatedPosts.filter((p) => p.status !== 'ready').length;
+  // All posts resolved (published/scheduled) or all deleted
+  const allResolved = generatedPosts.length === 0 || generatedPosts.every((p) => p.status === 'published' || p.status === 'scheduled');
   const [showMore, setShowMore] = useState(false);
   const [regenerating, setRegenerating] = useState<string | null>(null); // null or description text
   const [regenerateError, setRegenerateError] = useState<string | null>(null);
   const [justUpdatedId, setJustUpdatedId] = useState<number | null>(null);
+
+  // Connect account modal state (lifted from PostCard to avoid overflow-hidden clipping)
+  const [connectModalError, setConnectModalError] = useState<string | null>(null);
 
   // Approve modal state
   const [approveModalPostId, setApproveModalPostId] = useState<number | null>(null);
@@ -628,8 +728,14 @@ export function ResultsScreen({ onGenerateMore, onGoBack }: ResultsScreenProps) 
 
   const handleApproveClick = (postId: number) => {
     if (selectedPlatforms.length <= 1) {
-      // Only one platform — skip modal, approve directly
-      approvePost(postId);
+      // Only one platform — skip modal, approve directly with platform set
+      const post = generatedPosts.find((p) => p.id === postId);
+      const platforms = selectedPlatforms.length === 1 ? selectedPlatforms : post ? [post.platform] : [];
+      setGeneratedPosts(
+        generatedPosts.map((p) =>
+          p.id === postId ? { ...p, status: 'approved' as const, approvedPlatforms: platforms } : p
+        )
+      );
     } else {
       setApproveModalPostId(postId);
     }
@@ -762,7 +868,10 @@ export function ResultsScreen({ onGenerateMore, onGoBack }: ResultsScreenProps) 
     }
 
     // Needs save = not saved at all, OR imageUrl changed since last save
+    // Skip posts that are already published/scheduled or have empty approved platforms (deleted)
     const needsSave = generatedPosts.filter((p) => {
+      if (p.status === 'published' || p.status === 'scheduled') return false;
+      if (p.approvedPlatforms && p.approvedPlatforms.length === 0) return false;
       const entry = savedMap[p.id];
       if (!entry) return true;
       if (p.imageUrl && p.imageUrl !== entry.imageUrl) return true;
@@ -999,7 +1108,7 @@ export function ResultsScreen({ onGenerateMore, onGoBack }: ResultsScreenProps) 
         {/* Posts */}
         <div className="space-y-6">
           {generatedPosts.map((post, i) => (
-            <PostCard key={post.id} post={post} index={i} justUpdated={justUpdatedId === post.id} onApproveClick={handleApproveClick} />
+            <PostCard key={post.id} post={post} index={i} justUpdated={justUpdatedId === post.id} onApproveClick={handleApproveClick} onConnectError={setConnectModalError} />
           ))}
         </div>
 
@@ -1042,8 +1151,42 @@ export function ResultsScreen({ onGenerateMore, onGoBack }: ResultsScreenProps) 
           </p>
         )}
 
-        {/* Generate More */}
-        {showMore && (
+        {/* All posts resolved — Next button */}
+        {allResolved && (
+          <div
+            className="mt-10 p-6 rounded-[20px] text-center au"
+            style={{
+              background: 'rgba(16,185,129,0.05)',
+              border: '1px solid rgba(16,185,129,0.2)',
+            }}
+          >
+            <div className="text-[40px] mb-3">🎊</div>
+            <h3 className="text-[22px] font-extrabold text-text-primary mb-2">
+              {generatedPosts.length === 0 ? 'All posts removed' : 'All done!'}
+            </h3>
+            <p className="text-[14px] text-text-secondary mb-6">
+              {generatedPosts.length === 0
+                ? 'All posts have been removed. Head to your dashboard.'
+                : 'All your posts have been handled. Head to your dashboard to see them.'}
+            </p>
+            <button
+              onClick={() => {
+                magicStore.reset();
+                navigate('/');
+              }}
+              className="px-6 py-3 rounded-[14px] text-[15px] font-bold text-white"
+              style={{
+                background: 'linear-gradient(135deg, rgb(16,185,129), rgb(5,150,105))',
+                boxShadow: '0 4px 14px rgba(16,185,129,0.3)',
+              }}
+            >
+              Next — Go to Dashboard
+            </button>
+          </div>
+        )}
+
+        {/* Generate More — only when all approved but not all resolved */}
+        {showMore && !allResolved && (
           <div
             className="mt-10 p-6 rounded-[20px] text-center au"
             style={{
@@ -1148,6 +1291,13 @@ export function ResultsScreen({ onGenerateMore, onGoBack }: ResultsScreenProps) 
           </div>
         </div>
       )}
+
+      {/* Connect Account Modal */}
+      <ConnectAccountModal
+        open={!!connectModalError}
+        message={connectModalError || 'Please connect your account first.'}
+        onClose={() => setConnectModalError(null)}
+      />
 
       {/* Feedback Modal */}
       <FeedbackModal

@@ -10,7 +10,10 @@ from datetime import timedelta
 
 from posts.models import Post
 from brands.models import ApprovalLog
-from analytics.models import PostComment
+try:
+    from analytics.models import PostComment
+except (ImportError, RuntimeError):
+    PostComment = None
 from accounts.models import UserRole
 from accounts.services.notification_service import notify_approval_reminder, notify_reply_sla_breach
 
@@ -95,6 +98,9 @@ class Command(BaseCommand):
         )
 
         # V1.2.1 — Reply SLA check (default 2 hours)
+        if PostComment is None:
+            return
+
         reply_sla_hours = 2
         sla_cutoff = now - timedelta(hours=reply_sla_hours)
 

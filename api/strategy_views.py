@@ -683,22 +683,26 @@ class GenerateIdeasView(APIView):
             specific_pillar = pillars.filter(id=pillar_id).first()
 
         # V1.2.1 — Fetch learning signals for context
-        from analytics.models import LearningSignal
-        learning_signals = LearningSignal.objects.filter(
-            brand=brand, applied=False
-        ).order_by('-created_at')[:10]
-
         learning_context = ''
-        if learning_signals:
-            winning_items = []
-            for sig in learning_signals:
-                winning_items.append(
-                    f"- {sig.signal_type}: {sig.insight[:150]}"
-                )
-            learning_context = f"""
+        learning_signals = None
+        try:
+            from analytics.models import LearningSignal
+            learning_signals = LearningSignal.objects.filter(
+                brand=brand, applied=False
+            ).order_by('-created_at')[:10]
+
+            if learning_signals:
+                winning_items = []
+                for sig in learning_signals:
+                    winning_items.append(
+                        f"- {sig.signal_type}: {sig.insight[:150]}"
+                    )
+                learning_context = f"""
 Past winning patterns (use these to inform your ideas):
 {chr(10).join(winning_items)}
 """
+        except (ImportError, RuntimeError):
+            pass
 
         # V1.3 — Brand DNA context
         dna_context = ''
@@ -908,9 +912,13 @@ Return ONLY a JSON array of exactly {count} objects:
 
             # Mark learning signals as applied
             if learning_signals:
-                LearningSignal.objects.filter(
-                    id__in=[s.id for s in learning_signals]
-                ).update(applied=True)
+                try:
+                    from analytics.models import LearningSignal
+                    LearningSignal.objects.filter(
+                        id__in=[s.id for s in learning_signals]
+                    ).update(applied=True)
+                except (ImportError, RuntimeError):
+                    pass
 
             # Save prompt to history
             from brands.models import PromptHistory

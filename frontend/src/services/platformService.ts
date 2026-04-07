@@ -21,8 +21,9 @@ export interface ConnectAccountData {
 
 export const platformService = {
   async list(): Promise<SocialAccount[]> {
-    const response = await api.get<SocialAccount[]>('/platforms/');
-    return response.data;
+    const response = await api.get('/platforms/');
+    const data = response.data;
+    return Array.isArray(data) ? data : data.results || [];
   },
 
   async connect(data: ConnectAccountData): Promise<SocialAccount> {

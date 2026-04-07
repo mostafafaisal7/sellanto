@@ -31,8 +31,13 @@ from rest_framework import status
 
 from platforms.models import SocialAccount, OAuthState
 from platforms.services.facebook import FacebookService
-from messenger_bot.models import MessengerConnection
 from accounts.models import SiteConfiguration
+
+# Messenger bot is removed — provide a safe fallback
+try:
+    from messenger_bot.models import MessengerConnection
+except (ImportError, RuntimeError):
+    MessengerConnection = None
 
 logger = logging.getLogger(__name__)
 
@@ -770,20 +775,8 @@ def facebook_connection_status(request):
             'connected_at':  acc.connected_at,
         })
 
-    # ── Messenger Bot ──────────────────────────────────────────────────────────
+    # ── Messenger Bot (removed) ─────────────────────────────────────────────
     messenger = None
-    try:
-        mc = MessengerConnection.objects.get(user=user)
-        messenger = {
-            'page_id':             mc.page_id,
-            'page_name':           mc.page_name,
-            'is_active':           mc.is_active,
-            'is_webhook_verified': mc.is_webhook_verified,
-            'auto_reply_enabled':  mc.auto_reply_enabled,
-            'connected_at':        mc.connected_at,
-        }
-    except MessengerConnection.DoesNotExist:
-        messenger = None
 
     # ── Build missing & warnings lists ────────────────────────────────────────
     missing  = []
@@ -902,6 +895,7 @@ def facebook_connection_status(request):
 def _auto_setup_messenger(user, connected_pages, request):
     """
     Auto-creates or updates MessengerConnection right inside the OAuth callback.
+    NOTE: Messenger bot feature has been removed — this is now a no-op.
     Runs server-side so it works regardless of COOP headers, popup behaviour,
     or number of pages the user has.
 
@@ -913,7 +907,8 @@ def _auto_setup_messenger(user, connected_pages, request):
     Webhook subscription is best-effort — a failure here does NOT block the
     OAuth flow. The admin can re-run subscription from the admin panel.
     """
-    from messenger_bot.models import MessengerConnection
+    if MessengerConnection is None:
+        return  # Messenger bot feature removed
     from platforms.models import SocialAccount
 
     active_pages = [p for p in connected_pages if p.get('status') == 'active']

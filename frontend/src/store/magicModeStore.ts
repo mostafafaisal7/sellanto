@@ -16,6 +16,7 @@ export interface MagicPost {
   scheduledTime?: string;
   approvedPlatforms?: string[];
   platformCaptions?: Record<string, string>;
+  deletedPlatforms?: string[];
 }
 
 export interface MagicIdeaData {

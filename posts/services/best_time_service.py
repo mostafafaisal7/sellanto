@@ -9,7 +9,10 @@ from django.db.models import Avg
 from django.utils import timezone
 from datetime import timedelta
 
-from analytics.models import PostAnalytics
+try:
+    from analytics.models import PostAnalytics
+except (ImportError, RuntimeError):
+    PostAnalytics = None
 from brands.models import BestTimeSuggestion
 
 logger = logging.getLogger(__name__)
@@ -50,6 +53,10 @@ def compute_best_times(brand, platform=None):
     suggestions = []
 
     for plat in platforms:
+        if PostAnalytics is None:
+            suggestions.extend(_apply_defaults(brand, plat))
+            continue
+
         analytics = PostAnalytics.objects.filter(
             post__brand=brand,
             platform=plat,
