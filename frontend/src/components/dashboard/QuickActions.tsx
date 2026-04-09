@@ -20,12 +20,12 @@ const actions: QuickAction[] = [
   {
     name: 'Magic Mode',
     description: 'AI auto-create posts',
-    href: '/mode-select',
+    href: '/magic',
     icon: SparklesIcon,
     color: 'from-[#E8364F] to-[#FF6B6B]',
   },
   {
-    name: 'Setup V2',
+    name: 'Manual Setup',
     description: 'Brand & strategy',
     href: '/overflow',
     icon: RocketLaunchIcon,

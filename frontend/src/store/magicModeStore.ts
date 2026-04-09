@@ -46,6 +46,7 @@ interface MagicModeState {
   skipInitialQuestions: boolean;
   loading: boolean;
   error: string | null;
+  hasPreviousGeneration: boolean;
 
   // Logo (not persisted — File objects can't be serialized)
   logoFile: File | null;
@@ -55,6 +56,10 @@ interface MagicModeState {
   ideasData: MagicIdeaData[];
   captionsData: MagicCaptionData[];
   pipelineCompleted: boolean;
+
+  // Smart regeneration tracking
+  originalAnswers: Record<string, string | string[]>;
+  answersChanged: boolean;
 
   setScreen: (screen: MagicModeState['screen']) => void;
   setUrl: (url: string) => void;
@@ -71,10 +76,14 @@ interface MagicModeState {
   setSkipInitialQuestions: (skip: boolean) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
+  setHasPreviousGeneration: (value: boolean) => void;
   setTrendingTopics: (topics: string[]) => void;
   setIdeasData: (ideas: MagicIdeaData[]) => void;
   setCaptionsData: (captions: MagicCaptionData[]) => void;
   setPipelineCompleted: (completed: boolean) => void;
+  setOriginalAnswers: (answers: Record<string, string | string[]>) => void;
+  markAnswersChanged: () => void;
+  resetAnswersChanged: () => void;
   reset: () => void;
 }
 
@@ -91,18 +100,21 @@ export const useMagicModeStore = create<MagicModeState>()(
       skipInitialQuestions: false,
       loading: false,
       error: null,
+      hasPreviousGeneration: false,
       logoFile: null,
       trendingTopics: [],
       ideasData: [],
       captionsData: [],
       pipelineCompleted: false,
+      originalAnswers: {},
+      answersChanged: false,
 
       setScreen: (screen) => set({ screen }),
       setUrl: (websiteUrl) => set({ websiteUrl }),
       setLogoFile: (logoFile) => set({ logoFile }),
       setAnswer: (questionId, answer) =>
         set((state) => ({ answers: { ...state.answers, [questionId]: answer } })),
-      setGeneratedPosts: (generatedPosts) => set({ generatedPosts }),
+      setGeneratedPosts: (generatedPosts) => set({ generatedPosts, hasPreviousGeneration: true }),
       approvePost: (id) =>
         set((state) => ({
           generatedPosts: state.generatedPosts.map((p) =>
@@ -133,10 +145,14 @@ export const useMagicModeStore = create<MagicModeState>()(
       setSkipInitialQuestions: (skipInitialQuestions) => set({ skipInitialQuestions }),
       setLoading: (loading) => set({ loading }),
       setError: (error) => set({ error }),
+      setHasPreviousGeneration: (hasPreviousGeneration) => set({ hasPreviousGeneration }),
       setTrendingTopics: (trendingTopics) => set({ trendingTopics }),
       setIdeasData: (ideasData) => set({ ideasData }),
       setCaptionsData: (captionsData) => set({ captionsData }),
       setPipelineCompleted: (pipelineCompleted) => set({ pipelineCompleted }),
+      setOriginalAnswers: (originalAnswers) => set({ originalAnswers, answersChanged: false }),
+      markAnswersChanged: () => set({ answersChanged: true }),
+      resetAnswersChanged: () => set({ answersChanged: false }),
       reset: () => {
         localStorage.removeItem('magic_draft_post_ids');
         set({
@@ -151,10 +167,13 @@ export const useMagicModeStore = create<MagicModeState>()(
           skipInitialQuestions: false,
           loading: false,
           error: null,
+          hasPreviousGeneration: false,
           trendingTopics: [],
           ideasData: [],
           captionsData: [],
           pipelineCompleted: false,
+          originalAnswers: {},
+          answersChanged: false,
         });
       },
     }),
@@ -166,10 +185,13 @@ export const useMagicModeStore = create<MagicModeState>()(
         answers: state.answers,
         generatedPosts: state.generatedPosts,
         postCount: state.postCount,
+        hasPreviousGeneration: state.hasPreviousGeneration,
         trendingTopics: state.trendingTopics,
         ideasData: state.ideasData,
         captionsData: state.captionsData,
         pipelineCompleted: state.pipelineCompleted,
+        originalAnswers: state.originalAnswers,
+        answersChanged: state.answersChanged,
       }),
     }
   )

@@ -3,7 +3,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from accounts.permissions import IsCreatorOrAbove, IsWorkspaceAdmin, IsViewerOrAbove
+# RBAC removed - all users have full access with just IsAuthenticated
 from accounts.services.diamond_service import pre_check, deduct_diamonds
 
 from posts.models import Post, PostHashtag, HashtagGroup, BannedHashtag
@@ -19,7 +19,7 @@ from .serializers import (
 
 class DraftHashtagsView(APIView):
     """List hashtags for a specific draft/post"""
-    permission_classes = [IsAuthenticated, IsViewerOrAbove]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request, post_id):
         try:
@@ -34,7 +34,7 @@ class DraftHashtagsView(APIView):
 
 class GenerateHashtagsView(APIView):
     """Generate hashtags for a draft using LLM + tier logic"""
-    permission_classes = [IsAuthenticated, IsCreatorOrAbove]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request, post_id):
         try:
@@ -107,7 +107,7 @@ class GenerateHashtagsView(APIView):
 
 class ToggleHashtagView(APIView):
     """Toggle or update a hashtag"""
-    permission_classes = [IsAuthenticated, IsCreatorOrAbove]
+    permission_classes = [IsAuthenticated]
 
     def patch(self, request, hashtag_id):
         try:
@@ -129,7 +129,7 @@ class ToggleHashtagView(APIView):
 
 class HashtagGroupViewSet(viewsets.ModelViewSet):
     serializer_class = HashtagGroupSerializer
-    permission_classes = [IsAuthenticated, IsCreatorOrAbove]
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         brand_id = self.request.query_params.get('brand_id')
@@ -144,7 +144,7 @@ class HashtagGroupViewSet(viewsets.ModelViewSet):
 
 class BannedHashtagViewSet(viewsets.ModelViewSet):
     serializer_class = BannedHashtagSerializer
-    permission_classes = [IsAuthenticated, IsWorkspaceAdmin]
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         brand_id = self.request.query_params.get('brand_id')

@@ -230,6 +230,10 @@ urlpatterns = [
     # Magic Mode History
     path('magic/history/', views.MagicHistoryView.as_view(), name='api-magic-history'),
 
+    # Magic Mode Cached Posts Lookup
+    path('magic/posts/<str:industry>/<str:goal>/<str:tone>/<str:platforms>/<str:colors>/',
+         views.MagicModeCachedPostsView.as_view(), name='api-magic-cached-posts'),
+
     # ViewSet routes
     path('', include(router.urls)),
 ]

@@ -55,25 +55,35 @@ export function AIWorkingScreen({ onComplete, onStop }: AIWorkingScreenProps) {
     try {
       // Step 0: Get or create brand
       setStep(0);
-      let brandId: number = store.brandId || 0;
-      if (!brandId) {
-        const res = await api.get('/brands/');
-        const brands = Array.isArray(res.data) ? res.data : res.data.results || [];
-        if (brands.length > 0) {
+      let brandId: number = 0;
+
+      // Always fetch current user's brands to ensure brandId is valid for this user
+      const res = await api.get('/brands/');
+      const brands = Array.isArray(res.data) ? res.data : res.data.results || [];
+
+      if (brands.length > 0) {
+        // If stored brandId exists and belongs to current user, use it
+        const storedBrandId = store.brandId;
+        const storedBrand = storedBrandId ? brands.find((b: { id: number }) => b.id === storedBrandId) : null;
+
+        if (storedBrand) {
+          brandId = storedBrand.id;
+        } else {
+          // Stored brandId invalid/stale - use user's primary brand or first brand
           const primary = brands.find((b: { is_primary: boolean }) => b.is_primary) || brands[0];
           brandId = primary.id;
-          store.setBrandId(brandId);
-        } else {
-          // Create a brand from answers
-          const brandRes = await api.post('/brands/', {
-            brand_name: store.answers.industry ? String(store.answers.industry) : 'My Brand',
-            industry: store.answers.industry ? String(store.answers.industry) : '',
-            website_url: store.websiteUrl || '',
-            is_primary: true,
-          });
-          brandId = brandRes.data.id;
-          store.setBrandId(brandId);
         }
+        store.setBrandId(brandId);
+      } else {
+        // No brands exist - create one
+        const brandRes = await api.post('/brands/', {
+          brand_name: store.answers.industry ? String(store.answers.industry) : 'My Brand',
+          industry: store.answers.industry ? String(store.answers.industry) : '',
+          website_url: store.websiteUrl || '',
+          is_primary: true,
+        });
+        brandId = brandRes.data.id;
+        store.setBrandId(brandId);
       }
       if (cancelledRef.current) return;
 

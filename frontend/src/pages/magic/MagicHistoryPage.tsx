@@ -1,5 +1,19 @@
 import { useState, useEffect } from 'react';
 import api from '../../services/api';
+import { postService } from '../../services/postService';
+import ConnectAccountModal from '../../components/ConnectAccountModal';
+
+interface PostRecord {
+  id: number;
+  caption: string;
+  hook: string;
+  status: string;
+  platforms_list: string[];
+  media_urls: string[];
+  scheduled_time: string | null;
+  posted_at: string | null;
+  created_at: string;
+}
 
 interface CaptionRecord {
   id: number;
@@ -74,6 +88,7 @@ interface SessionStats {
   total_images: number;
   total_ideas: number;
   total_trending: number;
+  total_posts: number;
   total_tokens: number;
   total_time: number;
 }
@@ -89,6 +104,7 @@ interface Session {
   ideas: IdeaRecord[];
   trending_topics: TrendingRecord[];
   prompts: PromptRecord[];
+  posts: PostRecord[];
   stats: SessionStats;
 }
 
@@ -100,8 +116,11 @@ function formatDate(iso: string): string {
 
 function StatusBadge({ status }: { status: string }) {
   const colors: Record<string, { bg: string; text: string }> = {
-    completed: { bg: 'rgba(16,185,129,0.15)', text: '#10b981' },
+    draft: { bg: 'rgba(255,255,255,0.08)', text: '#94a3b8' },
+    scheduled: { bg: 'rgba(59,130,246,0.15)', text: '#3b82f6' },
+    posted: { bg: 'rgba(16,185,129,0.15)', text: '#10b981' },
     failed: { bg: 'rgba(239,68,68,0.15)', text: '#ef4444' },
+    completed: { bg: 'rgba(16,185,129,0.15)', text: '#10b981' },
     processing: { bg: 'rgba(59,130,246,0.15)', text: '#3b82f6' },
     pending: { bg: 'rgba(255,255,255,0.08)', text: '#94a3b8' },
   };
@@ -137,8 +156,243 @@ function ExpandableText({ label, text }: { label: string; text: string }) {
   );
 }
 
-function SessionCard({ session }: { session: Session }) {
-  const [expanded, setExpanded] = useState(false);
+// Post card for history (simpler than ResultsScreen version)
+function HistoryPostCard({ post, onConnectError }: { post: PostRecord; onConnectError: (msg: string) => void }) {
+  const [publishing, setPublishing] = useState(false);
+  const [showScheduler, setShowScheduler] = useState(false);
+  const [schedDate, setSchedDate] = useState('');
+  const [schedTime, setSchedTime] = useState('');
+  const [scheduling, setScheduling] = useState(false);
+  const [postError, setPostError] = useState<string | null>(null);
+
+  const isDraft = post.status === 'draft';
+  const isScheduled = post.status === 'scheduled';
+  const isPosted = post.status === 'posted';
+  const isFinal = isPosted || isScheduled;
+
+  const platformEmoji: Record<string, string> = {
+    linkedin: '💼',
+    instagram: '📸',
+    facebook: '📘',
+    twitter: '🐦',
+    tiktok: '🎵',
+  };
+
+  const downloadImageAsFile = async (): Promise<File[]> => {
+    if (!post.media_urls || post.media_urls.length === 0) return [];
+    try {
+      const res = await fetch(post.media_urls[0]);
+      const blob = await res.blob();
+      const ext = post.media_urls[0].split('.').pop()?.split('?')[0] || 'png';
+      return [new File([blob], `image.${ext}`, { type: blob.type || 'image/png' })];
+    } catch {
+      return [];
+    }
+  };
+
+  const handlePublish = async () => {
+    setPublishing(true);
+    setPostError(null);
+    try {
+      const mediaFiles = await downloadImageAsFile();
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const now = new Date();
+      now.setMinutes(now.getMinutes() + 1);
+      const scheduledTime = now.toISOString();
+
+      await postService.create({
+        caption: post.caption,
+        media_files: mediaFiles,
+        platforms: post.platforms_list as import('../../types').PlatformType[],
+        source: 'magic',
+        hook: post.hook,
+        scheduled_time: scheduledTime,
+        timezone,
+      });
+
+      // Delete the draft
+      await postService.delete(post.id);
+      window.location.reload(); // Reload to refresh the list
+    } catch (err: any) {
+      const msg = err?.response?.data?.error || err?.message || 'Failed to publish post.';
+      if (msg.toLowerCase().includes('no connected account')) {
+        onConnectError(msg);
+      } else {
+        setPostError(msg);
+      }
+    }
+    setPublishing(false);
+  };
+
+  const handleScheduleConfirm = async () => {
+    if (!schedDate || !schedTime) return;
+    setScheduling(true);
+    setPostError(null);
+    try {
+      const mediaFiles = await downloadImageAsFile();
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const scheduledTime = new Date(`${schedDate}T${schedTime}`).toISOString();
+
+      await postService.create({
+        caption: post.caption,
+        media_files: mediaFiles,
+        platforms: post.platforms_list as import('../../types').PlatformType[],
+        source: 'magic',
+        hook: post.hook,
+        scheduled_time: scheduledTime,
+        timezone,
+      });
+
+      // Delete the draft
+      await postService.delete(post.id);
+      window.location.reload(); // Reload to refresh the list
+    } catch (err: any) {
+      const msg = err?.response?.data?.error || err?.message || 'Failed to schedule post.';
+      if (msg.toLowerCase().includes('no connected account')) {
+        onConnectError(msg);
+      } else {
+        setPostError(msg);
+      }
+    }
+    setScheduling(false);
+  };
+
+  return (
+    <div
+      className="rounded-[16px] overflow-hidden mb-3"
+      style={{
+        background: 'rgba(255,255,255,0.02)',
+        border: `1px solid ${isFinal ? 'rgba(16,185,129,0.3)' : 'rgba(255,255,255,0.06)'}`,
+      }}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+        <div className="flex items-center gap-2 flex-wrap">
+          {post.platforms_list.map((plat) => (
+            <span key={plat} className="text-[12px]">
+              {platformEmoji[plat] || '📱'} {plat}
+            </span>
+          ))}
+        </div>
+        <StatusBadge status={post.status} />
+      </div>
+
+      {/* Content */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-0">
+        {/* Image */}
+        {post.media_urls && post.media_urls.length > 0 && (
+          <div className="p-4">
+            <img src={post.media_urls[0]} alt="Post" className="w-full h-[200px] object-cover rounded-[10px]" />
+          </div>
+        )}
+
+        {/* Caption */}
+        <div className="p-4 flex flex-col">
+          {post.hook && (
+            <h4 className="text-[14px] font-bold text-text-primary mb-2">{post.hook}</h4>
+          )}
+          <p className="text-[12px] text-text-secondary leading-relaxed whitespace-pre-line line-clamp-6">
+            {post.caption}
+          </p>
+        </div>
+      </div>
+
+      {/* Schedule picker */}
+      {showScheduler && (
+        <div
+          className="flex items-center gap-3 px-4 py-3"
+          style={{ borderTop: '1px solid var(--border-color)', background: 'rgba(59,130,246,0.04)' }}
+        >
+          <input
+            type="date"
+            value={schedDate}
+            onChange={(e) => setSchedDate(e.target.value)}
+            min={new Date().toISOString().split('T')[0]}
+            className="text-[12px] px-3 py-2 rounded-[10px] focus:outline-none"
+            style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border-color)', color: 'rgb(var(--c-text-primary))' }}
+          />
+          <input
+            type="time"
+            value={schedTime}
+            onChange={(e) => setSchedTime(e.target.value)}
+            className="text-[12px] px-3 py-2 rounded-[10px] focus:outline-none"
+            style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border-color)', color: 'rgb(var(--c-text-primary))' }}
+          />
+          <button
+            onClick={handleScheduleConfirm}
+            disabled={!schedDate || !schedTime || scheduling}
+            className="px-3 py-2 rounded-[10px] text-[12px] font-bold text-white"
+            style={{
+              background: 'linear-gradient(135deg, rgb(59,130,246), rgb(37,99,235))',
+              opacity: !schedDate || !schedTime || scheduling ? 0.5 : 1,
+            }}
+          >
+            {scheduling ? 'Scheduling...' : 'Schedule'}
+          </button>
+          <button
+            onClick={() => setShowScheduler(false)}
+            className="text-[12px] font-semibold"
+            style={{ color: 'rgb(var(--c-text-muted))' }}
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {/* Error */}
+      {postError && (
+        <div
+          className="flex items-center gap-3 px-4 py-3"
+          style={{ borderTop: '1px solid rgba(239,68,68,0.2)', background: 'rgba(239,68,68,0.06)' }}
+        >
+          <span className="text-[12px]">⚠️</span>
+          <span className="text-[12px] text-red-400 flex-1">{postError}</span>
+        </div>
+      )}
+
+      {/* Actions */}
+      {isDraft && (
+        <div
+          className="flex items-center justify-end gap-2 px-4 py-3"
+          style={{ borderTop: '1px solid var(--border-color)' }}
+        >
+          <button
+            onClick={() => setShowScheduler(!showScheduler)}
+            className="px-3 py-2 rounded-[10px] text-[12px] font-semibold"
+            style={{
+              background: 'rgba(255,255,255,0.06)',
+              border: '1px solid var(--border-color)',
+              color: 'rgb(var(--c-text-secondary))',
+            }}
+          >
+            📅 Schedule
+          </button>
+          <button
+            onClick={handlePublish}
+            disabled={publishing}
+            className="px-4 py-2 rounded-[10px] text-[12px] font-bold text-white"
+            style={{
+              background: 'linear-gradient(135deg, rgb(var(--c-coral)), rgb(var(--c-coral-hover)))',
+              opacity: publishing ? 0.6 : 1,
+            }}
+          >
+            {publishing ? 'Posting...' : '🚀 Post Now'}
+          </button>
+        </div>
+      )}
+
+      {isFinal && post.scheduled_time && (
+        <div className="px-4 py-3 text-[11px] text-text-muted" style={{ borderTop: '1px solid var(--border-color)' }}>
+          {isScheduled && `Scheduled for ${new Date(post.scheduled_time).toLocaleString()}`}
+          {isPosted && post.posted_at && `Posted on ${new Date(post.posted_at).toLocaleString()}`}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Technical details card (existing SessionCard functionality)
+function TechnicalDetailsCard({ session }: { session: Session }) {
   const [activeTab, setActiveTab] = useState<'ideas' | 'captions' | 'images' | 'trending' | 'dna' | 'prompts'>('captions');
   const { stats } = session;
 
@@ -153,201 +407,246 @@ function SessionCard({ session }: { session: Session }) {
 
   return (
     <div
+      className="rounded-[16px] overflow-hidden mt-3"
+      style={{ background: 'rgb(var(--c-bg-card))', border: '1px solid var(--border-color)' }}
+    >
+      {/* Tabs */}
+      <div className="flex gap-1 px-4 py-3 overflow-x-auto no-scrollbar" style={{ borderBottom: '1px solid var(--border-color)' }}>
+        {tabs.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className="px-3 py-2 rounded-[10px] text-[11px] font-semibold whitespace-nowrap transition-all"
+            style={{
+              background: activeTab === tab.key ? 'rgba(232,54,79,0.1)' : 'transparent',
+              color: activeTab === tab.key ? 'rgb(var(--c-coral))' : 'rgb(var(--c-text-secondary))',
+              border: activeTab === tab.key ? '1px solid rgba(232,54,79,0.2)' : '1px solid transparent',
+            }}
+          >
+            {tab.emoji} {tab.label} ({tab.count})
+          </button>
+        ))}
+      </div>
+
+      {/* Tab content */}
+      <div className="p-4 space-y-3 max-h-[500px] overflow-y-auto no-scrollbar">
+        {/* Captions tab */}
+        {activeTab === 'captions' && session.captions.map((c) => (
+          <div key={c.id} className="p-3 rounded-[12px]" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <div className="flex items-start justify-between gap-3 mb-2">
+              <p className="text-[12px] font-semibold text-text-primary flex-1">{c.input_text || 'Caption'}</p>
+              <StatusBadge status={c.status} />
+            </div>
+            {c.generated_caption && (
+              <p className="text-[11px] text-text-secondary leading-relaxed whitespace-pre-line mb-2">{c.generated_caption}</p>
+            )}
+            <div className="flex flex-wrap gap-2 mt-2">
+              {c.platform && <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ background: 'rgba(59,130,246,0.1)', color: '#3b82f6' }}>{c.platform}</span>}
+              {c.tone && <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ background: 'rgba(168,85,247,0.1)', color: '#a855f7' }}>{c.tone}</span>}
+              {c.model_used && <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ background: 'rgba(255,255,255,0.06)', color: '#94a3b8' }}>{c.model_used}</span>}
+              <span className="text-[10px] text-text-muted">⚡ {c.tokens_used} tokens</span>
+              <span className="text-[10px] text-text-muted">⏱ {c.processing_time?.toFixed(1)}s</span>
+            </div>
+            {c.custom_instructions && <ExpandableText label="Custom Instructions" text={c.custom_instructions} />}
+            {c.generated_hashtags && <p className="text-[11px] text-text-muted mt-2">{c.generated_hashtags}</p>}
+            {c.error_message && <p className="text-[11px] mt-2" style={{ color: '#ef4444' }}>{c.error_message}</p>}
+          </div>
+        ))}
+
+        {/* Ideas tab */}
+        {activeTab === 'ideas' && session.ideas.map((idea) => (
+          <div key={idea.id} className="p-3 rounded-[12px]" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <p className="text-[12px] font-semibold text-text-primary mb-1">{idea.title}</p>
+            {idea.hook && <p className="text-[11px] text-text-secondary mb-2">{idea.hook}</p>}
+            <div className="flex flex-wrap gap-2">
+              {idea.platform && <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ background: 'rgba(59,130,246,0.1)', color: '#3b82f6' }}>{idea.platform}</span>}
+              {idea.content_format && <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ background: 'rgba(16,185,129,0.1)', color: '#10b981' }}>{idea.content_format}</span>}
+              {idea.source && <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ background: 'rgba(255,255,255,0.06)', color: '#94a3b8' }}>{idea.source}</span>}
+              <StatusBadge status={idea.status} />
+            </div>
+            {idea.trending_topic_ref && <p className="text-[11px] text-text-muted mt-2">Trending: {idea.trending_topic_ref}</p>}
+          </div>
+        ))}
+
+        {/* Images tab */}
+        {activeTab === 'images' && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {session.images.map((img) => {
+              const imgUrl = img.generated_image_with_logo || img.generated_image || img.composited_image;
+              return (
+                <div key={img.id} className="rounded-[12px] overflow-hidden" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                  {imgUrl && (
+                    <img src={imgUrl} alt={img.title} className="w-full h-[150px] object-cover" />
+                  )}
+                  <div className="p-3">
+                    <div className="flex items-start justify-between gap-2 mb-1">
+                      <p className="text-[11px] font-semibold text-text-primary flex-1">{img.title || 'Image'}</p>
+                      <StatusBadge status={img.status} />
+                    </div>
+                    <div className="flex flex-wrap gap-2 mb-2">
+                      {img.provider && <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ background: 'rgba(255,255,255,0.06)', color: '#94a3b8' }}>{img.provider}</span>}
+                      {img.style && <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ background: 'rgba(168,85,247,0.1)', color: '#a855f7' }}>{img.style}</span>}
+                      <span className="text-[10px] text-text-muted">⏱ {img.processing_time?.toFixed(1)}s</span>
+                    </div>
+                    <ExpandableText label="Prompt" text={img.prompt} />
+                    {img.enhanced_prompt && <ExpandableText label="Enhanced Prompt" text={img.enhanced_prompt} />}
+                    {img.error_message && <p className="text-[11px] mt-2" style={{ color: '#ef4444' }}>{img.error_message}</p>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Trending tab */}
+        {activeTab === 'trending' && session.trending_topics.map((t) => (
+          <div key={t.id} className="flex items-center gap-4 p-3 rounded-[12px]" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <div className="flex-1 min-w-0">
+              <p className="text-[12px] font-semibold text-text-primary">{t.topic}</p>
+              {t.relevance_explanation && <p className="text-[11px] text-text-secondary mt-1">{t.relevance_explanation}</p>}
+              <div className="flex gap-2 mt-1">
+                {t.platform && <span className="text-[10px] text-text-muted">{t.platform}</span>}
+                {t.region && <span className="text-[10px] text-text-muted">{t.region}</span>}
+              </div>
+            </div>
+            <div className="text-center flex-shrink-0">
+              <div className="text-[16px] font-black" style={{ color: t.volume_score >= 80 ? '#ef4444' : t.volume_score >= 50 ? '#f59e0b' : '#3b82f6' }}>
+                {t.volume_score}
+              </div>
+              <span className="text-[10px] text-text-muted">score</span>
+            </div>
+          </div>
+        ))}
+
+        {/* DNA tab */}
+        {activeTab === 'dna' && session.dna && (() => {
+          const dnaObj = session.dna.dna_data;
+          const entries = dnaObj && typeof dnaObj === 'object' && !Array.isArray(dnaObj)
+            ? Object.entries(dnaObj as Record<string, string | string[]>)
+            : [];
+          return (
+            <div className="p-3 rounded-[12px] space-y-2" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-[14px]">🧬</span>
+                <p className="text-[13px] font-bold text-text-primary">Brand DNA Analysis</p>
+                {session.website_url && <span className="text-[10px] text-text-muted ml-auto">{session.website_url}</span>}
+              </div>
+              {entries.length > 0 && (
+                <div className="space-y-2">
+                  {entries.map(([key, val]) => (
+                    <div key={key} className="flex gap-3">
+                      <span className="text-[10px] font-semibold text-text-muted min-w-[100px] uppercase tracking-wide">{key.replace(/_/g, ' ')}</span>
+                      <span className="text-[11px] text-text-secondary flex-1">
+                        {Array.isArray(val) ? val.join(', ') : String(val ?? '—')}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* Prompts tab */}
+        {activeTab === 'prompts' && session.prompts.map((p) => (
+          <div key={p.id} className="p-3 rounded-[12px]" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ background: 'rgba(232,54,79,0.1)', color: 'rgb(var(--c-coral))' }}>
+                {p.feature}
+              </span>
+              <span className="text-[10px] text-text-muted ml-auto">{new Date(p.created_at).toLocaleTimeString()}</span>
+            </div>
+            <pre className="text-[10px] text-text-secondary leading-relaxed whitespace-pre-wrap max-h-[180px] overflow-y-auto no-scrollbar">
+              {p.prompt_text}
+            </pre>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Main session card with posts first, then optional technical details
+function SessionCard({ session }: { session: Session }) {
+  const [showDetails, setShowDetails] = useState(false);
+  const [connectModalError, setConnectModalError] = useState<string | null>(null);
+  const { stats } = session;
+
+  const hasTechnicalData = stats.total_captions > 0 || stats.total_images > 0 || stats.total_ideas > 0 || stats.total_trending > 0 || session.dna || session.prompts.length > 0;
+
+  return (
+    <div
       className="rounded-[20px] overflow-hidden transition-all duration-300"
       style={{ background: 'rgb(var(--c-bg-card))', border: '1px solid var(--border-color)' }}
     >
-      {/* Collapsed header */}
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center gap-4 px-6 py-5 text-left transition-colors hover:bg-white/[0.02]"
-      >
-        <div
-          className="w-11 h-11 rounded-[12px] flex items-center justify-center text-[20px] flex-shrink-0"
-          style={{ background: 'linear-gradient(135deg, rgba(232,54,79,0.15), rgba(232,54,79,0.05))' }}
-        >
-          ✨
-        </div>
+      {/* Header */}
+      <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: '1px solid var(--border-color)' }}>
         <div className="flex-1 min-w-0">
           <p className="text-[14px] font-bold text-text-primary">
             {formatDate(session.date)}
           </p>
           <div className="flex items-center gap-3 mt-1 flex-wrap">
             {session.brand_name && (
-              <span className="text-[12px] text-text-muted">🏢 {session.brand_name}</span>
+              <span className="text-[11px] text-text-muted">🏢 {session.brand_name}</span>
             )}
-            <span className="text-[12px] text-text-muted">✍️ {stats.total_captions} captions</span>
+            {stats.total_posts > 0 && (
+              <span className="text-[11px] text-text-muted">📝 {stats.total_posts} posts</span>
+            )}
+            {stats.total_captions > 0 && (
+              <span className="text-[11px] text-text-muted">✍️ {stats.total_captions} captions</span>
+            )}
             {stats.total_images > 0 && (
-              <span className="text-[12px] text-text-muted">🎨 {stats.total_images} images</span>
+              <span className="text-[11px] text-text-muted">🎨 {stats.total_images} images</span>
             )}
             {stats.total_ideas > 0 && (
-              <span className="text-[12px] text-text-muted">💡 {stats.total_ideas} ideas</span>
+              <span className="text-[11px] text-text-muted">💡 {stats.total_ideas} ideas</span>
             )}
-            <span className="text-[12px] text-text-muted">⚡ {stats.total_tokens.toLocaleString()} tokens</span>
-            <span className="text-[12px] text-text-muted">⏱ {stats.total_time}s</span>
           </div>
         </div>
-        <span className="text-[16px] text-text-muted transition-transform" style={{ transform: expanded ? 'rotate(180deg)' : 'none' }}>
-          ▼
-        </span>
-      </button>
+        {hasTechnicalData && (
+          <button
+            onClick={() => setShowDetails(!showDetails)}
+            className="px-3 py-2 rounded-[10px] text-[12px] font-semibold transition-all"
+            style={{
+              background: 'rgba(255,255,255,0.06)',
+              border: '1px solid var(--border-color)',
+              color: 'rgb(var(--c-text-primary))',
+            }}
+          >
+            {showDetails ? 'Hide Details' : 'View Details'}
+          </button>
+        )}
+      </div>
 
-      {/* Expanded content */}
-      {expanded && (
-        <div style={{ borderTop: '1px solid var(--border-color)' }}>
-          {/* Tabs */}
-          <div className="flex gap-1 px-5 py-3 overflow-x-auto no-scrollbar" style={{ borderBottom: '1px solid var(--border-color)' }}>
-            {tabs.map((tab) => (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
-                className="px-3.5 py-2 rounded-[10px] text-[12px] font-semibold whitespace-nowrap transition-all"
-                style={{
-                  background: activeTab === tab.key ? 'rgba(232,54,79,0.1)' : 'transparent',
-                  color: activeTab === tab.key ? 'rgb(var(--c-coral))' : 'rgb(var(--c-text-secondary))',
-                  border: activeTab === tab.key ? '1px solid rgba(232,54,79,0.2)' : '1px solid transparent',
-                }}
-              >
-                {tab.emoji} {tab.label} ({tab.count})
-              </button>
-            ))}
-          </div>
-
-          {/* Tab content */}
-          <div className="p-5 space-y-3 max-h-[600px] overflow-y-auto no-scrollbar">
-            {/* Captions tab */}
-            {activeTab === 'captions' && session.captions.map((c) => (
-              <div key={c.id} className="p-4 rounded-[14px]" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                <div className="flex items-start justify-between gap-3 mb-2">
-                  <p className="text-[13px] font-semibold text-text-primary flex-1">{c.input_text || 'Caption'}</p>
-                  <StatusBadge status={c.status} />
-                </div>
-                {c.generated_caption && (
-                  <p className="text-[12px] text-text-secondary leading-relaxed whitespace-pre-line mb-2">{c.generated_caption}</p>
-                )}
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {c.platform && <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ background: 'rgba(59,130,246,0.1)', color: '#3b82f6' }}>{c.platform}</span>}
-                  {c.tone && <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ background: 'rgba(168,85,247,0.1)', color: '#a855f7' }}>{c.tone}</span>}
-                  {c.model_used && <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ background: 'rgba(255,255,255,0.06)', color: '#94a3b8' }}>{c.model_used}</span>}
-                  <span className="text-[10px] text-text-muted">⚡ {c.tokens_used} tokens</span>
-                  <span className="text-[10px] text-text-muted">⏱ {c.processing_time?.toFixed(1)}s</span>
-                </div>
-                {c.custom_instructions && <ExpandableText label="Custom Instructions" text={c.custom_instructions} />}
-                {c.generated_hashtags && <p className="text-[11px] text-text-muted mt-2">{c.generated_hashtags}</p>}
-                {c.error_message && <p className="text-[11px] mt-2" style={{ color: '#ef4444' }}>{c.error_message}</p>}
-              </div>
-            ))}
-
-            {/* Ideas tab */}
-            {activeTab === 'ideas' && session.ideas.map((idea) => (
-              <div key={idea.id} className="p-4 rounded-[14px]" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                <p className="text-[13px] font-semibold text-text-primary mb-1">{idea.title}</p>
-                {idea.hook && <p className="text-[12px] text-text-secondary mb-2">{idea.hook}</p>}
-                <div className="flex flex-wrap gap-2">
-                  {idea.platform && <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ background: 'rgba(59,130,246,0.1)', color: '#3b82f6' }}>{idea.platform}</span>}
-                  {idea.content_format && <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ background: 'rgba(16,185,129,0.1)', color: '#10b981' }}>{idea.content_format}</span>}
-                  {idea.source && <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ background: 'rgba(255,255,255,0.06)', color: '#94a3b8' }}>{idea.source}</span>}
-                  <StatusBadge status={idea.status} />
-                </div>
-                {idea.trending_topic_ref && <p className="text-[11px] text-text-muted mt-2">Trending: {idea.trending_topic_ref}</p>}
-              </div>
-            ))}
-
-            {/* Images tab */}
-            {activeTab === 'images' && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {session.images.map((img) => {
-                  const imgUrl = img.generated_image_with_logo || img.generated_image || img.composited_image;
-                  return (
-                    <div key={img.id} className="rounded-[14px] overflow-hidden" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                      {imgUrl && (
-                        <img src={imgUrl} alt={img.title} className="w-full h-[180px] object-cover" />
-                      )}
-                      <div className="p-3.5">
-                        <div className="flex items-start justify-between gap-2 mb-1.5">
-                          <p className="text-[12px] font-semibold text-text-primary flex-1">{img.title || 'Image'}</p>
-                          <StatusBadge status={img.status} />
-                        </div>
-                        <div className="flex flex-wrap gap-2 mb-2">
-                          {img.provider && <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ background: 'rgba(255,255,255,0.06)', color: '#94a3b8' }}>{img.provider}</span>}
-                          {img.style && <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ background: 'rgba(168,85,247,0.1)', color: '#a855f7' }}>{img.style}</span>}
-                          <span className="text-[10px] text-text-muted">⏱ {img.processing_time?.toFixed(1)}s</span>
-                        </div>
-                        <ExpandableText label="Prompt" text={img.prompt} />
-                        {img.enhanced_prompt && <ExpandableText label="Enhanced Prompt" text={img.enhanced_prompt} />}
-                        {img.error_message && <p className="text-[11px] mt-2" style={{ color: '#ef4444' }}>{img.error_message}</p>}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Trending tab */}
-            {activeTab === 'trending' && session.trending_topics.map((t) => (
-              <div key={t.id} className="flex items-center gap-4 p-4 rounded-[14px]" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[13px] font-semibold text-text-primary">{t.topic}</p>
-                  {t.relevance_explanation && <p className="text-[12px] text-text-secondary mt-1">{t.relevance_explanation}</p>}
-                  <div className="flex gap-2 mt-1.5">
-                    {t.platform && <span className="text-[10px] text-text-muted">{t.platform}</span>}
-                    {t.region && <span className="text-[10px] text-text-muted">{t.region}</span>}
-                  </div>
-                </div>
-                <div className="text-center flex-shrink-0">
-                  <div className="text-[18px] font-black" style={{ color: t.volume_score >= 80 ? '#ef4444' : t.volume_score >= 50 ? '#f59e0b' : '#3b82f6' }}>
-                    {t.volume_score}
-                  </div>
-                  <span className="text-[10px] text-text-muted">score</span>
-                </div>
-              </div>
-            ))}
-
-            {/* DNA tab */}
-            {activeTab === 'dna' && session.dna && (() => {
-              const dnaObj = session.dna.dna_data;
-              const entries = dnaObj && typeof dnaObj === 'object' && !Array.isArray(dnaObj)
-                ? Object.entries(dnaObj as Record<string, string | string[]>)
-                : [];
-              return (
-                <div className="p-4 rounded-[14px] space-y-2" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="text-[16px]">🧬</span>
-                    <p className="text-[14px] font-bold text-text-primary">Brand DNA Analysis</p>
-                    {session.website_url && <span className="text-[11px] text-text-muted ml-auto">{session.website_url}</span>}
-                  </div>
-                  {entries.length > 0 && (
-                    <div className="space-y-2">
-                      {entries.map(([key, val]) => (
-                        <div key={key} className="flex gap-3">
-                          <span className="text-[11px] font-semibold text-text-muted min-w-[120px] uppercase tracking-wide">{key.replace(/_/g, ' ')}</span>
-                          <span className="text-[12px] text-text-secondary flex-1">
-                            {Array.isArray(val) ? val.join(', ') : String(val ?? '—')}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })()}
-
-            {/* Prompts tab */}
-            {activeTab === 'prompts' && session.prompts.map((p) => (
-              <div key={p.id} className="p-4 rounded-[14px]" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ background: 'rgba(232,54,79,0.1)', color: 'rgb(var(--c-coral))' }}>
-                    {p.feature}
-                  </span>
-                  <span className="text-[10px] text-text-muted ml-auto">{new Date(p.created_at).toLocaleTimeString()}</span>
-                </div>
-                <pre className="text-[11px] text-text-secondary leading-relaxed whitespace-pre-wrap max-h-[200px] overflow-y-auto no-scrollbar">
-                  {p.prompt_text}
-                </pre>
-              </div>
-            ))}
-          </div>
+      {/* Posts */}
+      {session.posts.length > 0 && (
+        <div className="px-6 py-4">
+          {session.posts.map((post) => (
+            <HistoryPostCard key={post.id} post={post} onConnectError={setConnectModalError} />
+          ))}
         </div>
       )}
+
+      {/* Technical details (expandable) */}
+      {showDetails && hasTechnicalData && (
+        <div className="px-6 pb-4">
+          <TechnicalDetailsCard session={session} />
+        </div>
+      )}
+
+      {/* No posts message */}
+      {session.posts.length === 0 && (
+        <div className="px-6 py-6 text-center">
+          <p className="text-[12px] text-text-muted">No posts found in this session</p>
+        </div>
+      )}
+
+      {/* Connect account modal */}
+      <ConnectAccountModal
+        open={!!connectModalError}
+        message={connectModalError || 'Please connect your account first.'}
+        onClose={() => setConnectModalError(null)}
+      />
     </div>
   );
 }
@@ -370,9 +669,9 @@ export function MagicHistoryPage() {
 
   // Summary stats
   const totalSessions = sessions.length;
+  const totalPosts = sessions.reduce((s, sess) => s + sess.stats.total_posts, 0);
   const totalCaptions = sessions.reduce((s, sess) => s + sess.stats.total_captions, 0);
   const totalImages = sessions.reduce((s, sess) => s + sess.stats.total_images, 0);
-  const totalTokens = sessions.reduce((s, sess) => s + sess.stats.total_tokens, 0);
 
   return (
     <div className="max-w-4xl mx-auto py-8 px-4">
@@ -388,7 +687,7 @@ export function MagicHistoryPage() {
           <h1 className="text-[28px] font-black text-text-primary">Magic Mode History</h1>
         </div>
         <p className="text-[14px] text-text-secondary ml-[52px]">
-          Full audit trail of every Magic Mode session — ideas, captions, images, prompts, and AI details.
+          Review your Magic Mode posts — draft, publish, or schedule them here.
         </p>
       </div>
 
@@ -397,9 +696,9 @@ export function MagicHistoryPage() {
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
           {[
             { label: 'Sessions', value: totalSessions, emoji: '🚀' },
+            { label: 'Posts', value: totalPosts, emoji: '📝' },
             { label: 'Captions', value: totalCaptions, emoji: '✍️' },
             { label: 'Images', value: totalImages, emoji: '🎨' },
-            { label: 'Tokens Used', value: totalTokens.toLocaleString(), emoji: '⚡' },
           ].map((stat) => (
             <div
               key={stat.label}

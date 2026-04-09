@@ -57,6 +57,8 @@ export const useAuthStore = create<AuthState>()(
           await authService.logout();
         } finally {
           clearTokens();
+          // Clear all localStorage to prevent stale data (e.g., Magic Mode brandId) from affecting next user
+          localStorage.clear();
           set({ user: null, isAuthenticated: false });
         }
       },

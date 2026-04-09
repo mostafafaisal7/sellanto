@@ -725,6 +725,69 @@ export function ResultsScreen({ onGenerateMore, onGoBack }: ResultsScreenProps) 
   // Approve modal state
   const [approveModalPostId, setApproveModalPostId] = useState<number | null>(null);
   const selectedPlatforms: string[] = Array.isArray(answers.platforms) ? answers.platforms as string[] : [];
+  const [loadingPosts, setLoadingPosts] = useState(false);
+
+  // Load posts from backend if generatedPosts is empty (e.g., page refresh or localStorage cleared)
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadFromBackend = async () => {
+      // Only load if we have no posts - don't check pipelineCompleted
+      if (generatedPosts.length > 0) return;
+
+      console.log('[ResultsScreen] generatedPosts empty, loading from backend...');
+      setLoadingPosts(true);
+
+      try {
+        // Fetch recent Magic Mode posts from backend using list() method
+        const response = await postService.list({
+          source: 'magic' as any,
+          page_size: 10,
+          ordering: '-created_at'
+        });
+
+        if (cancelled) return;
+
+        console.log('[ResultsScreen] Backend response:', response);
+        const posts = response?.results || [];
+
+        if (posts.length === 0) {
+          console.log('[ResultsScreen] No magic posts found in backend');
+          setLoadingPosts(false);
+          return;
+        }
+
+        // Convert backend Post objects to MagicPost format
+        const magicPosts: MagicPost[] = posts.map((p: any) => {
+          const platforms = typeof p.platforms === 'string' ? JSON.parse(p.platforms || '[]') : (p.platforms || []);
+          const mediaFiles = typeof p.media_files === 'string' ? JSON.parse(p.media_files || '[]') : (p.media_files || []);
+
+          return {
+            id: p.id,
+            title: p.title || 'Post',
+            platform: platforms[0] || 'LinkedIn',
+            imageOverlay: p.image_overlay || '',
+            imageStyle: p.image_style || '',
+            caption: p.caption || '',
+            imageUrl: mediaFiles[0] || undefined,
+            status: p.status === 'draft' ? 'ready' as const : p.status as any,
+            approvedPlatforms: p.status === 'approved' ? platforms : undefined,
+          };
+        });
+
+        console.log('[ResultsScreen] Converted to MagicPosts:', magicPosts);
+        setGeneratedPosts(magicPosts);
+      } catch (error) {
+        console.error('[ResultsScreen] Failed to load posts from backend:', error);
+      } finally {
+        if (!cancelled) setLoadingPosts(false);
+      }
+    };
+
+    loadFromBackend();
+
+    return () => { cancelled = true; };
+  }, [generatedPosts.length, setGeneratedPosts]);
 
   const handleApproveClick = (postId: number) => {
     if (selectedPlatforms.length <= 1) {
@@ -910,9 +973,21 @@ export function ResultsScreen({ onGenerateMore, onGoBack }: ResultsScreenProps) 
         } catch { /* silent */ }
       }
       localStorage.setItem('magic_draft_post_ids', JSON.stringify(savedMap));
+
+      // Save cache entry for this answer combination
+      const postIds = Object.values(savedMap).map((entry) => entry.draftId);
+      if (postIds.length > 0) {
+        try {
+          const { saveMagicModeCache } = await import('./MagicModePage');
+          await saveMagicModeCache(answers, postIds);
+        } catch (err) {
+          console.error('[ResultsScreen] Failed to save cache:', err);
+        }
+      }
+
       draftSaveInProgress.current = false;
     })();
-  }, [generatedPosts]);
+  }, [generatedPosts, answers]);
 
   // Go back — drafts are already auto-saved, just navigate
   const handleGoBackWithSave = () => {
@@ -1099,7 +1174,9 @@ export function ResultsScreen({ onGenerateMore, onGoBack }: ResultsScreenProps) 
             Your posts are ready!
           </h1>
           <p className="text-[16px] text-text-secondary au2">
-            {generatedPosts.length > 0
+            {loadingPosts
+              ? 'Loading your posts from database...'
+              : generatedPosts.length > 0
               ? `Here are ${generatedPosts.length} ready-to-publish posts. Review each one — approve it, or tell us what to change.`
               : 'No posts were generated. Try again with different settings.'}
           </p>

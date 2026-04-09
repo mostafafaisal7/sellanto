@@ -11,6 +11,12 @@ interface ExistingBrand {
   brand_name: string;
   website_url: string;
   industry: string;
+  brand_dna?: {
+    brand_voice?: string;
+    target_audience?: string;
+    social_platforms?: string[];
+    [key: string]: any;
+  };
 }
 
 // Map stored brand industry to the closest AIQuestionsScreen option
@@ -26,6 +32,117 @@ function mapIndustryToOption(industry: string): string {
   if (lower.includes('consult') || lower.includes('freelanc') || lower.includes('coach'))
     return 'Consulting / Freelancing';
   return 'Other';
+}
+
+// Map brand voice to tone option
+function mapBrandVoiceToTone(brandVoice: string): string {
+  const lower = (brandVoice || '').toLowerCase();
+  if (lower.includes('professional') || lower.includes('formal') || lower.includes('authoritative'))
+    return 'Professional & Authoritative';
+  if (lower.includes('friendly') || lower.includes('approachable') || lower.includes('warm'))
+    return 'Friendly & Approachable';
+  if (lower.includes('bold') || lower.includes('provocative') || lower.includes('edgy'))
+    return 'Bold & Provocative';
+  if (lower.includes('educational') || lower.includes('helpful') || lower.includes('informative'))
+    return 'Educational & Helpful';
+  if (lower.includes('fun') || lower.includes('casual') || lower.includes('playful'))
+    return 'Fun & Casual';
+  return 'Professional & Authoritative'; // Default
+}
+
+// Extract platforms from social_platforms or target_audience
+function extractPlatforms(brand: ExistingBrand): string[] {
+  const platforms: string[] = [];
+  const dna = brand.brand_dna;
+
+  if (dna?.social_platforms && Array.isArray(dna.social_platforms)) {
+    const platformMap: Record<string, string> = {
+      'linkedin': 'LinkedIn',
+      'instagram': 'Instagram',
+      'facebook': 'Facebook',
+      'twitter': 'Twitter / X',
+      'tiktok': 'TikTok',
+    };
+
+    dna.social_platforms.forEach((p: string) => {
+      const lower = p.toLowerCase();
+      Object.entries(platformMap).forEach(([key, value]) => {
+        if (lower.includes(key) && !platforms.includes(value)) {
+          platforms.push(value);
+        }
+      });
+    });
+  }
+
+  // Default to LinkedIn if no platforms found
+  return platforms.length > 0 ? platforms : ['LinkedIn'];
+}
+
+// Question options in order (must match AIQuestionsScreen.tsx QUESTIONS array)
+const QUESTION_OPTIONS = {
+  industry: ['Digital Marketing Agency', 'E-commerce / Online Store', 'SaaS / Software Company', 'Local Service Business', 'Consulting / Freelancing', 'Other'],
+  goal: ['Get more customers / leads', 'Build brand awareness', 'Drive website traffic', 'Establish thought leadership', 'Showcase products / services'],
+  tone: ['Professional & Authoritative', 'Friendly & Approachable', 'Bold & Provocative', 'Educational & Helpful', 'Fun & Casual'],
+  platforms: ['LinkedIn', 'Instagram', 'Facebook', 'Twitter / X', 'TikTok'],
+  colors: ['Blue tones (trust, professional)', 'Red/Orange (energy, bold)', 'Green (growth, nature)', 'Purple (creative, premium)', 'Dark/Minimal (sleek, modern)', 'Use colors from my website'],
+};
+
+/**
+ * Encode user answers to numerical indices for cache key
+ * Example: { industry: ['E-commerce / Online Store', 'Local Service Business'] } → "24"
+ * Example: { tone: ['Professional & Authoritative'] } → "1"
+ */
+function encodeAnswersToIndices(answers: Record<string, string | string[]>): Record<string, string> {
+  const encoded: Record<string, string> = {};
+
+  Object.keys(QUESTION_OPTIONS).forEach((questionId) => {
+    const answer = answers[questionId];
+    const options = QUESTION_OPTIONS[questionId as keyof typeof QUESTION_OPTIONS];
+
+    if (!answer) {
+      encoded[questionId] = '0'; // No selection
+      return;
+    }
+
+    const selectedValues = Array.isArray(answer) ? answer : [answer];
+    const indices: number[] = [];
+
+    selectedValues.forEach((value) => {
+      const index = options.indexOf(value);
+      if (index !== -1) {
+        indices.push(index + 1); // 1-based indexing
+      }
+    });
+
+    // Sort and join (e.g., [1, 3, 2] → "123")
+    encoded[questionId] = indices.sort((a, b) => a - b).join('');
+    if (!encoded[questionId]) {
+      encoded[questionId] = '0'; // Fallback if no valid indices
+    }
+  });
+
+  return encoded;
+}
+
+/**
+ * Save Magic Mode cache entry
+ * Exported so ResultsScreen can call this after creating posts
+ */
+export async function saveMagicModeCache(answers: Record<string, string | string[]>, postIds: number[]) {
+  const encoded = encodeAnswersToIndices(answers);
+  const cacheKey = `${encoded.industry}/${encoded.goal}/${encoded.tone}/${encoded.platforms}/${encoded.colors}`;
+
+  console.log('[MagicMode] Saving cache with key:', cacheKey, 'post IDs:', postIds);
+
+  try {
+    const { api } = await import('../../services');
+    const response = await api.post(`/magic/posts/${cacheKey}/`, { post_ids: postIds });
+    console.log('[MagicMode] Cache saved successfully:', response.data);
+    return true;
+  } catch (error) {
+    console.error('[MagicMode] Failed to save cache:', error);
+    return false;
+  }
 }
 
 export function MagicModePage() {
@@ -65,6 +182,7 @@ export function MagicModePage() {
             brand_name: primary.brand_name,
             website_url: primary.website_url || '',
             industry: primary.industry,
+            brand_dna: primary.brand_dna || {},
           });
           // Only show popup if we're on the initial screen (not mid-flow or returning from results)
           if (store.screen === 'url' || store.screen === 'mode') {
@@ -82,19 +200,38 @@ export function MagicModePage() {
 
   const handleUsePrevious = useCallback(() => {
     if (!existingBrand) return;
+
+    // Build pre-filled answers object
+    const prefilledAnswers: Record<string, string | string[]> = {
+      industry: mapIndustryToOption(existingBrand.industry),
+      tone: existingBrand.brand_dna?.brand_voice
+        ? mapBrandVoiceToTone(existingBrand.brand_dna.brand_voice)
+        : 'Professional & Authoritative',
+      platforms: extractPlatforms(existingBrand),
+      goal: 'Build brand awareness',
+      colors: ['Use colors from my website'], // Default to website colors
+    };
+
+    // Set all answers
+    Object.entries(prefilledAnswers).forEach(([key, val]) => setAnswer(key, val));
+
+    // Store as "original answers" for change detection
+    store.setOriginalAnswers(prefilledAnswers);
+
+    // Pre-fill URL and brand ID
     setUrl(existingBrand.website_url);
-    setAnswer('industry', mapIndustryToOption(existingBrand.industry));
-    setSkipInitialQuestions(true);
     setBrandId(existingBrand.id);
+
+    setSkipInitialQuestions(false); // Let user see and confirm the questions
     setShowPopup(false);
-    setScreen('questions');
-  }, [existingBrand, setUrl, setAnswer, setSkipInitialQuestions, setBrandId, setScreen]);
+    setScreen('questions'); // Go to questions screen with pre-filled data
+  }, [existingBrand, setUrl, setAnswer, setSkipInitialQuestions, setBrandId, setScreen, store]);
 
   const handleStartFresh = useCallback(() => {
-    setSkipInitialQuestions(false);
+    store.reset(); // Clear all stored data
     setShowPopup(false);
     setScreen('url');
-  }, [setSkipInitialQuestions, setScreen]);
+  }, [store, setScreen]);
 
   const handleURLSubmit = useCallback((url: string, logoFile?: File) => {
     setUrl(url);
@@ -111,6 +248,47 @@ export function MagicModePage() {
     Object.entries(answers).forEach(([key, val]) => setAnswer(key, val));
     setScreen('working');
   }, [setAnswer, setScreen]);
+
+  const handleQuestionsNext = useCallback(async () => {
+    // Try to load cached posts based on current answer combination
+    const encoded = encodeAnswersToIndices(store.answers);
+    const cacheKey = `${encoded.industry}/${encoded.goal}/${encoded.tone}/${encoded.platforms}/${encoded.colors}`;
+
+    console.log('[MagicMode] Looking up cached posts with key:', cacheKey);
+
+    try {
+      const { api } = await import('../../services');
+      const response = await api.get(`/magic/posts/${cacheKey}/`);
+
+      if (response.data && response.data.posts && response.data.posts.length > 0) {
+        console.log('[MagicMode] Cache HIT - Loading', response.data.posts.length, 'existing posts');
+        // Convert backend posts to MagicPost format
+        const posts = response.data.posts.map((p: any) => ({
+          id: p.id,
+          title: p.title || 'Post',
+          platform: Array.isArray(p.platforms) ? p.platforms[0] : JSON.parse(p.platforms || '["LinkedIn"]')[0],
+          imageOverlay: p.image_overlay || '',
+          imageStyle: p.image_style || '',
+          caption: p.caption || '',
+          imageUrl: Array.isArray(p.media_files) ? p.media_files[0] : JSON.parse(p.media_files || '[]')[0],
+          status: p.status === 'draft' ? 'ready' : p.status,
+          approvedPlatforms: p.status === 'approved' ? p.platforms : undefined,
+        }));
+
+        store.setGeneratedPosts(posts);
+        store.setHasPreviousGeneration(true);
+        setScreen('results');
+      } else {
+        console.log('[MagicMode] Cache MISS - Generating new posts');
+        // No cached posts, need to generate
+        setScreen('working');
+      }
+    } catch (error) {
+      console.error('[MagicMode] Cache lookup failed:', error);
+      // On error, generate new posts
+      setScreen('working');
+    }
+  }, [store, setScreen]);
 
   const handleQuestionsBack = useCallback(() => {
     if (store.skipInitialQuestions && existingBrand) {
@@ -284,6 +462,7 @@ export function MagicModePage() {
       return (
         <AIQuestionsScreen
           onComplete={handleQuestionsComplete}
+          onNext={handleQuestionsNext}
           onBack={handleQuestionsBack}
           skipIndustry={store.skipInitialQuestions}
         />

@@ -5,7 +5,7 @@ from rest_framework.views import APIView
 from django.utils import timezone
 from datetime import timedelta
 
-from accounts.permissions import IsPublisherOrAbove, IsViewerOrAbove
+# RBAC removed - all users have full access with just IsAuthenticated
 from accounts.services.diamond_service import pre_check, deduct_diamonds
 
 from posts.models import Post, PostCaption, ScheduledPostPlatform
@@ -20,7 +20,7 @@ from .serializers import (
 
 class SchedulePostView(APIView):
     """Schedule a post per-platform with specific captions and times"""
-    permission_classes = [IsAuthenticated, IsPublisherOrAbove]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request, post_id):
         try:
@@ -76,7 +76,7 @@ class SchedulePostView(APIView):
 
 class RescheduleView(APIView):
     """Reschedule a platform-specific scheduled post"""
-    permission_classes = [IsAuthenticated, IsPublisherOrAbove]
+    permission_classes = [IsAuthenticated]
 
     def patch(self, request, spp_id):
         try:
@@ -105,7 +105,7 @@ class RescheduleView(APIView):
 
 class CalendarView(APIView):
     """Get calendar data for FullCalendar integration"""
-    permission_classes = [IsAuthenticated, IsViewerOrAbove]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         start = request.query_params.get('start')
@@ -153,7 +153,7 @@ class CalendarView(APIView):
 
 
 class BestTimeSuggestionsView(APIView):
-    permission_classes = [IsAuthenticated, IsViewerOrAbove]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request, brand_id):
         try:
@@ -172,7 +172,7 @@ class BestTimeSuggestionsView(APIView):
 
 class ConflictCheckView(APIView):
     """Check for scheduling conflicts (same platform within buffer window)"""
-    permission_classes = [IsAuthenticated, IsViewerOrAbove]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
         serializer = ConflictCheckRequestSerializer(data=request.data)
@@ -210,7 +210,7 @@ class ConflictCheckView(APIView):
 
 class ComputeRecommendedTimesView(APIView):
     """Compute recommended posting times based on competitor analysis"""
-    permission_classes = [IsAuthenticated, IsViewerOrAbove]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
         brand_id = request.data.get('brand_id')

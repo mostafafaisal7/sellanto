@@ -252,7 +252,16 @@ class RegisterWithBrandSerializer(serializers.Serializer):
                         handle_or_url=handle_or_url,
                     )
 
-            # 7. Mark onboarding steps 1 & 2 as completed (workspace + brand created)
+            # 7. Assign 'owner' role to user in their workspace (CRITICAL for RBAC permissions)
+            from accounts.models import UserRole
+            UserRole.objects.create(
+                user=user,
+                workspace=workspace,
+                role='owner',
+                granted_by=user  # Self-granted since they're the workspace owner
+            )
+
+            # 8. Mark onboarding steps 1 & 2 as completed (workspace + brand created)
             try:
                 onboarding = OnboardingProgress.objects.get(user=user)
                 onboarding.mark_step_completed(1)

@@ -136,7 +136,36 @@ class Post(models.Model):
     def set_platforms(self, platforms):
         """Set platforms from list"""
         self.platforms = json.dumps(platforms)
-    
+
+
+class MagicModeCache(models.Model):
+    """Cache for Magic Mode post generations based on answer combinations"""
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='magic_caches')
+    brand = models.ForeignKey('brands.Brand', on_delete=models.CASCADE, related_name='magic_caches', null=True, blank=True)
+
+    # Cache key format: "industry/goal/tone/platforms/colors"
+    # Example: "2/2/1/123/6" (each number is 1-based option indices)
+    params_hash = models.CharField(max_length=100, help_text='Encoded answer parameters (e.g., "2/2/1/123/6")')
+
+    # Store post IDs as JSON array
+    post_ids = models.JSONField(default=list, help_text='List of Post IDs generated for this combination')
+
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'magic_mode_cache'
+        verbose_name = 'Magic Mode Cache'
+        verbose_name_plural = 'Magic Mode Caches'
+        ordering = ['-created_at']
+        # Ensure one cache entry per user + params_hash combination
+        unique_together = [['user', 'params_hash']]
+
+    def __str__(self):
+        return f"{self.user.username} - {self.params_hash} ({len(self.post_ids)} posts)"
+
     @property
     def media_files_list(self):
         """Get media files as list"""

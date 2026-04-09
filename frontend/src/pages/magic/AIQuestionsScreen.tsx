@@ -27,7 +27,7 @@ const QUESTIONS: Question[] = [
     id: 'tone', emoji: '🗣️',
     question: 'How should your posts sound?',
     subtext: 'Pick the vibe that matches your brand',
-    options: ['Professional & authoritative', 'Friendly & approachable', 'Bold & provocative', 'Educational & helpful', 'Fun & casual'],
+    options: ['Professional & Authoritative', 'Friendly & Approachable', 'Bold & Provocative', 'Educational & Helpful', 'Fun & Casual'],
   },
   {
     id: 'platforms', emoji: '📱',
@@ -51,37 +51,30 @@ function answerToSet(val: string | string[] | undefined): Set<string> {
 
 interface AIQuestionsScreenProps {
   onComplete: (answers: Record<string, string | string[]>) => void;
+  onNext?: () => void;
   onBack: () => void;
   skipIndustry?: boolean;
 }
 
-export function AIQuestionsScreen({ onComplete, onBack, skipIndustry }: AIQuestionsScreenProps) {
+export function AIQuestionsScreen({ onComplete, onNext, onBack, skipIndustry }: AIQuestionsScreenProps) {
   const filteredQuestions = skipIndustry
     ? QUESTIONS.filter((q) => q.id !== 'industry')
     : QUESTIONS;
 
   const storeAnswers = useMagicModeStore((s) => s.answers);
+  const hasPreviousGeneration = useMagicModeStore((s) => s.hasPreviousGeneration);
+  const setHasPreviousGeneration = useMagicModeStore((s) => s.setHasPreviousGeneration);
+  const originalAnswers = useMagicModeStore((s) => s.originalAnswers);
+  const answersChanged = useMagicModeStore((s) => s.answersChanged);
+  const markAnswersChanged = useMagicModeStore((s) => s.markAnswersChanged);
 
-  const [currentQ, setCurrentQ] = useState(() => {
-    if (Object.keys(storeAnswers).length > 0) {
-      let lastIdx = -1;
-      for (let i = filteredQuestions.length - 1; i >= 0; i--) {
-        if (storeAnswers[filteredQuestions[i].id] !== undefined) { lastIdx = i; break; }
-      }
-      return lastIdx >= 0 ? lastIdx : 0;
-    }
-    return 0;
-  });
+  // Always start from Question 1 so user can review all pre-filled answers
+  const [currentQ, setCurrentQ] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string | string[]>>(storeAnswers);
-  const [multiSel, setMultiSel] = useState<Set<string>>(() => {
-    let startIdx = 0;
-    if (Object.keys(storeAnswers).length > 0) {
-      for (let i = filteredQuestions.length - 1; i >= 0; i--) {
-        if (storeAnswers[filteredQuestions[i].id] !== undefined) { startIdx = i; break; }
-      }
-    }
-    return answerToSet(storeAnswers[filteredQuestions[startIdx]?.id]);
-  });
+  // Initialize multiSel from Question 1's answer (currentQ = 0)
+  const [multiSel, setMultiSel] = useState<Set<string>>(() =>
+    answerToSet(storeAnswers[filteredQuestions[0]?.id])
+  );
   const [animating, setAnimating] = useState(false);
 
   const question = filteredQuestions[currentQ];
@@ -108,11 +101,28 @@ export function AIQuestionsScreen({ onComplete, onBack, skipIndustry }: AIQuesti
   const handleSelect = (option: string) => {
     if (animating) return;
 
+    const qId = question.id;
     const next = new Set(multiSel);
     if (next.has(option)) next.delete(option);
     else next.add(option);
     setMultiSel(next);
-    setAnswers({ ...answers, [question.id]: Array.from(next) });
+
+    const newValue = Array.from(next);
+    setAnswers({ ...answers, [qId]: newValue });
+
+    // Detect if this answer differs from original
+    if (!answersChanged && originalAnswers[qId] !== undefined) {
+      const original = originalAnswers[qId];
+      const originalSet = new Set(Array.isArray(original) ? original : [original]);
+
+      // Check if the sets are different
+      const hasChanged = next.size !== originalSet.size ||
+        [...next].some(v => !originalSet.has(v));
+
+      if (hasChanged) {
+        markAnswersChanged();
+      }
+    }
   };
 
   const goBack = () => {
@@ -206,19 +216,77 @@ export function AIQuestionsScreen({ onComplete, onBack, skipIndustry }: AIQuesti
           })}
         </div>
 
-        {/* Next button — visible when at least 1 option selected */}
+        {/* Next button(s) — visible when at least 1 option selected */}
         {multiSel.size > 0 && (
           <div className="mt-8">
-            <button
-              onClick={goNext}
-              className="px-6 py-3 rounded-[14px] text-[15px] font-bold text-white"
-              style={{
-                background: 'linear-gradient(135deg, rgb(var(--c-coral)), rgb(var(--c-coral-hover)))',
-                boxShadow: 'var(--shadow-glow-coral)',
-              }}
-            >
-              Next →
-            </button>
+            {/* Last question - show different buttons based on whether answers changed */}
+            {currentQ === filteredQuestions.length - 1 ? (
+              answersChanged ? (
+                /* User CHANGED answers → Show only "Generate Posts" button */
+                <button
+                  onClick={goNext}
+                  className="px-6 py-3 rounded-[14px] text-[15px] font-bold text-white"
+                  style={{
+                    background: 'linear-gradient(135deg, rgb(var(--c-coral)), rgb(var(--c-coral-hover)))',
+                    boxShadow: 'var(--shadow-glow-coral)',
+                  }}
+                >
+                  Generate Posts →
+                </button>
+              ) : hasPreviousGeneration && onNext ? (
+                /* User DID NOT change answers → Show "Next" and "Regenerate" buttons */
+                <div className="flex gap-3">
+                  <button
+                    onClick={onNext}
+                    className="px-6 py-3 rounded-[14px] text-[15px] font-bold"
+                    style={{
+                      background: 'rgba(255,255,255,0.08)',
+                      border: '1.5px solid var(--border-color)',
+                      color: 'rgb(var(--c-text-primary))',
+                    }}
+                  >
+                    Next →
+                  </button>
+                  <button
+                    onClick={() => {
+                      setHasPreviousGeneration(false);
+                      goNext();
+                    }}
+                    className="px-6 py-3 rounded-[14px] text-[15px] font-bold text-white"
+                    style={{
+                      background: 'linear-gradient(135deg, rgb(var(--c-coral)), rgb(var(--c-coral-hover)))',
+                      boxShadow: 'var(--shadow-glow-coral)',
+                    }}
+                  >
+                    🔄 Regenerate
+                  </button>
+                </div>
+              ) : (
+                /* Default for new users (no previous generation) */
+                <button
+                  onClick={goNext}
+                  className="px-6 py-3 rounded-[14px] text-[15px] font-bold text-white"
+                  style={{
+                    background: 'linear-gradient(135deg, rgb(var(--c-coral)), rgb(var(--c-coral-hover)))',
+                    boxShadow: 'var(--shadow-glow-coral)',
+                  }}
+                >
+                  Generate Posts →
+                </button>
+              )
+            ) : (
+              /* Not last question → Regular Next button */
+              <button
+                onClick={goNext}
+                className="px-6 py-3 rounded-[14px] text-[15px] font-bold text-white"
+                style={{
+                  background: 'linear-gradient(135deg, rgb(var(--c-coral)), rgb(var(--c-coral-hover)))',
+                  boxShadow: 'var(--shadow-glow-coral)',
+                }}
+              >
+                Next →
+              </button>
+            )}
           </div>
         )}
       </div>

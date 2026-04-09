@@ -7,7 +7,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import viewsets
 
-from accounts.permissions import IsCreatorOrAbove, IsViewerOrAbove
+# RBAC removed - all users have full access with just IsAuthenticated
 from accounts.services.diamond_service import pre_check, deduct_diamonds
 
 from posts.models import Post, PostCaption
@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 class PostCaptionViewSet(viewsets.ModelViewSet):
     serializer_class = PostCaptionSerializer
-    permission_classes = [IsAuthenticated, IsCreatorOrAbove]
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         return PostCaption.objects.filter(post__user=self.request.user)
@@ -37,7 +37,7 @@ class PostCaptionViewSet(viewsets.ModelViewSet):
 
 class DraftCaptionsView(APIView):
     """List captions for a specific draft/post"""
-    permission_classes = [IsAuthenticated, IsViewerOrAbove]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request, post_id):
         try:
@@ -52,7 +52,7 @@ class DraftCaptionsView(APIView):
 
 class GenerateCaptionsView(APIView):
     """Generate caption variants for a draft using LLM"""
-    permission_classes = [IsAuthenticated, IsCreatorOrAbove]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request, post_id):
         try:
@@ -261,7 +261,7 @@ Output:
 
 class AdaptCaptionView(APIView):
     """Adapt an existing caption to different platforms"""
-    permission_classes = [IsAuthenticated, IsCreatorOrAbove]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request, post_id):
         try:
@@ -313,7 +313,7 @@ class AdaptCaptionView(APIView):
 
 class SelectCaptionView(APIView):
     """Select a caption as the primary for its platform"""
-    permission_classes = [IsAuthenticated, IsCreatorOrAbove]
+    permission_classes = [IsAuthenticated]
 
     def patch(self, request, caption_id):
         try:
@@ -337,7 +337,7 @@ class SelectCaptionView(APIView):
 
 class CaptionPreviewView(APIView):
     """Preview a caption formatted for a specific platform"""
-    permission_classes = [IsAuthenticated, IsViewerOrAbove]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request, caption_id, platform):
         try:
@@ -382,7 +382,7 @@ class CaptionPreviewView(APIView):
 
 class ABTagCaptionView(APIView):
     """Tag a caption for A/B testing"""
-    permission_classes = [IsAuthenticated, IsCreatorOrAbove]
+    permission_classes = [IsAuthenticated]
 
     def patch(self, request, caption_id):
         try:

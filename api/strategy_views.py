@@ -12,7 +12,7 @@ from accounts.services.diamond_service import pre_check, deduct_diamonds
 
 logger = logging.getLogger(__name__)
 
-from accounts.permissions import IsWorkspaceAdmin, IsCreatorOrAbove, IsViewerOrAbove
+# RBAC removed - all users have full access with just IsAuthenticated
 
 from brands.models import (
     Brand, Workspace, ContentPillar, CompetitorProfile, CompetitorInsight,
@@ -39,6 +39,14 @@ def get_or_create_brand(user):
     workspace = Workspace.objects.filter(owner=user).first()
     if not workspace:
         workspace = Workspace.objects.create(owner=user, name=f"{user.username}'s Workspace")
+        # Assign 'owner' role to user in their workspace (CRITICAL for RBAC permissions)
+        from accounts.models import UserRole
+        UserRole.objects.create(
+            user=user,
+            workspace=workspace,
+            role='owner',
+            granted_by=user
+        )
     brand = Brand.objects.create(
         workspace=workspace,
         user=user,
@@ -52,7 +60,7 @@ def get_or_create_brand(user):
 
 class ContentPillarViewSet(viewsets.ModelViewSet):
     serializer_class = ContentPillarSerializer
-    permission_classes = [IsAuthenticated, IsWorkspaceAdmin]
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         return ContentPillar.objects.filter(
@@ -77,7 +85,7 @@ class ContentPillarViewSet(viewsets.ModelViewSet):
 
 
 class PillarComplianceView(APIView):
-    permission_classes = [IsAuthenticated, IsViewerOrAbove]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request, brand_id):
         try:
@@ -113,7 +121,7 @@ class PillarComplianceView(APIView):
 
 class CompetitorProfileViewSet(viewsets.ModelViewSet):
     serializer_class = CompetitorProfileSerializer
-    permission_classes = [IsAuthenticated, IsCreatorOrAbove]
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         return CompetitorProfile.objects.filter(
@@ -280,7 +288,7 @@ def _crawl_site_pages(base_url, max_pages=8):
 
 class CompetitorCrawlView(APIView):
     """Analyze competitors by reading their page content with AI insights"""
-    permission_classes = [IsAuthenticated, IsWorkspaceAdmin]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request, brand_id):
         try:
@@ -568,7 +576,7 @@ Return ONLY valid JSON array — no markdown, no commentary."""},
 
 
 class CompetitorInsightsView(APIView):
-    permission_classes = [IsAuthenticated, IsViewerOrAbove]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request, brand_id):
         try:
@@ -625,7 +633,7 @@ class CompetitorInsightsView(APIView):
 
 class BrandTemplateViewSet(viewsets.ModelViewSet):
     serializer_class = BrandTemplateSerializer
-    permission_classes = [IsAuthenticated, IsWorkspaceAdmin]
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         return BrandTemplate.objects.filter(
@@ -634,7 +642,7 @@ class BrandTemplateViewSet(viewsets.ModelViewSet):
 
 
 class TrendingTopicsView(APIView):
-    permission_classes = [IsAuthenticated, IsViewerOrAbove]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         platform = request.query_params.get('platform', '')
@@ -654,7 +662,7 @@ class TrendingTopicsView(APIView):
 
 class GenerateIdeasView(APIView):
     """Generate content ideas using LLM with pillar context"""
-    permission_classes = [IsAuthenticated, IsCreatorOrAbove]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
         serializer = GenerateIdeasRequestSerializer(data=request.data)
@@ -940,7 +948,7 @@ Return ONLY a JSON array of exactly {count} objects:
 
 
 class RegenerateIdeaView(APIView):
-    permission_classes = [IsAuthenticated, IsCreatorOrAbove]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request, idea_id):
         try:
@@ -1067,7 +1075,7 @@ Return ONLY this JSON:
 
 
 class AddIdeaToCalendarView(APIView):
-    permission_classes = [IsAuthenticated, IsCreatorOrAbove]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request, idea_id):
         try:
@@ -1109,7 +1117,7 @@ class AddIdeaToCalendarView(APIView):
 
 class GenerateTrendingView(APIView):
     """Generate trending topics for a brand using pytrends + OpenAI"""
-    permission_classes = [IsAuthenticated, IsCreatorOrAbove]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request, brand_id):
         try:
@@ -1149,7 +1157,7 @@ class GenerateTrendingView(APIView):
 
 class BrandTrendingTopicsView(APIView):
     """Get cached trending topics for a specific brand"""
-    permission_classes = [IsAuthenticated, IsViewerOrAbove]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request, brand_id):
         topics = TrendingCache.objects.filter(
@@ -1336,7 +1344,7 @@ class IdeaHistoryView(APIView):
 
 class SuggestCompetitorsView(APIView):
     """AI-suggest competitors based on brand DNA + industry + region"""
-    permission_classes = [IsAuthenticated, IsCreatorOrAbove]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
         brand_id = request.data.get('brand_id')
@@ -1475,7 +1483,7 @@ IMPORTANT: Only suggest companies you are confident are real. If unsure about a 
 
 class GeneratePillarsView(APIView):
     """AI-generate content pillars based on brand DNA + competitors + trends"""
-    permission_classes = [IsAuthenticated, IsCreatorOrAbove]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request, brand_id):
         try:
@@ -1709,7 +1717,7 @@ Existing pillars (DO NOT duplicate): {', '.join(existing_pillars) if existing_pi
 
 class TrendFeedbackView(APIView):
     """Submit or retrieve trend feedback for learning"""
-    permission_classes = [IsAuthenticated, IsCreatorOrAbove]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request, brand_id):
         try:
@@ -1769,7 +1777,7 @@ class TrendFeedbackView(APIView):
 
 class ManualTrendView(APIView):
     """Add a manual trending topic"""
-    permission_classes = [IsAuthenticated, IsCreatorOrAbove]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request, brand_id):
         try:
@@ -1808,7 +1816,7 @@ class ManualTrendView(APIView):
 
 class PromptHistoryView(APIView):
     """Get prompt history for a brand + feature"""
-    permission_classes = [IsAuthenticated, IsViewerOrAbove]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request, brand_id):
         try:

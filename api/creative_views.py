@@ -9,7 +9,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.utils import timezone
 
-from accounts.permissions import IsCreatorOrAbove, IsViewerOrAbove
+# RBAC removed - all users have full access with just IsAuthenticated
 from accounts.services.notification_service import notify_images_ready
 from accounts.services.llm_service import get_llm_service
 from accounts.services.diamond_service import pre_check, deduct_diamonds
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 class GenerateAltTextView(APIView):
     """Generate accessibility alt text for an image using LLM vision"""
-    permission_classes = [IsAuthenticated, IsCreatorOrAbove]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request, asset_id):
         try:
@@ -57,7 +57,7 @@ class GenerateAltTextView(APIView):
 
 class ResizeAssetView(APIView):
     """Resize an image for platform-specific dimensions"""
-    permission_classes = [IsAuthenticated, IsCreatorOrAbove]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request, asset_id):
         try:
@@ -86,7 +86,7 @@ class ResizeAssetView(APIView):
 
 class ApplyTemplateView(APIView):
     """Apply a brand template overlay to an image"""
-    permission_classes = [IsAuthenticated, IsCreatorOrAbove]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request, asset_id):
         try:
@@ -118,7 +118,7 @@ class ApplyTemplateView(APIView):
 
 class AssetVersionsView(APIView):
     """Get version history for an asset"""
-    permission_classes = [IsAuthenticated, IsViewerOrAbove]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request, asset_id):
         try:
@@ -146,7 +146,7 @@ class AssetVersionsView(APIView):
 
 class DraftAssetsListView(APIView):
     """List all creative assets for a specific draft"""
-    permission_classes = [IsAuthenticated, IsViewerOrAbove]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request, post_id):
         try:
@@ -193,7 +193,7 @@ class DraftAssetsListView(APIView):
 
 class DraftAssetGenerateView(APIView):
     """Generate an image asset for a specific draft"""
-    permission_classes = [IsAuthenticated, IsCreatorOrAbove]
+    permission_classes = [IsAuthenticated]
 
     MAX_IMAGES_PER_DRAFT = 4
 
@@ -311,7 +311,7 @@ class DraftAssetGenerateView(APIView):
 
 class DraftAssetUploadView(APIView):
     """Upload an asset file for a specific draft"""
-    permission_classes = [IsAuthenticated, IsCreatorOrAbove]
+    permission_classes = [IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser]
 
     def post(self, request, post_id):
@@ -348,7 +348,7 @@ class DraftAssetUploadView(APIView):
 
 class AssetRegenerateView(APIView):
     """Regenerate an asset, saving old version to history"""
-    permission_classes = [IsAuthenticated, IsCreatorOrAbove]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request, asset_id):
         try:
@@ -420,7 +420,7 @@ class AssetRegenerateView(APIView):
 
 class CloneDraftView(APIView):
     """Clone a rejected/existing draft into a new draft"""
-    permission_classes = [IsAuthenticated, IsCreatorOrAbove]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request, post_id):
         try:
@@ -505,7 +505,7 @@ class CarouselSplitView(APIView):
     Takes text content and generates 2-10 slide images.
     Phase 1: LLM-based text splitting + individual image generation per slide.
     """
-    permission_classes = [IsAuthenticated, IsCreatorOrAbove]
+    permission_classes = [IsAuthenticated]
 
     MAX_CAROUSEL_SLIDES = 10
     MAX_IMAGES_PER_DRAFT = 4

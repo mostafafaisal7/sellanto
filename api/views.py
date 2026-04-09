@@ -17,7 +17,7 @@ import json
 import openai
 import logging
 
-from accounts.models import UserProfile, SiteConfiguration
+from accounts.models import UserProfile, SiteConfiguration, UserRole
 from accounts.api_keys import get_openai_key
 from accounts.services.llm_service import get_llm_service, UnifiedLLMService
 from posts.models import Post
@@ -1711,6 +1711,14 @@ class WorkspaceViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         workspace = serializer.save(owner=self.request.user)
 
+        # Assign 'owner' role to user in their workspace (CRITICAL for RBAC permissions)
+        UserRole.objects.create(
+            user=self.request.user,
+            workspace=workspace,
+            role='owner',
+            granted_by=self.request.user
+        )
+
         # Mark onboarding step 1 complete if user is in onboarding
         try:
             from onboarding.models import OnboardingProgress
@@ -2706,12 +2714,19 @@ class MagicHistoryView(APIView):
 
     def get(self, request):
         from brands.models import Brand, ContentIdea, TrendingCache, BrandDNAHistory, PromptHistory
+        from posts.models import Post
 
         user = request.user
 
         # Get user's brands
         brands = Brand.objects.filter(user=user).order_by('-created_at')
         brand_ids = list(brands.values_list('id', flat=True))
+
+        # Fetch Magic Mode posts
+        magic_posts = list(Post.objects.filter(user=user, source='magic').order_by('-created_at').values(
+            'id', 'caption', 'media_files', 'platforms', 'status', 'scheduled_time',
+            'hook', 'created_at', 'posted_at',
+        )[:200])
 
         # Fetch all data ordered by newest first
         captions = list(CaptionGeneration.objects.filter(user=user).order_by('-created_at').values(
@@ -2762,6 +2777,8 @@ class MagicHistoryView(APIView):
             all_events.append(('dna', d['generated_at'], d))
         for p in prompt_history:
             all_events.append(('prompt', p['created_at'], p))
+        for post in magic_posts:
+            all_events.append(('post', post['created_at'], post))
 
         # Sort by timestamp desc
         all_events.sort(key=lambda x: x[1] if x[1] else timezone.now(), reverse=True)
@@ -2784,6 +2801,7 @@ class MagicHistoryView(APIView):
                     'trending_topics': [],
                     'dna': None,
                     'prompts': [],
+                    'posts': [],
                     '_last_ts': ts,
                 }
                 sessions.append(current_session)
@@ -2816,6 +2834,23 @@ class MagicHistoryView(APIView):
             elif event_type == 'prompt':
                 data['created_at'] = data['created_at'].isoformat() if data['created_at'] else None
                 current_session['prompts'].append(data)
+            elif event_type == 'post':
+                data['created_at'] = data['created_at'].isoformat() if data['created_at'] else None
+                data['posted_at'] = data['posted_at'].isoformat() if data.get('posted_at') else None
+                data['scheduled_time'] = data['scheduled_time'].isoformat() if data.get('scheduled_time') else None
+                # Convert media files to URLs
+                import json
+                try:
+                    media_list = json.loads(data.get('media_files', '[]'))
+                    data['media_urls'] = [request.build_absolute_uri('/media/' + str(m)) for m in media_list]
+                except:
+                    data['media_urls'] = []
+                # Parse platforms
+                try:
+                    data['platforms_list'] = json.loads(data.get('platforms', '[]'))
+                except:
+                    data['platforms_list'] = []
+                current_session['posts'].append(data)
 
         # Add stats and clean up internal fields
         for s in sessions:
@@ -2830,6 +2865,7 @@ class MagicHistoryView(APIView):
                 'total_images': len(s['images']),
                 'total_ideas': len(s['ideas']),
                 'total_trending': len(s['trending_topics']),
+                'total_posts': len(s['posts']),
                 'total_tokens': total_tokens,
                 'total_time': round(total_time, 1),
             }
@@ -2842,3 +2878,109 @@ class MagicHistoryView(APIView):
                 s['website_url'] = ''
 
         return Response({'sessions': sessions})
+
+
+class MagicModeCachedPostsView(APIView):
+    """
+    GET /api/magic/posts/{industry}/{goal}/{tone}/{platforms}/{colors}/
+
+    Look up cached Magic Mode posts based on answer combination.
+    Returns posts if cache hit, empty response if cache miss.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, industry, goal, tone, platforms, colors):
+        from posts.models import MagicModeCache, Post
+
+        # Build params_hash from URL parameters
+        params_hash = f"{industry}/{goal}/{tone}/{platforms}/{colors}"
+
+        print(f"[MagicCache] Looking up cache for user {request.user.id} with params: {params_hash}")
+
+        try:
+            # Find cache entry
+            cache_entry = MagicModeCache.objects.get(
+                user=request.user,
+                params_hash=params_hash
+            )
+
+            # Fetch the posts
+            post_ids = cache_entry.post_ids
+            if not post_ids:
+                print(f"[MagicCache] Cache entry found but no post_ids")
+                return Response({'posts': []})
+
+            posts = Post.objects.filter(id__in=post_ids, user=request.user).order_by('-created_at')
+
+            # Serialize posts
+            serialized_posts = []
+            for post in posts:
+                serialized_posts.append({
+                    'id': post.id,
+                    'title': post.title,
+                    'caption': post.caption,
+                    'platforms': post.platforms,
+                    'media_files': post.media_files,
+                    'status': post.status,
+                    'image_overlay': post.image_overlay,
+                    'image_style': post.image_style,
+                    'created_at': post.created_at.isoformat(),
+                })
+
+            print(f"[MagicCache] Cache HIT - Returning {len(serialized_posts)} posts")
+            return Response({
+                'cache_hit': True,
+                'posts': serialized_posts,
+                'cached_at': cache_entry.created_at.isoformat(),
+            })
+
+        except MagicModeCache.DoesNotExist:
+            print(f"[MagicCache] Cache MISS - No entry found")
+            return Response({
+                'cache_hit': False,
+                'posts': [],
+            })
+        except Exception as e:
+            print(f"[MagicCache] Error: {e}")
+            return Response({
+                'cache_hit': False,
+                'posts': [],
+                'error': str(e)
+            }, status=500)
+
+    def post(self, request, industry, goal, tone, platforms, colors):
+        """Create/update cache entry for Magic Mode posts"""
+        from posts.models import MagicModeCache
+
+        # Build params_hash from URL parameters
+        params_hash = f"{industry}/{goal}/{tone}/{platforms}/{colors}"
+        post_ids = request.data.get('post_ids', [])
+
+        if not post_ids:
+            return Response({'error': 'post_ids required'}, status=400)
+
+        print(f"[MagicCache] Saving cache for user {request.user.id} with params: {params_hash}, posts: {post_ids}")
+
+        try:
+            # Create or update cache entry
+            cache_entry, created = MagicModeCache.objects.update_or_create(
+                user=request.user,
+                params_hash=params_hash,
+                defaults={'post_ids': post_ids}
+            )
+
+            action = "Created" if created else "Updated"
+            print(f"[MagicCache] {action} cache entry")
+
+            return Response({
+                'success': True,
+                'created': created,
+                'post_count': len(post_ids),
+            })
+
+        except Exception as e:
+            print(f"[MagicCache] Error saving cache: {e}")
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=500)
