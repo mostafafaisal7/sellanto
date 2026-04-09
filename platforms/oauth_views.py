@@ -31,13 +31,9 @@ from rest_framework import status
 
 from platforms.models import SocialAccount, OAuthState
 from platforms.services.facebook import FacebookService
+from messenger_bot.models import MessengerConnection
 from accounts.models import SiteConfiguration
-
-# Messenger bot is removed — provide a safe fallback
-try:
-    from messenger_bot.models import MessengerConnection
-except (ImportError, RuntimeError):
-    MessengerConnection = None
+from accounts.utils import is_messenger_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -502,6 +498,11 @@ def facebook_setup_messenger(request):
     Body: { "account_id": <SocialAccount.id> }
     Uses account_id (DB pk) — guarantees ownership without exposing page_id to user input.
     """
+    if not is_messenger_enabled():
+        return Response(
+            {'error': 'Messenger feature is currently disabled by admin.'},
+            status=status.HTTP_403_FORBIDDEN
+        )
 
     account_id = request.data.get('account_id')
 
@@ -775,8 +776,22 @@ def facebook_connection_status(request):
             'connected_at':  acc.connected_at,
         })
 
-    # ── Messenger Bot (removed) ─────────────────────────────────────────────
+    # ── Messenger Bot (gated by kill switch) ─────────────────────────────────
     messenger = None
+    messenger_enabled = is_messenger_enabled()
+    if messenger_enabled:
+        try:
+            mc = MessengerConnection.objects.get(user=user)
+            messenger = {
+                'page_id':             mc.page_id,
+                'page_name':           mc.page_name,
+                'is_active':           mc.is_active,
+                'is_webhook_verified': mc.is_webhook_verified,
+                'auto_reply_enabled':  mc.auto_reply_enabled,
+                'connected_at':        mc.connected_at,
+            }
+        except MessengerConnection.DoesNotExist:
+            messenger = None
 
     # ── Build missing & warnings lists ────────────────────────────────────────
     missing  = []
@@ -826,45 +841,55 @@ def facebook_connection_status(request):
             'severity': 'info',
         })
 
-    # Messenger Bot
-    if not messenger and active_fb:
-        missing.append({
-            'key':      'messenger',
-            'title':    'Messenger Bot',
-            'message':  'Messenger bot not set up.',
-            'detail':   'Select a Facebook Page to receive and reply to Messenger conversations.',
-            'action':   'setup_messenger',
-            'severity': 'info',
-        })
-    elif messenger:
-        if not messenger['is_webhook_verified']:
-            warnings.append({
-                'key':      'messenger_webhook',
+    # Messenger Bot (skip entirely when feature is disabled)
+    if messenger_enabled:
+        if not messenger and active_fb:
+            missing.append({
+                'key':      'messenger',
                 'title':    'Messenger Bot',
-                'message':  'Webhook not verified.',
-                'detail':   'Messenger auto-replies will not work. Re-run Messenger setup to fix this.',
+                'message':  'Messenger bot not set up.',
+                'detail':   'Select a Facebook Page to receive and reply to Messenger conversations.',
                 'action':   'setup_messenger',
-                'severity': 'warning',
-            })
-        elif not messenger['is_active']:
-            warnings.append({
-                'key':      'messenger_inactive',
-                'title':    'Messenger Bot',
-                'message':  'Messenger bot is disabled.',
-                'detail':   'Enable it in Messenger Settings to start receiving replies.',
-                'action':   'enable_messenger',
                 'severity': 'info',
             })
+        elif messenger:
+            if not messenger['is_webhook_verified']:
+                warnings.append({
+                    'key':      'messenger_webhook',
+                    'title':    'Messenger Bot',
+                    'message':  'Webhook not verified.',
+                    'detail':   'Messenger auto-replies will not work. Re-run Messenger setup to fix this.',
+                    'action':   'setup_messenger',
+                    'severity': 'warning',
+                })
+            elif not messenger['is_active']:
+                warnings.append({
+                    'key':      'messenger_inactive',
+                    'title':    'Messenger Bot',
+                    'message':  'Messenger bot is disabled.',
+                    'detail':   'Enable it in Messenger Settings to start receiving replies.',
+                    'action':   'enable_messenger',
+                    'severity': 'info',
+                })
 
-    # ── Overall status ─────────────────────────────────────────────────────────
+    # ── Overall status (messenger excluded from calculation when disabled) ────
     if not fb_pages:
         overall = 'not_connected'
-    elif problem_fb or (messenger and not messenger['is_webhook_verified']):
+    elif problem_fb or (messenger_enabled and messenger and not messenger['is_webhook_verified']):
         overall = 'needs_attention'
-    elif active_fb and ig_list and messenger and messenger['is_webhook_verified']:
-        overall = 'fully_connected'
+    elif messenger_enabled:
+        if active_fb and ig_list and messenger and messenger['is_webhook_verified']:
+            overall = 'fully_connected'
+        else:
+            overall = 'partially_connected'
     else:
-        overall = 'partially_connected'
+        # Messenger disabled — only check FB + IG
+        if active_fb and ig_list:
+            overall = 'fully_connected'
+        elif active_fb:
+            overall = 'partially_connected'
+        else:
+            overall = 'partially_connected'
 
     return Response({
         'overall_status': overall,
@@ -881,8 +906,10 @@ def facebook_connection_status(request):
         },
         'messenger': {
             'connected': messenger is not None,
+            'enabled':   messenger_enabled,
             'data':      messenger,
         },
+        'messenger_enabled': messenger_enabled,
         'missing':  missing,
         'warnings': warnings,
     })
@@ -895,7 +922,6 @@ def facebook_connection_status(request):
 def _auto_setup_messenger(user, connected_pages, request):
     """
     Auto-creates or updates MessengerConnection right inside the OAuth callback.
-    NOTE: Messenger bot feature has been removed — this is now a no-op.
     Runs server-side so it works regardless of COOP headers, popup behaviour,
     or number of pages the user has.
 
@@ -907,8 +933,11 @@ def _auto_setup_messenger(user, connected_pages, request):
     Webhook subscription is best-effort — a failure here does NOT block the
     OAuth flow. The admin can re-run subscription from the admin panel.
     """
-    if MessengerConnection is None:
-        return  # Messenger bot feature removed
+    if not is_messenger_enabled():
+        logger.info('[Messenger] Feature disabled — skipping auto-setup')
+        return
+
+    from messenger_bot.models import MessengerConnection
     from platforms.models import SocialAccount
 
     active_pages = [p for p in connected_pages if p.get('status') == 'active']

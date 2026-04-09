@@ -13,6 +13,12 @@ import sys
 
 def main():
     """Run administrative tasks."""
+    # Fix Windows cp1252 crash on Unicode emojis in print statements
+    if sys.stdout.encoding != 'utf-8':
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    if sys.stderr.encoding != 'utf-8':
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+
     os.environ['DJANGO_SETTINGS_MODULE'] = 'socialsync.settings'
     try:
         from django.core.management import execute_from_command_line

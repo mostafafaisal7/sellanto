@@ -9,7 +9,7 @@ from platforms.models import SocialAccount
 from platforms.services.facebook import FacebookService
 from platforms.services.twitter import TwitterService
 from platforms.services.linkedin import LinkedInService
-from platforms.services.instagram import InstagramService  # ← ADD THIS LINE!
+from platforms.services.instagram import InstagramService  # <- ADD THIS LINE!
 from apscheduler.schedulers.background import BackgroundScheduler
 from django.conf import settings
 import os
@@ -449,7 +449,7 @@ def publish_post(post):
     
     # Post to each platform
     for platform in platforms:
-        print(f"\n   → {platform.upper()}...", end=' ')
+        print(f"\n   -> {platform.upper()}...", end=' ')
         
         try:
             account = SocialAccount.objects.get(
@@ -466,7 +466,7 @@ def publish_post(post):
             elif platform == 'twitter':
                 result, error_msg = post_twitter(post, account, caption, media_files)
             elif platform == 'linkedin':
-                result, error_msg = post_linkedin(post, account, caption, media_files)  # ← ADD media_files!
+                result, error_msg = post_linkedin(post, account, caption, media_files)  # <- ADD media_files!
             elif platform == 'instagram':
                 result, error_msg = post_instagram(post, account, caption, media_files)
             

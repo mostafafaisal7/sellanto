@@ -25,6 +25,8 @@ import {
   // V1.3
   OverflowPage,
   IdeaHistoryPage,
+  // Messenger Bot
+  MessengerBotPage,
   // V2 Redesign
   ModeSelectPage,
   MagicModePage,
@@ -195,6 +197,9 @@ function App() {
           <Route path="/overflow" element={<OverflowPage />} />
           <Route path="/overflow/history" element={<OverflowHistoryPage />} />
           <Route path="/ideas/history" element={<IdeaHistoryPage />} />
+
+          {/* Messenger Bot */}
+          <Route path="/messenger" element={<MessengerBotPage />} />
 
           {/* V2 Redesign Routes */}
           <Route path="/getting-started" element={<GettingStartedPage />} />

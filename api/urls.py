@@ -5,6 +5,7 @@ from . import views
 from platforms.oauth_views import (
     facebook_oauth_initiate,
     facebook_oauth_callback,
+    facebook_setup_messenger,
     facebook_connection_status,
 )
 from . import admin_views
@@ -23,6 +24,10 @@ router = DefaultRouter()
 router.register(r'posts', views.PostViewSet, basename='post')
 router.register(r'platforms', views.SocialAccountViewSet, basename='platform')
 router.register(r'platforms-detail', views.SocialAccountDetailViewSet, basename='platform-detail')
+
+# Messenger routers
+router.register(r'messenger/connections', views.MessengerConnectionViewSet, basename='messenger-connection')
+router.register(r'messenger/notifications', views.NotificationViewSet, basename='notification')
 
 # Onboarding & Brands routers
 router.register(r'workspaces', views.WorkspaceViewSet, basename='workspace')
@@ -44,6 +49,7 @@ urlpatterns = [
     # ── Facebook OAuth & Connection Status ───────────────────────────────────
     path('platforms/facebook/initiate/',        facebook_oauth_initiate,    name='fb-oauth-initiate'),
     path('platforms/facebook/callback/',        facebook_oauth_callback,    name='fb-oauth-callback'),
+    path('platforms/facebook/setup-messenger/', facebook_setup_messenger,   name='fb-setup-messenger'),
     path('platforms/facebook/status/',          facebook_connection_status, name='fb-conn-status'),
 
     # Auth endpoints
@@ -82,6 +88,44 @@ urlpatterns = [
     path('ai-image/generate/', views.generate_image, name='api-generate-image'),
     path('ai-image/refine-prompt/', views.refine_image_prompt, name='api-refine-image-prompt'),
 
+    # Messenger Bot endpoints
+    path('messenger/dashboard/', views.MessengerDashboardView.as_view(), name='api-messenger-dashboard'),
+    path('messenger/connections/<int:connection_id>/config/', views.AIConfigurationView.as_view(), name='api-ai-config'),
+    path('messenger/connections/<int:connection_id>/pdfs/', views.PDFKnowledgeBaseViewSet.as_view({
+        'get': 'list', 'post': 'create',
+    }), name='api-pdf-list'),
+    path('messenger/connections/<int:connection_id>/pdfs/<int:pk>/', views.PDFKnowledgeBaseViewSet.as_view({
+        'get': 'retrieve', 'delete': 'destroy',
+    }), name='api-pdf-detail'),
+    path('messenger/connections/<int:connection_id>/conversations/', views.ConversationViewSet.as_view({
+        'get': 'list',
+    }), name='api-conversations'),
+    path('messenger/connections/<int:connection_id>/conversations/<int:pk>/', views.ConversationViewSet.as_view({
+        'get': 'retrieve',
+    }), name='api-conversation-detail'),
+    path('messenger/connections/<int:connection_id>/conversations/<int:pk>/toggle-takeover/', views.ConversationViewSet.as_view({
+        'post': 'toggle_takeover',
+    }), name='api-conversation-takeover'),
+    path('messenger/connections/<int:connection_id>/conversations/<int:pk>/send-message/', views.ConversationViewSet.as_view({
+        'post': 'send_message',
+    }), name='api-conversation-send'),
+    path('messenger/connections/<int:connection_id>/prompts/', views.CustomPromptViewSet.as_view({
+        'get': 'list', 'post': 'create',
+    }), name='api-prompts'),
+    path('messenger/connections/<int:connection_id>/prompts/<int:pk>/', views.CustomPromptViewSet.as_view({
+        'get': 'retrieve', 'put': 'update', 'delete': 'destroy',
+    }), name='api-prompt-detail'),
+    path('messenger/connections/<int:connection_id>/prompts/<int:pk>/activate/', views.CustomPromptViewSet.as_view({
+        'post': 'activate',
+    }), name='api-prompt-activate'),
+    path('messenger/connections/<int:connection_id>/crawl-website/', views.CrawlWebsiteView.as_view(), name='api-crawl-website'),
+
+    # E-Commerce endpoints
+    path('messenger/connections/<int:connection_id>/ecommerce/', views.ECommerceSettingsView.as_view(), name='api-ecommerce-settings'),
+    path('messenger/connections/<int:connection_id>/ecommerce/test/', views.TestECommerceConnectionView.as_view(), name='api-ecommerce-test'),
+    path('messenger/connections/<int:connection_id>/ecommerce/sync/', views.SyncProductsView.as_view(), name='api-ecommerce-sync'),
+    path('messenger/connections/<int:connection_id>/ecommerce/embeddings/', views.RegenerateEmbeddingsView.as_view(), name='api-ecommerce-embeddings'),
+    path('messenger/connections/<int:connection_id>/ecommerce/products/', views.ProductListView.as_view(), name='api-ecommerce-products'),
 
     # Brand DNA endpoints
     path('brands/<int:brand_id>/generate-dna/', views.GenerateBrandDNAView.as_view(), name='api-generate-brand-dna'),
@@ -212,6 +256,8 @@ urlpatterns = [
     path('admin/users/<int:user_id>/accounts/', admin_views.AdminUserAccountsView.as_view(), name='api-admin-user-accounts'),
     path('admin/users/<int:user_id>/captions/', admin_views.AdminUserCaptionsView.as_view(), name='api-admin-user-captions'),
     path('admin/users/<int:user_id>/images/', admin_views.AdminUserImagesView.as_view(), name='api-admin-user-images'),
+    path('admin/users/<int:user_id>/messenger/', admin_views.AdminUserMessengerView.as_view(), name='api-admin-user-messenger'),
+    path('admin/conversations/<int:conv_id>/messages/', admin_views.AdminConversationMessagesView.as_view(), name='api-admin-conv-messages'),
     path('admin/bulk-approve/', admin_views.AdminBulkApproveView.as_view(), name='api-admin-bulk-approve'),
 
     # Diamond Token endpoints

@@ -619,6 +619,68 @@ class AdminUserImagesView(APIView):
         return Response({'images': images})
 
 
+class AdminUserMessengerView(APIView):
+    permission_classes = [IsOriginalAdmin]
+
+    def get(self, request, user_id):
+        connections = safe_query("SELECT id, page_id, page_name, is_active, connected_at FROM messenger_connections WHERE user_id = %s", [user_id])
+        for c in connections:
+            if c.get('connected_at'):
+                c['connected_at'] = str(c['connected_at'])
+
+        conversations = []
+        for conn in connections:
+            convs = safe_query("""
+                SELECT c.id, c.sender_id, c.sender_name, c.sender_profile_pic, c.started_at as created_at, c.last_message_at as updated_at,
+                       (SELECT COUNT(*) FROM messages WHERE conversation_id = c.id) as message_count,
+                       (SELECT COALESCE(SUM(tokens_used), 0) FROM messages WHERE conversation_id = c.id AND sender = 'bot') as total_tokens
+                FROM conversations c WHERE c.connection_id = %s ORDER BY c.last_message_at DESC
+            """, [conn['id']])
+            for cv in convs:
+                cv['total_tokens'] = int(to_float(cv.get('total_tokens', 0)))
+                cv['connection_id'] = conn['id']
+                if cv.get('created_at'):
+                    cv['created_at'] = str(cv['created_at'])
+                if cv.get('updated_at'):
+                    cv['updated_at'] = str(cv['updated_at'])
+            conversations.extend(convs)
+
+        return Response({'connections': connections, 'conversations': conversations})
+
+
+class AdminConversationMessagesView(APIView):
+    permission_classes = [IsOriginalAdmin]
+
+    def get(self, request, conv_id):
+        messages = safe_query("""
+            SELECT id, message_type, sender, text, image_url, file_url,
+                   model_used, tokens_used, processing_time, timestamp
+            FROM messages WHERE conversation_id = %s ORDER BY timestamp ASC
+        """, [conv_id])
+
+        total_messages = len(messages)
+        bot_messages = len([m for m in messages if m.get('sender') == 'bot'])
+        user_messages = total_messages - bot_messages
+        total_tokens = sum(to_float(m.get('tokens_used', 0)) for m in messages if m.get('sender') == 'bot')
+
+        for m in messages:
+            m['tokens_used'] = int(to_float(m.get('tokens_used', 0)))
+            m['processing_time'] = round(to_float(m.get('processing_time', 0)), 2)
+            if m.get('timestamp'):
+                m['timestamp'] = str(m['timestamp'])
+
+        return Response({
+            'messages': messages,
+            'stats': {
+                'total': total_messages,
+                'user': user_messages,
+                'bot': bot_messages,
+                'tokens': int(total_tokens),
+                'cost': estimate_cost(total_tokens)
+            }
+        })
+
+
 # ==================== Analytics ====================
 
 
@@ -708,6 +770,7 @@ class FacebookSettingsView(APIView):
                     'All users\' pages will send messages to this single URL automatically.'
                 ),
             },
+            'messenger_feature_enabled': SiteConfiguration.get('messenger_feature_enabled', 'true') == 'true',
             'help': {
                 'where_to_find': 'https://developers.facebook.com → Your App → Settings → Basic',
                 'redirect_uri_note': (
@@ -730,6 +793,16 @@ class FacebookSettingsView(APIView):
         import secrets as _secrets
         updated = []
         errors  = []
+
+        # ── Messenger feature toggle ───────────────────────────────────────────
+        if 'messenger_feature_enabled' in request.data:
+            enabled = str(request.data['messenger_feature_enabled']).lower() in ('true', '1', 'yes')
+            SiteConfiguration.set(
+                'messenger_feature_enabled',
+                'true' if enabled else 'false',
+                'Master kill switch for the Messenger Bot feature. Set to false to fully disable.'
+            )
+            updated.append('messenger_feature_enabled')
 
         # ── Optionally regenerate the Messenger verify token ─────────────────
         if request.data.get('regenerate_verify_token'):
@@ -801,6 +874,7 @@ class FacebookSettingsView(APIView):
                 'verify_token': verify_token,
                 'fields':       'messages, messaging_postbacks, messaging_optins',
             },
+            'messenger_feature_enabled': SiteConfiguration.get('messenger_feature_enabled', 'true') == 'true',
         }
         if errors:
             response['warnings'] = errors
