@@ -230,7 +230,14 @@ urlpatterns = [
     # Magic Mode History
     path('magic/history/', views.MagicHistoryView.as_view(), name='api-magic-history'),
 
-    # Magic Mode Cached Posts Lookup
+    # Magic Mode Cached Posts Lookup (with user_id and optional custom parameter)
+    path('magic/posts/<int:user_id>/<str:industry>/<str:goal>/<str:tone>/<str:platforms>/<str:colors>/<str:custom>/',
+         views.MagicModeCachedPostsView.as_view(), name='api-magic-cached-posts-user-custom'),
+    path('magic/posts/<int:user_id>/<str:industry>/<str:goal>/<str:tone>/<str:platforms>/<str:colors>/',
+         views.MagicModeCachedPostsView.as_view(), name='api-magic-cached-posts-user'),
+    # Backward compatibility (old URLs without user_id)
+    path('magic/posts/<str:industry>/<str:goal>/<str:tone>/<str:platforms>/<str:colors>/<str:custom>/',
+         views.MagicModeCachedPostsView.as_view(), name='api-magic-cached-posts-custom'),
     path('magic/posts/<str:industry>/<str:goal>/<str:tone>/<str:platforms>/<str:colors>/',
          views.MagicModeCachedPostsView.as_view(), name='api-magic-cached-posts'),
 

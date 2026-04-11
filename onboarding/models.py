@@ -5,13 +5,8 @@ from django.utils import timezone
 
 class OnboardingProgress(models.Model):
     STEP_CHOICES = [
-        (1, 'Create Workspace'),
-        (2, 'Brand Wizard'),
-        (3, 'Connect Platforms'),
-        (4, 'AI & Automation Setup'),
-        (5, 'Generate Brand DNA'),
-        (6, 'Launch Plan Setup'),
-        (7, 'Onboarding Complete'),
+        (1, 'Brand Wizard'),
+        (2, 'Onboarding Complete'),
     ]
 
     user = models.OneToOneField(
@@ -41,7 +36,7 @@ class OnboardingProgress(models.Model):
     def mark_step_completed(self, step_number):
         if step_number not in self.completed_steps:
             self.completed_steps = self.completed_steps + [step_number]
-        if step_number < 7:
+        if step_number < 2:
             self.current_step = step_number + 1
         else:
             self.is_completed = True

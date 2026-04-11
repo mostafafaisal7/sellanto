@@ -3,10 +3,11 @@ import { useState, useRef, useEffect } from 'react';
 interface URLInputScreenProps {
   onSubmit: (url: string, logoFile?: File) => void;
   onSkip: () => void;
+  initialUrl?: string;
 }
 
-export function URLInputScreen({ onSubmit, onSkip }: URLInputScreenProps) {
-  const [url, setUrl] = useState('');
+export function URLInputScreen({ onSubmit, onSkip, initialUrl }: URLInputScreenProps) {
+  const [url, setUrl] = useState(initialUrl || '');
   const [loading, setLoading] = useState(false);
   const [showMessage, setShowMessage] = useState(false);
   const [error, setError] = useState('');

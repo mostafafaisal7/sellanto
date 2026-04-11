@@ -15,6 +15,11 @@ import {
   ChevronDownIcon,
   ChevronUpIcon,
   ArrowPathIcon,
+  PencilIcon,
+  TrashIcon,
+  ExclamationTriangleIcon,
+  XMarkIcon,
+  CheckIcon,
 } from '@heroicons/react/24/outline';
 import onboardingService from '../services/onboardingService';
 import { platformService } from '../services/platformService';
@@ -32,6 +37,9 @@ export function BusinessProfilePage() {
   const [showWorkspaceForm, setShowWorkspaceForm] = useState(false);
   const [showBrandForm, setShowBrandForm] = useState(false);
   const [collapsedBrand, setCollapsedBrand] = useState<number | null>(null);
+  const [editingBrand, setEditingBrand] = useState<number | null>(null);
+  const [deletingBrand, setDeletingBrand] = useState<Brand | null>(null);
+  const [deleteConfirmName, setDeleteConfirmName] = useState('');
 
   // Workspace form
   const [wsName, setWsName] = useState('');
@@ -52,6 +60,19 @@ export function BusinessProfilePage() {
   const [brandAudiences, setBrandAudiences] = useState<string[]>([]);
   const [newAudience, setNewAudience] = useState('');
   const [brandSubmitting, setBrandSubmitting] = useState(false);
+
+  // Edit brand form
+  const [editForm, setEditForm] = useState({
+    brand_name: '',
+    industry: '',
+    target_region: '',
+    website_url: '',
+    voice_tone: 'professional',
+  });
+  const [editGoals, setEditGoals] = useState<string[]>([]);
+  const [editAudiences, setEditAudiences] = useState<string[]>([]);
+  const [newEditAudience, setNewEditAudience] = useState('');
+  const [editSubmitting, setEditSubmitting] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -151,6 +172,73 @@ export function BusinessProfilePage() {
     if (newAudience.trim() && brandAudiences.length < 5) {
       setBrandAudiences([...brandAudiences, newAudience.trim()]);
       setNewAudience('');
+    }
+  };
+
+  const addEditAudience = () => {
+    if (newEditAudience.trim() && editAudiences.length < 5) {
+      setEditAudiences([...editAudiences, newEditAudience.trim()]);
+      setNewEditAudience('');
+    }
+  };
+
+  const handleEditBrand = (brand: Brand) => {
+    setEditingBrand(brand.id);
+    setEditForm({
+      brand_name: brand.brand_name,
+      industry: brand.industry,
+      target_region: brand.target_region,
+      website_url: brand.website_url || '',
+      voice_tone: brand.voice_tone || 'professional',
+    });
+    setEditGoals(brand.goals || []);
+    setEditAudiences(brand.audiences || []);
+    setCollapsedBrand(null); // Expand the brand when editing
+  };
+
+  const handleCancelEdit = () => {
+    setEditingBrand(null);
+    setEditForm({ brand_name: '', industry: '', target_region: '', website_url: '', voice_tone: 'professional' });
+    setEditGoals([]);
+    setEditAudiences([]);
+    setNewEditAudience('');
+  };
+
+  const handleSaveEdit = async (brandId: number) => {
+    if (editForm.website_url && !isValidUrl(editForm.website_url)) {
+      alert('Please enter a valid website URL (e.g. example.com)');
+      return;
+    }
+    setEditSubmitting(true);
+    try {
+      await onboardingService.updateBrand(brandId, {
+        ...editForm,
+        website_url: normalizeUrl(editForm.website_url),
+        goals: editGoals,
+        audiences: editAudiences,
+      } as unknown as Partial<Brand>);
+      handleCancelEdit();
+      await loadData();
+    } catch {
+      alert('Failed to update brand');
+    } finally {
+      setEditSubmitting(false);
+    }
+  };
+
+  const handleDeleteBrand = async () => {
+    if (!deletingBrand) return;
+    if (deleteConfirmName !== deletingBrand.brand_name) {
+      alert('Brand name does not match. Please type the exact brand name to confirm deletion.');
+      return;
+    }
+    try {
+      await onboardingService.deleteBrand(deletingBrand.id);
+      setDeletingBrand(null);
+      setDeleteConfirmName('');
+      await loadData();
+    } catch {
+      alert('Failed to delete brand');
     }
   };
 
@@ -572,9 +660,9 @@ export function BusinessProfilePage() {
             return (
               <div key={brand.id} className="card overflow-hidden">
                 {/* Brand header */}
-                <div className="p-5 cursor-pointer hover:bg-white/[0.02] transition-colors" onClick={() => setCollapsedBrand(isExpanded ? brand.id : null)}>
+                <div className="p-5">
                   <div className="flex items-start justify-between">
-                    <div className="flex-1">
+                    <div className="flex-1 cursor-pointer" onClick={() => editingBrand !== brand.id && setCollapsedBrand(isExpanded ? brand.id : null)}>
                       <div className="flex items-center gap-3 mb-2">
                         <h3 className="font-semibold text-text-primary text-lg">{brand.brand_name}</h3>
                         {brand.is_primary && <span className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary">Primary</span>}
@@ -590,14 +678,189 @@ export function BusinessProfilePage() {
                         )}
                       </div>
                     </div>
-                    <button className="text-text-muted p-1">
-                      {isExpanded ? <ChevronUpIcon className="w-5 h-5" /> : <ChevronDownIcon className="w-5 h-5" />}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {editingBrand !== brand.id && (
+                        <>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleEditBrand(brand); }}
+                            className="p-2 hover:bg-primary/10 rounded-lg transition-colors text-primary"
+                            title="Edit brand"
+                          >
+                            <PencilIcon className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setDeletingBrand(brand); }}
+                            className="p-2 hover:bg-red-500/10 rounded-lg transition-colors text-red-400"
+                            title="Delete brand"
+                          >
+                            <TrashIcon className="w-4 h-4" />
+                          </button>
+                        </>
+                      )}
+                      <button className="text-text-muted p-1" onClick={() => editingBrand !== brand.id && setCollapsedBrand(isExpanded ? brand.id : null)}>
+                        {isExpanded ? <ChevronUpIcon className="w-5 h-5" /> : <ChevronDownIcon className="w-5 h-5" />}
+                      </button>
+                    </div>
                   </div>
                 </div>
 
+                {/* Edit Form */}
+                {editingBrand === brand.id && (
+                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="border-t border-white/5 p-5 bg-dark-700/30">
+                    <div className="mb-4 flex items-center gap-2">
+                      <PencilIcon className="w-5 h-5 text-primary" />
+                      <h4 className="text-lg font-semibold text-primary">Edit Brand</h4>
+                    </div>
+
+                    <div className="space-y-4">
+                      {/* Basic Info */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-sm font-medium text-text-secondary mb-2">Brand Name *</label>
+                          <input
+                            type="text"
+                            value={editForm.brand_name}
+                            onChange={(e) => setEditForm({ ...editForm, brand_name: e.target.value })}
+                            placeholder="Your brand name"
+                            className="input w-full"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-text-secondary mb-2">Industry *</label>
+                          <input
+                            type="text"
+                            value={editForm.industry}
+                            onChange={(e) => setEditForm({ ...editForm, industry: e.target.value })}
+                            placeholder="e.g., Technology, Fashion"
+                            className="input w-full"
+                            required
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-sm font-medium text-text-secondary mb-2">Target Region *</label>
+                          <input
+                            type="text"
+                            value={editForm.target_region}
+                            onChange={(e) => setEditForm({ ...editForm, target_region: e.target.value })}
+                            placeholder="e.g., Global, South Asia"
+                            className="input w-full"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-text-secondary mb-2">Website URL</label>
+                          <input
+                            type="text"
+                            value={editForm.website_url}
+                            onChange={(e) => setEditForm({ ...editForm, website_url: e.target.value })}
+                            placeholder="yourbrand.com"
+                            className="input w-full"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Voice & Tone */}
+                      <div>
+                        <label className="block text-sm font-medium text-text-secondary mb-2">Brand Voice</label>
+                        <select
+                          value={editForm.voice_tone}
+                          onChange={(e) => setEditForm({ ...editForm, voice_tone: e.target.value })}
+                          className="input w-full md:w-64"
+                        >
+                          <option value="professional">Professional</option>
+                          <option value="casual">Casual</option>
+                          <option value="friendly">Friendly</option>
+                          <option value="enthusiastic">Enthusiastic</option>
+                          <option value="humorous">Humorous</option>
+                          <option value="inspirational">Inspirational</option>
+                        </select>
+                      </div>
+
+                      {/* Goals */}
+                      <div>
+                        <label className="block text-sm font-medium text-text-secondary mb-2">Goals</label>
+                        <div className="flex flex-wrap gap-2">
+                          {goalOptions.map((g) => (
+                            <button
+                              key={g.value}
+                              type="button"
+                              onClick={() => setEditGoals(editGoals.includes(g.value) ? editGoals.filter((x) => x !== g.value) : [...editGoals, g.value])}
+                              className={`px-4 py-2 rounded-lg text-sm border transition-all ${editGoals.includes(g.value) ? 'bg-primary/20 border-primary text-primary' : 'border-white/10 text-text-secondary hover:border-white/20'}`}
+                            >
+                              {g.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Audiences */}
+                      <div>
+                        <label className="block text-sm font-medium text-text-secondary mb-2">Target Audiences (max 5)</label>
+                        <div className="flex gap-2 mb-2">
+                          <input
+                            type="text"
+                            value={newEditAudience}
+                            onChange={(e) => setNewEditAudience(e.target.value)}
+                            placeholder="e.g., Small business owners aged 25-45"
+                            className="input flex-1"
+                            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addEditAudience(); } }}
+                            disabled={editAudiences.length >= 5}
+                          />
+                          <button
+                            type="button"
+                            onClick={addEditAudience}
+                            disabled={editAudiences.length >= 5 || !newEditAudience.trim()}
+                            className="btn-secondary px-4"
+                          >
+                            <PlusIcon className="w-4 h-4" />
+                          </button>
+                        </div>
+                        {editAudiences.length > 0 && (
+                          <div className="flex flex-wrap gap-2">
+                            {editAudiences.map((a, i) => (
+                              <span key={i} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-sm text-primary">
+                                {a}
+                                <button
+                                  type="button"
+                                  onClick={() => setEditAudiences(editAudiences.filter((_, j) => j !== i))}
+                                  className="hover:text-red-400 transition-colors text-xs"
+                                >
+                                  <XMarkIcon className="w-3 h-3" />
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Action buttons */}
+                      <div className="flex gap-3 pt-2">
+                        <button
+                          onClick={() => handleSaveEdit(brand.id)}
+                          disabled={!editForm.brand_name || !editForm.industry || !editForm.target_region || editSubmitting}
+                          className="btn-primary px-6 flex items-center gap-2"
+                        >
+                          <CheckIcon className="w-4 h-4" />
+                          {editSubmitting ? 'Saving...' : 'Save Changes'}
+                        </button>
+                        <button
+                          onClick={handleCancelEdit}
+                          disabled={editSubmitting}
+                          className="btn-secondary px-4"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+
                 {/* Expanded details */}
-                {isExpanded && (
+                {isExpanded && editingBrand !== brand.id && (
                   <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="border-t border-white/5">
                     <div className="p-5 space-y-5">
                       {/* Goals */}
@@ -734,6 +997,65 @@ export function BusinessProfilePage() {
           })}
         </div>
       </section>
+
+      {/* Delete Confirmation Modal */}
+      {deletingBrand && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-dark-800 rounded-2xl border border-red-500/20 p-6 max-w-md w-full shadow-2xl"
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center">
+                <ExclamationTriangleIcon className="w-6 h-6 text-red-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-text-primary">Delete Brand</h3>
+                <p className="text-sm text-text-muted">This action cannot be undone</p>
+              </div>
+            </div>
+
+            <div className="mb-5">
+              <p className="text-text-secondary mb-4">
+                You are about to permanently delete <strong className="text-text-primary">{deletingBrand.brand_name}</strong>.
+                This will remove all associated data, content, and settings.
+              </p>
+              <p className="text-sm text-text-secondary mb-3">
+                Type the brand name <strong className="text-primary font-mono">{deletingBrand.brand_name}</strong> to confirm:
+              </p>
+              <input
+                type="text"
+                value={deleteConfirmName}
+                onChange={(e) => setDeleteConfirmName(e.target.value)}
+                placeholder="Enter brand name"
+                className="input w-full"
+                autoFocus
+              />
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={handleDeleteBrand}
+                disabled={deleteConfirmName !== deletingBrand.brand_name}
+                className="btn-danger flex-1 py-3 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <TrashIcon className="w-4 h-4 inline mr-2" />
+                Delete Brand
+              </button>
+              <button
+                onClick={() => {
+                  setDeletingBrand(null);
+                  setDeleteConfirmName('');
+                }}
+                className="btn-secondary px-6"
+              >
+                Cancel
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }

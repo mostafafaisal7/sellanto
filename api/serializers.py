@@ -261,11 +261,10 @@ class RegisterWithBrandSerializer(serializers.Serializer):
                 granted_by=user  # Self-granted since they're the workspace owner
             )
 
-            # 8. Mark onboarding steps 1 & 2 as completed (workspace + brand created)
+            # 8. Mark onboarding step 1 as completed (brand created)
             try:
                 onboarding = OnboardingProgress.objects.get(user=user)
                 onboarding.mark_step_completed(1)
-                onboarding.mark_step_completed(2)
             except OnboardingProgress.DoesNotExist:
                 pass
 

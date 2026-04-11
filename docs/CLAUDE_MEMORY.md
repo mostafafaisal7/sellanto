@@ -45,7 +45,7 @@
 - **GlobalAPIKey** model — admin sets shared API keys for openai/gemini/claude
 - `accounts/api_keys.py` — `get_openai_key()`, `get_gemini_key()`, `get_claude_key()` (DB → settings)
 - `accounts/services/diamond_service.py` — `pre_check()`, `deduct_diamonds()`, `recharge_diamonds()`, `grant_plan_diamonds()`, `DIAMOND_COSTS` dict
-- New user signal: auto-creates DiamondWallet + grants 50 free diamonds
+- New user signal: auto-creates DiamondWallet + grants 200 free diamonds
 - `api/diamond_views.py` — user balance/usage/transactions + admin recharge/keys/overview
 - Diamond endpoints: `/api/v1/diamond/*` (user) + `/api/v1/admin/diamond-overview/` + `/api/v1/admin/global-api-keys/`
 - **Pattern for AI views**: call `pre_check()` before, `deduct_diamonds()` after success → HTTP 402 on insufficient

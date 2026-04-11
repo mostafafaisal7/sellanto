@@ -55,6 +55,10 @@ const onboardingService = {
     return data;
   },
 
+  deleteBrand: async (brandId: number): Promise<void> => {
+    await api.delete(`/brands/${brandId}/`);
+  },
+
   // Launch Plan
   createLaunchPlan: async (planData: Partial<LaunchPlan>): Promise<LaunchPlan> => {
     const { data } = await api.post('/launch-plans/', planData);

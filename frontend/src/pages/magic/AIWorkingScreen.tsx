@@ -76,9 +76,15 @@ export function AIWorkingScreen({ onComplete, onStop }: AIWorkingScreenProps) {
         store.setBrandId(brandId);
       } else {
         // No brands exist - create one
+        // Use custom industry if "Other" was selected, otherwise use selected option
+        const customIndustry = store.customAnswers?.industry_other;
+        const industryValue = customIndustry ||
+          (store.answers.industry ? String(store.answers.industry) : 'My Brand');
+
         const brandRes = await api.post('/brands/', {
-          brand_name: store.answers.industry ? String(store.answers.industry) : 'My Brand',
-          industry: store.answers.industry ? String(store.answers.industry) : '',
+          brand_name: industryValue,
+          industry: industryValue,
+          target_region: store.answers.region ? String(store.answers.region) : 'Global',
           website_url: store.websiteUrl || '',
           is_primary: true,
         });

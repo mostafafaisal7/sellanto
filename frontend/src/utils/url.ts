@@ -15,3 +15,16 @@ export function isValidUrl(url: string): boolean {
     return false;
   }
 }
+
+export function extractDomainName(url: string): string {
+  try {
+    const normalized = normalizeUrl(url);
+    const parsed = new URL(normalized);
+    const hostname = parsed.hostname.replace('www.', '');
+    const parts = hostname.split('.');
+    const name = parts[0];
+    return name.charAt(0).toUpperCase() + name.slice(1);
+  } catch {
+    return '';
+  }
+}

@@ -67,6 +67,7 @@ export function AIQuestionsScreen({ onComplete, onNext, onBack, skipIndustry }: 
   const originalAnswers = useMagicModeStore((s) => s.originalAnswers);
   const answersChanged = useMagicModeStore((s) => s.answersChanged);
   const markAnswersChanged = useMagicModeStore((s) => s.markAnswersChanged);
+  const setCustomAnswer = useMagicModeStore((s) => s.setCustomAnswer); // NEW
 
   // Always start from Question 1 so user can review all pre-filled answers
   const [currentQ, setCurrentQ] = useState(0);
@@ -76,6 +77,7 @@ export function AIQuestionsScreen({ onComplete, onNext, onBack, skipIndustry }: 
     answerToSet(storeAnswers[filteredQuestions[0]?.id])
   );
   const [animating, setAnimating] = useState(false);
+  const [otherInputs, setOtherInputs] = useState<Record<string, string>>({}); // NEW: Track "Other" text inputs
 
   const question = filteredQuestions[currentQ];
   const progress = ((currentQ) / filteredQuestions.length) * 100;
@@ -177,47 +179,86 @@ export function AIQuestionsScreen({ onComplete, onNext, onBack, skipIndustry }: 
         <div className="w-full max-w-[440px] mx-auto flex flex-col gap-3">
           {question.options.map((option, i) => {
             const isSelected = multiSel.has(option);
+            const isOtherOption = option === 'Other';
 
             return (
-              <button
-                key={option}
-                onClick={() => handleSelect(option)}
-                className={`w-full text-left flex items-center gap-3.5 transition-all duration-200 au${Math.min(i + 1, 5)}`}
-                style={{
-                  padding: '16px 22px',
-                  borderRadius: 16,
-                  border: `2px solid ${isSelected ? 'rgba(232,54,79,0.4)' : 'var(--border-color)'}`,
-                  background: isSelected ? 'rgba(232,54,79,0.1)' : 'rgba(255,255,255,0.03)',
-                }}
-              >
-                {/* Checkbox */}
-                <div
-                  className="w-6 h-6 flex-shrink-0 flex items-center justify-center transition-all duration-200"
+              <div key={option} className="w-full">
+                <button
+                  onClick={() => handleSelect(option)}
+                  className={`w-full text-left flex items-center gap-3.5 transition-all duration-200 au${Math.min(i + 1, 5)}`}
                   style={{
-                    borderRadius: 7,
-                    border: `2px solid ${isSelected ? 'rgb(var(--c-coral))' : 'rgba(255,255,255,0.15)'}`,
-                    background: isSelected ? 'rgb(var(--c-coral))' : 'transparent',
+                    padding: '16px 22px',
+                    borderRadius: 16,
+                    border: `2px solid ${isSelected ? 'rgba(232,54,79,0.4)' : 'var(--border-color)'}`,
+                    background: isSelected ? 'rgba(232,54,79,0.1)' : 'rgba(255,255,255,0.03)',
                   }}
                 >
-                  {isSelected && (
-                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                      <path d="M2.5 6L5 8.5L9.5 3.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  )}
-                </div>
-                <span
-                  className="text-[15px] font-semibold transition-colors duration-200"
-                  style={{ color: isSelected ? 'rgb(var(--c-coral))' : 'rgb(var(--c-text-primary))' }}
-                >
-                  {option}
-                </span>
-              </button>
+                  {/* Checkbox */}
+                  <div
+                    className="w-6 h-6 flex-shrink-0 flex items-center justify-center transition-all duration-200"
+                    style={{
+                      borderRadius: 7,
+                      border: `2px solid ${isSelected ? 'rgb(var(--c-coral))' : 'rgba(255,255,255,0.15)'}`,
+                      background: isSelected ? 'rgb(var(--c-coral))' : 'transparent',
+                    }}
+                  >
+                    {isSelected && (
+                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                        <path d="M2.5 6L5 8.5L9.5 3.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    )}
+                  </div>
+                  <span
+                    className="text-[15px] font-semibold transition-colors duration-200"
+                    style={{ color: isSelected ? 'rgb(var(--c-coral))' : 'rgb(var(--c-text-primary))' }}
+                  >
+                    {option}
+                  </span>
+                </button>
+
+                {/* NEW: Dynamic text field for "Other" option */}
+                {isOtherOption && isSelected && (
+                  <div className="mt-3 slide-up">
+                    <input
+                      type="text"
+                      value={otherInputs[question.id] || ''}
+                      onChange={(e) => {
+                        const newValue = e.target.value;
+                        setOtherInputs({ ...otherInputs, [question.id]: newValue });
+                        // Save to store immediately
+                        setCustomAnswer(`${question.id}_other`, newValue);
+                      }}
+                      placeholder={
+                        question.id === 'industry'
+                          ? "Please specify your business type (e.g., 'Legal Services', 'Real Estate Agency')"
+                          : question.id === 'goal'
+                          ? "Please specify your goal..."
+                          : question.id === 'tone'
+                          ? "Describe your preferred tone..."
+                          : "Please specify..."
+                      }
+                      className="w-full text-[15px]"
+                      style={{
+                        padding: '14px 18px',
+                        borderRadius: 12,
+                        border: '2px solid rgba(232,54,79,0.3)',
+                        background: 'rgba(255,255,255,0.05)',
+                        color: 'rgb(var(--c-text-primary))',
+                      }}
+                      autoFocus
+                    />
+                    <p className="text-xs text-text-muted mt-2">
+                      💡 Be specific to get the best AI-generated content for your {question.id}
+                    </p>
+                  </div>
+                )}
+              </div>
             );
           })}
         </div>
 
-        {/* Next button(s) — visible when at least 1 option selected */}
-        {multiSel.size > 0 && (
+        {/* Next button(s) — visible when at least 1 option selected AND "Other" text is filled (if "Other" selected) */}
+        {multiSel.size > 0 && !(multiSel.has('Other') && (!otherInputs[question.id] || !otherInputs[question.id].trim())) && (
           <div className="mt-8">
             {/* Last question - show different buttons based on whether answers changed */}
             {currentQ === filteredQuestions.length - 1 ? (

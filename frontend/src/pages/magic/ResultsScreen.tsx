@@ -709,7 +709,7 @@ interface ResultsScreenProps {
 export function ResultsScreen({ onGenerateMore, onGoBack }: ResultsScreenProps) {
   const navigate = useNavigate();
   const magicStore = useMagicModeStore();
-  const { generatedPosts, feedbackModal, closeFeedback, resetPostStatus, setPostCount, postCount, setGeneratedPosts, answers } = magicStore;
+  const { generatedPosts, feedbackModal, closeFeedback, resetPostStatus, setPostCount, postCount, setGeneratedPosts, answers, customAnswers } = magicStore;
   const allApproved = generatedPosts.length > 0 && generatedPosts.every((p) => p.status === 'approved' || p.status === 'published' || p.status === 'scheduled');
   const approvedCount = generatedPosts.filter((p) => p.status !== 'ready').length;
   // All posts resolved (published/scheduled) or all deleted
@@ -979,7 +979,7 @@ export function ResultsScreen({ onGenerateMore, onGoBack }: ResultsScreenProps) 
       if (postIds.length > 0) {
         try {
           const { saveMagicModeCache } = await import('./MagicModePage');
-          await saveMagicModeCache(answers, postIds);
+          await saveMagicModeCache(answers, postIds, customAnswers);
         } catch (err) {
           console.error('[ResultsScreen] Failed to save cache:', err);
         }

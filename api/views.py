@@ -2883,17 +2883,25 @@ class MagicHistoryView(APIView):
 class MagicModeCachedPostsView(APIView):
     """
     GET /api/magic/posts/{industry}/{goal}/{tone}/{platforms}/{colors}/
+    GET /api/magic/posts/{industry}/{goal}/{tone}/{platforms}/{colors}/{custom}/
 
     Look up cached Magic Mode posts based on answer combination.
     Returns posts if cache hit, empty response if cache miss.
+    Custom parameter is optional for "Other" option custom text.
     """
     permission_classes = [IsAuthenticated]
 
-    def get(self, request, industry, goal, tone, platforms, colors):
+    def get(self, request, industry, goal, tone, platforms, colors, custom=None, user_id=None):
         from posts.models import MagicModeCache, Post
 
-        # Build params_hash from URL parameters
+        # Security check: Verify user_id matches authenticated user
+        if user_id is not None and user_id != request.user.id:
+            return Response({'error': 'Unauthorized access'}, status=403)
+
+        # Build params_hash from URL parameters (include custom if provided)
         params_hash = f"{industry}/{goal}/{tone}/{platforms}/{colors}"
+        if custom:
+            params_hash += f"/{custom}"
 
         print(f"[MagicCache] Looking up cache for user {request.user.id} with params: {params_hash}")
 
@@ -2917,13 +2925,10 @@ class MagicModeCachedPostsView(APIView):
             for post in posts:
                 serialized_posts.append({
                     'id': post.id,
-                    'title': post.title,
                     'caption': post.caption,
                     'platforms': post.platforms,
                     'media_files': post.media_files,
                     'status': post.status,
-                    'image_overlay': post.image_overlay,
-                    'image_style': post.image_style,
                     'created_at': post.created_at.isoformat(),
                 })
 
@@ -2948,12 +2953,19 @@ class MagicModeCachedPostsView(APIView):
                 'error': str(e)
             }, status=500)
 
-    def post(self, request, industry, goal, tone, platforms, colors):
+    def post(self, request, industry, goal, tone, platforms, colors, custom=None, user_id=None):
         """Create/update cache entry for Magic Mode posts"""
         from posts.models import MagicModeCache
 
-        # Build params_hash from URL parameters
+        # Security check: Verify user_id matches authenticated user
+        if user_id is not None and user_id != request.user.id:
+            return Response({'error': 'Unauthorized access'}, status=403)
+
+        # Build params_hash from URL parameters (include custom if provided)
         params_hash = f"{industry}/{goal}/{tone}/{platforms}/{colors}"
+        if custom:
+            params_hash += f"/{custom}"
+
         post_ids = request.data.get('post_ids', [])
 
         if not post_ids:

@@ -770,7 +770,7 @@ CORS_ALLOWED_ORIGINS = ['http://localhost:3000', 'https://abedintechllc.com', ng
 
 **DiamondTransaction.transaction_type**: recharge, deduction, refund, plan_grant
 
-**Auto-creation signal**: on new User → DiamondWallet created + 50 diamond plan_grant (free plan default)
+**Auto-creation signal**: on new User → DiamondWallet created + 200 diamond plan_grant (free plan default)
 
 ### Diamond Service (`accounts/services/diamond_service.py`)
 

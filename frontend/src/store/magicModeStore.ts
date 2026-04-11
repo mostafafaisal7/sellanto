@@ -39,6 +39,7 @@ interface MagicModeState {
   screen: 'mode' | 'url' | 'questions' | 'working' | 'results';
   websiteUrl: string;
   answers: Record<string, string | string[]>;
+  customAnswers: Record<string, string>; // NEW: Store custom "Other" text values
   generatedPosts: MagicPost[];
   feedbackModal: { postId: number; answers: Record<string, string> } | null;
   postCount: number;
@@ -65,6 +66,7 @@ interface MagicModeState {
   setUrl: (url: string) => void;
   setLogoFile: (file: File | null) => void;
   setAnswer: (questionId: string, answer: string | string[]) => void;
+  setCustomAnswer: (key: string, customValue: string) => void; // NEW
   setGeneratedPosts: (posts: MagicPost[]) => void;
   approvePost: (id: number) => void;
   resetPostStatus: (id: number) => void;
@@ -93,6 +95,7 @@ export const useMagicModeStore = create<MagicModeState>()(
       screen: 'mode',
       websiteUrl: '',
       answers: {},
+      customAnswers: {}, // NEW
       generatedPosts: [],
       feedbackModal: null,
       postCount: 2,
@@ -114,6 +117,8 @@ export const useMagicModeStore = create<MagicModeState>()(
       setLogoFile: (logoFile) => set({ logoFile }),
       setAnswer: (questionId, answer) =>
         set((state) => ({ answers: { ...state.answers, [questionId]: answer } })),
+      setCustomAnswer: (key, customValue) => // NEW
+        set((state) => ({ customAnswers: { ...state.customAnswers, [key]: customValue } })),
       setGeneratedPosts: (generatedPosts) => set({ generatedPosts, hasPreviousGeneration: true }),
       approvePost: (id) =>
         set((state) => ({
@@ -159,6 +164,7 @@ export const useMagicModeStore = create<MagicModeState>()(
           screen: 'mode',
           websiteUrl: '',
           answers: {},
+          customAnswers: {}, // NEW
           generatedPosts: [],
           feedbackModal: null,
           postCount: 2,
@@ -183,6 +189,7 @@ export const useMagicModeStore = create<MagicModeState>()(
         brandId: state.brandId,
         websiteUrl: state.websiteUrl,
         answers: state.answers,
+        customAnswers: state.customAnswers, // NEW
         generatedPosts: state.generatedPosts,
         postCount: state.postCount,
         hasPreviousGeneration: state.hasPreviousGeneration,

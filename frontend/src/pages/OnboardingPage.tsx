@@ -1,70 +1,172 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { normalizeUrl, isValidUrl } from '../utils/url';
+import { normalizeUrl, isValidUrl, extractDomainName } from '../utils/url';
 import {
-  BuildingOfficeIcon,
   SparklesIcon,
-  LinkIcon,
-  CpuChipIcon,
-  BeakerIcon,
-  RocketLaunchIcon,
   CheckCircleIcon,
-  ArrowLeftIcon,
   XMarkIcon,
   PlusIcon,
   ExclamationTriangleIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
+  GlobeAltIcon,
+  BuildingOfficeIcon,
+  UserGroupIcon,
 } from '@heroicons/react/24/outline';
 import onboardingService from '../services/onboardingService';
-import { platformService } from '../services/platformService';
 import { useAuthStore } from '../store';
-import type { OnboardingProgress, Workspace, Brand, SocialAccount } from '../types';
+import type { Workspace, Brand } from '../types';
 
 const STEPS = [
-  { number: 1, title: 'Create Workspace', icon: BuildingOfficeIcon, description: 'Set up your workspace' },
-  { number: 2, title: 'Brand Wizard', icon: SparklesIcon, description: 'Define your brand identity' },
-  { number: 3, title: 'Connect Platforms', icon: LinkIcon, description: 'Link your social accounts' },
-  { number: 4, title: 'AI & Automation', icon: CpuChipIcon, description: 'Configure AI settings' },
-  { number: 5, title: 'Brand DNA', icon: BeakerIcon, description: 'Generate your brand DNA' },
-  { number: 6, title: 'Launch Plan', icon: RocketLaunchIcon, description: 'Set up your posting plan' },
-  { number: 7, title: 'All Set!', icon: CheckCircleIcon, description: "You're ready to go" },
+  { number: 1, title: 'Brand Wizard', icon: SparklesIcon, description: 'Define your brand identity' },
+  { number: 2, title: 'All Set!', icon: CheckCircleIcon, description: "You're ready to go" },
+];
+
+const REGION_OPTIONS = [
+  { value: 'Global', label: 'Global' },
+  { value: 'North America', label: 'North America' },
+  { value: 'South America', label: 'South America' },
+  { value: 'Europe', label: 'Europe' },
+  { value: 'Asia', label: 'Asia' },
+  { value: 'South Asia', label: 'South Asia' },
+  { value: 'Southeast Asia', label: 'Southeast Asia' },
+  { value: 'Middle East', label: 'Middle East' },
+  { value: 'Africa', label: 'Africa' },
+  { value: 'Australia & Oceania', label: 'Australia & Oceania' },
+];
+
+const AUDIENCE_OPTIONS = [
+  { value: 'Small Business Owners', label: 'Small Business Owners' },
+  { value: 'Entrepreneurs', label: 'Entrepreneurs' },
+  { value: 'Marketing Professionals', label: 'Marketing Professionals' },
+  { value: 'E-commerce Sellers', label: 'E-commerce Sellers' },
+  { value: 'Content Creators', label: 'Content Creators' },
+  { value: 'Freelancers', label: 'Freelancers' },
+  { value: 'Startups', label: 'Startups' },
+  { value: 'Corporate Teams', label: 'Corporate Teams' },
+  { value: 'Agency Clients', label: 'Agency Clients' },
+  { value: 'Consumers (B2C)', label: 'Consumers (B2C)' },
+  { value: 'Young Professionals (25-35)', label: 'Young Professionals (25-35)' },
+  { value: 'Middle-Aged Professionals (35-50)', label: 'Middle-Aged Professionals (35-50)' },
+  { value: 'Students & Recent Graduates', label: 'Students & Recent Graduates' },
+  { value: 'Tech Enthusiasts', label: 'Tech Enthusiasts' },
+  { value: 'Other', label: 'Other (specify below)' },
 ];
 
 // =============================================
-// Step 1: Create Workspace
+// Step 1: Brand Wizard
 // =============================================
-function WorkspaceStep({ existingWorkspace, onNext }: { existingWorkspace?: Workspace | null; onNext: (ws: Workspace) => void }) {
-  const [name, setName] = useState(existingWorkspace?.name || '');
-  const [tz, setTz] = useState(existingWorkspace?.timezone || 'UTC');
-  const [language, setLanguage] = useState(existingWorkspace?.default_language || 'en');
-  const [teamSize, setTeamSize] = useState<number | ''>(existingWorkspace?.team_size || '');
+function BrandWizardStep({ onNext }: { onNext: (workspace: Workspace, brand: Brand) => void }) {
+  const [websiteUrl, setWebsiteUrl] = useState('');
+  const [region, setRegion] = useState('Global');
+  const [selectedAudiences, setSelectedAudiences] = useState<string[]>([]);
+  const [customAudiences, setCustomAudiences] = useState<string[]>([]);
+  const [newCustomAudience, setNewCustomAudience] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  const handleAudienceToggle = (value: string) => {
+    if (value === 'Other') {
+      // Toggle Other option
+      if (selectedAudiences.includes('Other')) {
+        setSelectedAudiences(selectedAudiences.filter((a) => a !== 'Other'));
+        setCustomAudiences([]);
+      } else {
+        if (selectedAudiences.length + customAudiences.length < 3) {
+          setSelectedAudiences([...selectedAudiences, 'Other']);
+        }
+      }
+    } else {
+      if (selectedAudiences.includes(value)) {
+        setSelectedAudiences(selectedAudiences.filter((a) => a !== value));
+      } else {
+        const totalSelected = selectedAudiences.filter((a) => a !== 'Other').length + customAudiences.length;
+        if (totalSelected < 3) {
+          setSelectedAudiences([...selectedAudiences, value]);
+        }
+      }
+    }
+  };
+
+  const addCustomAudience = () => {
+    if (newCustomAudience.trim() && customAudiences.length < 3) {
+      const totalSelected = selectedAudiences.filter((a) => a !== 'Other').length + customAudiences.length;
+      if (totalSelected < 3) {
+        setCustomAudiences([...customAudiences, newCustomAudience.trim()]);
+        setNewCustomAudience('');
+      }
+    }
+  };
+
+  const removeCustomAudience = (index: number) => {
+    setCustomAudiences(customAudiences.filter((_, i) => i !== index));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!websiteUrl.trim()) {
+      setError('Website URL is required');
+      return;
+    }
+
+    if (!isValidUrl(websiteUrl)) {
+      setError('Please enter a valid website URL (e.g., example.com)');
+      return;
+    }
+
+    const totalAudiences = selectedAudiences.filter((a) => a !== 'Other').length + customAudiences.length;
+    if (totalAudiences === 0) {
+      setError('Please select at least one target audience');
+      return;
+    }
+
     setLoading(true);
     setError('');
+
     try {
-      const data = {
-        name,
-        timezone: tz,
-        default_language: language,
-        ...(teamSize ? { team_size: Number(teamSize) } : {}),
-      };
-      let workspace: Workspace;
-      if (existingWorkspace?.id) {
-        workspace = await onboardingService.updateWorkspace(existingWorkspace.id, data);
-      } else {
-        workspace = await onboardingService.createWorkspace(data);
-      }
-      onNext(workspace);
-    } catch {
-      setError('Failed to save workspace. Please try again.');
-    } finally {
+      const normalizedUrl = normalizeUrl(websiteUrl);
+      const brandName = extractDomainName(websiteUrl);
+      const workspaceName = brandName || 'My Workspace';
+
+      // Create workspace first (auto-generated from brand)
+      const workspace = await onboardingService.createWorkspace({
+        name: workspaceName,
+        timezone: 'UTC',
+        default_language: 'en',
+      });
+
+      // Combine selected and custom audiences
+      const allAudiences = [
+        ...selectedAudiences.filter((a) => a !== 'Other'),
+        ...customAudiences,
+      ];
+
+      // Create brand
+      const brand = await onboardingService.createBrand({
+        brand_name: brandName,
+        industry: brandName,
+        target_region: region,
+        website_url: normalizedUrl,
+        workspace: workspace.id,
+        voice_tone: 'professional',
+        audiences: allAudiences,
+        goals: [],
+      } as unknown as Partial<Brand>);
+
+      // Mark step 1 as complete
+      await onboardingService.completeStep(1);
+
+      onNext(workspace, brand);
+    } catch (err) {
+      setError('Failed to create brand. Please try again.');
       setLoading(false);
     }
   };
+
+  const totalSelected = selectedAudiences.filter((a) => a !== 'Other').length + customAudiences.length;
+  const canAddMore = totalSelected < 3;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -74,799 +176,322 @@ function WorkspaceStep({ existingWorkspace, onNext }: { existingWorkspace?: Work
           {error}
         </div>
       )}
+
+      {/* Website URL */}
       <div>
-        <label className="block text-sm font-medium text-text-secondary mb-2">Workspace Name *</label>
+        <label className="block text-sm font-medium text-text-secondary mb-2">
+          Website URL <span className="text-red-400">*</span>
+        </label>
         <input
           type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="e.g., My Agency, Marketing Team"
+          value={websiteUrl}
+          onChange={(e) => setWebsiteUrl(e.target.value)}
+          placeholder="e.g., yourbrand.com"
           className="input w-full"
           required
         />
+        <p className="text-xs text-text-muted mt-1">
+          We'll use this to automatically set up your brand name and workspace
+        </p>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-text-secondary mb-2">Timezone</label>
-          <select value={tz} onChange={(e) => setTz(e.target.value)} className="input w-full" style={{ backgroundColor: '#1a1a2e', color: '#e2e8f0' }}>
-            <option value="UTC" style={{ background: '#1a1a2e', color: '#e2e8f0' }}>UTC</option>
-            <option value="US/Eastern" style={{ background: '#1a1a2e', color: '#e2e8f0' }}>US Eastern</option>
-            <option value="US/Pacific" style={{ background: '#1a1a2e', color: '#e2e8f0' }}>US Pacific</option>
-            <option value="Europe/London" style={{ background: '#1a1a2e', color: '#e2e8f0' }}>London</option>
-            <option value="Asia/Tokyo" style={{ background: '#1a1a2e', color: '#e2e8f0' }}>Tokyo</option>
-            <option value="Asia/Kolkata" style={{ background: '#1a1a2e', color: '#e2e8f0' }}>India (IST)</option>
-            <option value="Asia/Dhaka" style={{ background: '#1a1a2e', color: '#e2e8f0' }}>Bangladesh (BST)</option>
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-text-secondary mb-2">Default Language</label>
-          <select value={language} onChange={(e) => setLanguage(e.target.value)} className="input w-full" style={{ backgroundColor: '#1a1a2e', color: '#e2e8f0' }}>
-            <option value="en" style={{ background: '#1a1a2e', color: '#e2e8f0' }}>English</option>
-            <option value="bn" style={{ background: '#1a1a2e', color: '#e2e8f0' }}>Bengali</option>
-            <option value="es" style={{ background: '#1a1a2e', color: '#e2e8f0' }}>Spanish</option>
-            <option value="fr" style={{ background: '#1a1a2e', color: '#e2e8f0' }}>French</option>
-            <option value="de" style={{ background: '#1a1a2e', color: '#e2e8f0' }}>German</option>
-            <option value="hi" style={{ background: '#1a1a2e', color: '#e2e8f0' }}>Hindi</option>
-          </select>
-        </div>
-      </div>
+
+      {/* Region */}
       <div>
-        <label className="block text-sm font-medium text-text-secondary mb-2">Team Size (optional)</label>
-        <input
-          type="number"
-          min={1}
-          max={1000}
-          value={teamSize}
-          onChange={(e) => setTeamSize(e.target.value ? Number(e.target.value) : '')}
-          placeholder="e.g., 5"
-          className="input w-full"
-        />
-      </div>
-      <button type="submit" disabled={!name.trim() || loading} className="btn-primary w-full py-3">
-        {loading ? 'Saving...' : existingWorkspace ? 'Update & Continue' : 'Create Workspace & Continue'}
-      </button>
-    </form>
-  );
-}
-
-// =============================================
-// Step 2: Brand Wizard
-// =============================================
-function BrandStep({ workspaceId, existingBrand, onNext }: { workspaceId: number; existingBrand?: Brand | null; onNext: (brand: Brand) => void }) {
-  const [form, setForm] = useState({
-    brand_name: existingBrand?.brand_name || '',
-    industry: existingBrand?.industry || '',
-    target_region: existingBrand?.target_region || '',
-    website_url: existingBrand?.website_url || '',
-    voice_tone: existingBrand?.voice_tone || 'professional',
-  });
-  const [doDontRules, setDoDontRules] = useState(() => {
-    if (!existingBrand?.do_dont_rules) return '';
-    const rules = existingBrand.do_dont_rules;
-    const lines: string[] = [];
-    if (rules.do) lines.push(...rules.do);
-    if (rules.dont) lines.push(...rules.dont);
-    return lines.join('\n');
-  });
-  const [goals, setGoals] = useState<string[]>(existingBrand?.goals || []);
-  const [audiences, setAudiences] = useState<string[]>(existingBrand?.audiences || []);
-  const [newAudience, setNewAudience] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  const goalOptions = [
-    { value: 'leads', label: 'Lead Generation' },
-    { value: 'growth', label: 'Audience Growth' },
-    { value: 'authority', label: 'Thought Leadership' },
-    { value: 'sales', label: 'Direct Sales' },
-    { value: 'awareness', label: 'Brand Awareness' },
-    { value: 'community', label: 'Community Building' },
-  ];
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (form.website_url && !isValidUrl(form.website_url)) {
-      setError('Please enter a valid website URL (e.g. example.com)');
-      return;
-    }
-    setLoading(true);
-    setError('');
-    try {
-      const doRules: string[] = [];
-      const dontRules: string[] = [];
-      if (doDontRules.trim()) {
-        doDontRules.split('\n').forEach((line) => {
-          const trimmed = line.trim();
-          if (trimmed.toLowerCase().startsWith("don't") || trimmed.toLowerCase().startsWith('dont') || trimmed.toLowerCase().startsWith('never') || trimmed.toLowerCase().startsWith('avoid')) {
-            dontRules.push(trimmed);
-          } else if (trimmed) {
-            doRules.push(trimmed);
-          }
-        });
-      }
-
-      const brandData = {
-        ...form,
-        website_url: normalizeUrl(form.website_url),
-        workspace: workspaceId,
-        goals,
-        audiences,
-        do_dont_rules: { do: doRules, dont: dontRules },
-      } as unknown as Partial<Brand>;
-
-      let brand: Brand;
-      if (existingBrand?.id) {
-        brand = await onboardingService.updateBrand(existingBrand.id, brandData);
-      } else {
-        brand = await onboardingService.createBrand(brandData);
-      }
-      onNext(brand);
-    } catch {
-      setError('Failed to create brand. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const addAudience = () => {
-    if (newAudience.trim() && audiences.length < 5) {
-      setAudiences([...audiences, newAudience.trim()]);
-      setNewAudience('');
-    }
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-5">
-      {error && (
-        <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
-          <ExclamationTriangleIcon className="w-4 h-4 flex-shrink-0" />
-          {error}
-        </div>
-      )}
-
-      {/* Section A: Basic Info */}
-      <div className="space-y-1 mb-2">
-        <h3 className="text-sm font-semibold text-primary uppercase tracking-wider">Basic Info</h3>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-text-secondary mb-2">Brand Name *</label>
-          <input type="text" value={form.brand_name} onChange={(e) => setForm({ ...form, brand_name: e.target.value })} placeholder="Your brand or business name" className="input w-full" required />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-text-secondary mb-2">Industry *</label>
-          <input type="text" value={form.industry} onChange={(e) => setForm({ ...form, industry: e.target.value })} placeholder="e.g., Technology, Fashion, Food" className="input w-full" required />
-        </div>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-text-secondary mb-2">Target Region *</label>
-          <input type="text" value={form.target_region} onChange={(e) => setForm({ ...form, target_region: e.target.value })} placeholder="e.g., Global, South Asia, US" className="input w-full" required />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-text-secondary mb-2">Website URL</label>
-          <input type="text" value={form.website_url} onChange={(e) => setForm({ ...form, website_url: e.target.value })} placeholder="yourbrand.com" className="input w-full" />
-        </div>
-      </div>
-
-      {/* Section B: Voice & Tone */}
-      <div className="border-t border-white/5 pt-5 mt-5">
-        <h3 className="text-sm font-semibold text-primary uppercase tracking-wider mb-3">Voice & Tone</h3>
-      </div>
-      <div>
-        <label className="block text-sm font-medium text-text-secondary mb-2">Brand Voice</label>
-        <select value={form.voice_tone} onChange={(e) => setForm({ ...form, voice_tone: e.target.value })} className="input w-full" style={{ backgroundColor: '#1a1a2e', color: '#e2e8f0' }}>
-          <option value="professional" style={{ background: '#1a1a2e', color: '#e2e8f0' }}>Professional</option>
-          <option value="casual" style={{ background: '#1a1a2e', color: '#e2e8f0' }}>Casual</option>
-          <option value="friendly" style={{ background: '#1a1a2e', color: '#e2e8f0' }}>Friendly</option>
-          <option value="enthusiastic" style={{ background: '#1a1a2e', color: '#e2e8f0' }}>Enthusiastic</option>
-          <option value="humorous" style={{ background: '#1a1a2e', color: '#e2e8f0' }}>Humorous</option>
-          <option value="inspirational" style={{ background: '#1a1a2e', color: '#e2e8f0' }}>Inspirational</option>
-          <option value="formal" style={{ background: '#1a1a2e', color: '#e2e8f0' }}>Formal</option>
-          <option value="conversational" style={{ background: '#1a1a2e', color: '#e2e8f0' }}>Conversational</option>
+        <label className="block text-sm font-medium text-text-secondary mb-2">Target Region</label>
+        <select value={region} onChange={(e) => setRegion(e.target.value)} className="input w-full">
+          {REGION_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
         </select>
       </div>
+
+      {/* Target Audiences */}
       <div>
-        <label className="block text-sm font-medium text-text-secondary mb-2">Do / Don't Rules (optional)</label>
-        <textarea
-          value={doDontRules}
-          onChange={(e) => setDoDontRules(e.target.value)}
-          placeholder={"Always use inclusive language\nKeep it short and direct\nDon't use slang\nNever discuss competitors"}
-          rows={4}
-          className="input w-full resize-none"
-        />
-        <p className="text-xs text-text-muted mt-1">One rule per line. Lines starting with "Don't", "Never", or "Avoid" will be categorized as Don'ts.</p>
-      </div>
+        <label className="block text-sm font-medium text-text-secondary mb-2">
+          Target Audiences <span className="text-xs text-text-muted">(Select up to 3)</span>
+        </label>
+        <div className="space-y-2 max-h-64 overflow-y-auto pr-2">
+          {AUDIENCE_OPTIONS.map((opt) => {
+            const isSelected = selectedAudiences.includes(opt.value);
+            const isDisabled = !canAddMore && !isSelected;
 
-      {/* Section C: Goals */}
-      <div className="border-t border-white/5 pt-5 mt-5">
-        <h3 className="text-sm font-semibold text-primary uppercase tracking-wider mb-3">Goals</h3>
-      </div>
-      <div>
-        <label className="block text-sm font-medium text-text-secondary mb-2">What are your social media goals?</label>
-        <div className="flex flex-wrap gap-2">
-          {goalOptions.map((g) => (
-            <button
-              key={g.value}
-              type="button"
-              onClick={() => setGoals(goals.includes(g.value) ? goals.filter((x) => x !== g.value) : [...goals, g.value])}
-              className={`px-4 py-2 rounded-lg text-sm border transition-all ${
-                goals.includes(g.value) ? 'bg-primary/20 border-primary text-primary shadow-glow-primary' : 'border-white/10 text-text-secondary hover:border-white/20'
-              }`}
-            >
-              {g.label}
-            </button>
-          ))}
-        </div>
-      </div>
+            return (
+              <div key={opt.value}>
+                <button
+                  type="button"
+                  onClick={() => !isDisabled && handleAudienceToggle(opt.value)}
+                  disabled={isDisabled}
+                  className={`w-full text-left px-4 py-3 rounded-lg border transition-all ${
+                    isSelected
+                      ? 'bg-primary/20 border-primary text-primary'
+                      : isDisabled
+                      ? 'border-white/5 text-text-muted opacity-50 cursor-not-allowed'
+                      : 'border-white/10 text-text-secondary hover:border-white/20 hover:bg-white/[0.02]'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">{opt.label}</span>
+                    {isSelected && <CheckCircleIcon className="w-5 h-5" />}
+                  </div>
+                </button>
 
-      {/* Section D: Audiences */}
-      <div className="border-t border-white/5 pt-5 mt-5">
-        <h3 className="text-sm font-semibold text-primary uppercase tracking-wider mb-3">Target Audiences</h3>
-      </div>
-      <div>
-        <label className="block text-sm font-medium text-text-secondary mb-2">Who is your target audience? (up to 5)</label>
-        <div className="flex gap-2 mb-2">
-          <input
-            type="text"
-            value={newAudience}
-            onChange={(e) => setNewAudience(e.target.value)}
-            placeholder="e.g., Small business owners aged 25-45"
-            className="input flex-1"
-            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addAudience(); } }}
-            disabled={audiences.length >= 5}
-          />
-          <button type="button" onClick={addAudience} disabled={audiences.length >= 5 || !newAudience.trim()} className="btn-secondary px-4">
-            <PlusIcon className="w-4 h-4" />
-          </button>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {audiences.map((a, i) => (
-            <span key={i} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-sm text-primary">
-              {a}
-              <button type="button" onClick={() => setAudiences(audiences.filter((_, j) => j !== i))} className="hover:text-red-400 transition-colors">
-                <XMarkIcon className="w-3.5 h-3.5" />
-              </button>
-            </span>
-          ))}
-        </div>
-      </div>
+                {/* Custom audience input for "Other" */}
+                {opt.value === 'Other' && isSelected && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    className="mt-2 ml-4 space-y-2"
+                  >
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newCustomAudience}
+                        onChange={(e) => setNewCustomAudience(e.target.value)}
+                        placeholder="Specify your target audience..."
+                        className="input flex-1"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            addCustomAudience();
+                          }
+                        }}
+                        disabled={customAudiences.length >= 3}
+                      />
+                      <button
+                        type="button"
+                        onClick={addCustomAudience}
+                        disabled={customAudiences.length >= 3 || !newCustomAudience.trim()}
+                        className="btn-secondary px-4 disabled:opacity-50"
+                      >
+                        <PlusIcon className="w-4 h-4" />
+                      </button>
+                    </div>
 
-      <button type="submit" disabled={!form.brand_name || !form.industry || !form.target_region || loading} className="btn-primary w-full py-3 mt-4">
-        {loading ? 'Saving...' : existingBrand ? 'Update Brand & Continue' : 'Create Brand & Continue'}
-      </button>
-    </form>
-  );
-}
-
-// =============================================
-// Step 3: Connect Platforms
-// =============================================
-function ConnectPlatformsStep({ onNext }: { onNext: () => void }) {
-  const [accounts, setAccounts] = useState<SocialAccount[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
-  const [connectError, setConnectError] = useState('');
-
-  // Simple connect form state
-  const [platform, setPlatform] = useState('facebook');
-  const [accountName, setAccountName] = useState('');
-  const [credentials, setCredentials] = useState<Record<string, string>>({});
-  const [submitting, setSubmitting] = useState(false);
-
-  const platformConfigs: Record<string, { label: string; color: string; fields: { key: string; label: string; placeholder: string }[] }> = {
-    facebook: {
-      label: 'Facebook',
-      color: '#1877F2',
-      fields: [
-        { key: 'facebook_page_id', label: 'Page ID', placeholder: 'Your Facebook Page ID' },
-        { key: 'facebook_access_token', label: 'Access Token', placeholder: 'Page Access Token' },
-      ],
-    },
-    instagram: {
-      label: 'Instagram',
-      color: '#E4405F',
-      fields: [
-        { key: 'instagram_business_account_id', label: 'Business Account ID', placeholder: 'Instagram Business Account ID' },
-        { key: 'instagram_access_token', label: 'Access Token', placeholder: 'Instagram Access Token' },
-      ],
-    },
-    twitter: {
-      label: 'Twitter/X',
-      color: '#1DA1F2',
-      fields: [
-        { key: 'twitter_api_key', label: 'API Key', placeholder: 'API Key' },
-        { key: 'twitter_api_secret', label: 'API Secret', placeholder: 'API Secret' },
-        { key: 'twitter_access_token', label: 'Access Token', placeholder: 'Access Token' },
-        { key: 'twitter_access_token_secret', label: 'Access Token Secret', placeholder: 'Access Token Secret' },
-      ],
-    },
-    linkedin: {
-      label: 'LinkedIn',
-      color: '#0A66C2',
-      fields: [
-        { key: 'linkedin_person_urn', label: 'Person URN', placeholder: 'urn:li:person:xxxxx' },
-        { key: 'linkedin_access_token', label: 'Access Token', placeholder: 'LinkedIn Access Token' },
-      ],
-    },
-    telegram: {
-      label: 'Telegram',
-      color: '#0088CC',
-      fields: [
-        { key: 'telegram_bot_token', label: 'Bot Token', placeholder: 'Bot Token from @BotFather' },
-        { key: 'telegram_channel_id', label: 'Channel ID', placeholder: '@channel_username or -100xxx' },
-      ],
-    },
-  };
-
-  const loadAccounts = useCallback(async () => {
-    try {
-      const list = await platformService.list();
-      setAccounts(list);
-    } catch { /* ok */ }
-    setLoading(false);
-  }, []);
-
-  useEffect(() => {
-    loadAccounts();
-  }, [loadAccounts]);
-
-  const handleConnect = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmitting(true);
-    setConnectError('');
-    try {
-      await platformService.connect({
-        platform: platform as SocialAccount['platform'],
-        account_name: accountName,
-        ...credentials,
-      });
-      setShowForm(false);
-      setAccountName('');
-      setCredentials({});
-      await loadAccounts();
-    } catch {
-      setConnectError('Failed to connect account. Check your credentials.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleDisconnect = async (id: number) => {
-    try {
-      await platformService.disconnect(id);
-      await loadAccounts();
-    } catch { /* ok */ }
-  };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <div className="animate-spin w-6 h-6 border-2 border-primary border-t-transparent rounded-full" />
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-6">
-      <p className="text-text-secondary text-center">
-        Connect at least one social media account to continue. You can add more later.
-      </p>
-
-      {/* Connected accounts list */}
-      {accounts.length > 0 && (
-        <div className="space-y-2">
-          <h4 className="text-sm font-medium text-text-secondary">Connected Accounts ({accounts.length})</h4>
-          {accounts.map((acc) => (
-            <div key={acc.id} className="flex items-center justify-between p-3 rounded-lg border border-white/10 bg-dark-700/50">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold text-white"
-                  style={{ backgroundColor: platformConfigs[acc.platform]?.color || '#666' }}>
-                  {acc.platform[0].toUpperCase()}
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-text-primary">{acc.account_name}</p>
-                  <p className="text-xs text-text-muted capitalize">{acc.platform}</p>
-                </div>
+                    {customAudiences.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {customAudiences.map((aud, i) => (
+                          <span
+                            key={i}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-sm text-primary"
+                          >
+                            {aud}
+                            <button
+                              type="button"
+                              onClick={() => removeCustomAudience(i)}
+                              className="hover:text-red-400 transition-colors"
+                            >
+                              <XMarkIcon className="w-3 h-3" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </motion.div>
+                )}
               </div>
-              <button onClick={() => handleDisconnect(acc.id)} className="text-xs text-red-400 hover:text-red-300 transition-colors">
-                Disconnect
-              </button>
-            </div>
-          ))}
+            );
+          })}
         </div>
-      )}
 
-      {/* Connect new account */}
-      {!showForm ? (
-        <button
-          onClick={() => setShowForm(true)}
-          className="w-full py-3 rounded-lg border-2 border-dashed border-white/10 hover:border-primary/30 text-text-secondary hover:text-primary transition-all flex items-center justify-center gap-2"
-        >
-          <PlusIcon className="w-5 h-5" />
-          Connect New Account
-        </button>
-      ) : (
-        <motion.form
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          onSubmit={handleConnect}
-          className="p-4 rounded-lg border border-white/10 bg-dark-700/50 space-y-4"
-        >
-          {connectError && (
-            <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
-              <ExclamationTriangleIcon className="w-4 h-4 flex-shrink-0" />
-              {connectError}
-            </div>
-          )}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1">Platform</label>
-              <select value={platform} onChange={(e) => { setPlatform(e.target.value); setCredentials({}); }} className="input w-full text-sm" style={{ backgroundColor: '#1a1a2e', color: '#e2e8f0' }}>
-                {Object.entries(platformConfigs).map(([key, cfg]) => (
-                  <option key={key} value={key} style={{ background: '#1a1a2e', color: '#e2e8f0' }}>{cfg.label}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1">Account Name</label>
-              <input type="text" value={accountName} onChange={(e) => setAccountName(e.target.value)} placeholder="Display name" className="input w-full text-sm" required />
-            </div>
-          </div>
-          {platformConfigs[platform]?.fields.map((field) => (
-            <div key={field.key}>
-              <label className="block text-xs font-medium text-text-secondary mb-1">{field.label}</label>
-              <input
-                type="text"
-                value={credentials[field.key] || ''}
-                onChange={(e) => setCredentials({ ...credentials, [field.key]: e.target.value })}
-                placeholder={field.placeholder}
-                className="input w-full text-sm"
-                required
-              />
-            </div>
-          ))}
-          <div className="flex gap-2">
-            <button type="submit" disabled={submitting} className="btn-primary px-6 text-sm">
-              {submitting ? 'Connecting...' : 'Connect'}
-            </button>
-            <button type="button" onClick={() => { setShowForm(false); setConnectError(''); }} className="btn-secondary px-4 text-sm">
-              Cancel
-            </button>
-          </div>
-        </motion.form>
-      )}
-
-      {/* Continue button */}
-      <button
-        onClick={onNext}
-        disabled={accounts.length === 0}
-        className={`w-full py-3 rounded-lg font-medium transition-all ${
-          accounts.length > 0
-            ? 'btn-primary'
-            : 'bg-dark-600 text-text-muted cursor-not-allowed'
-        }`}
-      >
-        {accounts.length === 0 ? 'Connect at least 1 account to continue' : `Continue with ${accounts.length} account${accounts.length > 1 ? 's' : ''}`}
-      </button>
-    </div>
-  );
-}
-
-// =============================================
-// Step 4: AI & Automation Setup (Informational)
-// =============================================
-function AISetupStep({ onNext }: { onNext: () => void }) {
-  return (
-    <div className="space-y-6">
-      <p className="text-text-secondary text-center">
-        Sellanto includes powerful AI tools. You can configure them anytime from their settings pages.
-      </p>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {[
-          { title: 'AI Caption Generator', desc: 'Generate engaging captions with OpenAI GPT models', icon: '1' },
-          { title: 'AI Image Generator', desc: 'Create stunning images with Gemini or DALL-E', icon: '2' },
-          { title: 'AI Video Generator', desc: 'Generate videos with Google Gemini', icon: '3' },
-          { title: 'Messenger Bot', desc: 'Automate Facebook Messenger with RAG AI', icon: '4' },
-        ].map((tool) => (
-          <div key={tool.title} className="card p-4 border border-white/5 hover:border-primary/20 transition-colors">
-            <div className="flex items-start gap-3">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center flex-shrink-0">
-                <span className="text-xs font-bold text-primary">{tool.icon}</span>
-              </div>
-              <div>
-                <h4 className="font-semibold text-text-primary text-sm">{tool.title}</h4>
-                <p className="text-xs text-text-secondary mt-0.5">{tool.desc}</p>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-      <p className="text-xs text-text-muted text-center">
-        API keys can be configured from each tool's settings page anytime after setup.
-      </p>
-      <button onClick={onNext} className="btn-primary w-full py-3">
-        Continue
-      </button>
-    </div>
-  );
-}
-
-// =============================================
-// Step 5: Brand DNA
-// =============================================
-function BrandDNAStep({ brand, onNext }: { brand: Brand | null; onNext: () => void }) {
-  const [generating, setGenerating] = useState(false);
-  const [generated, setGenerated] = useState(false);
-  const [error, setError] = useState('');
-
-  // Detect pre-existing DNA (generated during registration)
-  const hasExistingDna = brand?.brand_dna && typeof brand.brand_dna === 'object' && Object.keys(brand.brand_dna).length > 2;
-
-  const handleGenerate = async () => {
-    if (!brand) return;
-    setGenerating(true);
-    setError('');
-    try {
-      const brandDna = {
-        voice: brand.voice_tone || 'professional',
-        industry: brand.industry,
-        region: brand.target_region,
-        goals: brand.goals || [],
-        audiences: brand.audiences || [],
-        generated_at: new Date().toISOString(),
-        version: 1,
-      };
-      await onboardingService.updateBrand(brand.id, { brand_dna: brandDna } as unknown as Partial<Brand>);
-      setGenerated(true);
-    } catch {
-      setError('Failed to generate Brand DNA. You can do this later from Business Profile.');
-    } finally {
-      setGenerating(false);
-    }
-  };
-
-  return (
-    <div className="space-y-6">
-      <div className="text-center">
-        <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-primary/20 to-secondary/20 flex items-center justify-center mx-auto mb-4">
-          <BeakerIcon className="w-10 h-10 text-primary" />
-        </div>
-        <h3 className="text-lg font-semibold text-text-primary mb-2">Brand DNA Generation</h3>
-        <p className="text-text-secondary text-sm">
-          Brand DNA helps AI tools create content that matches your brand voice, goals, and audience.
-        </p>
-      </div>
-
-      {/* Already generated during registration */}
-      {hasExistingDna && !generated && (
-        <div className="rounded-lg border border-green-500/20 bg-green-500/5 p-5 space-y-3 text-center">
-          <div className="flex items-center justify-center gap-2 text-green-400">
-            <CheckCircleIcon className="w-6 h-6" />
-            <span className="font-semibold text-lg">Brand DNA Already Generated</span>
-          </div>
-          <p className="text-sm text-text-secondary">
-            Your Brand DNA was automatically created during registration.
-            You can view and edit it anytime from the Strategy Hub.
+        {totalSelected > 0 && (
+          <p className="text-xs text-text-muted mt-2">
+            {totalSelected} of 3 audiences selected
           </p>
-          <div className="flex gap-3 justify-center pt-2">
-            <a href="/strategy?tab=dna" className="text-sm text-primary hover:underline">
-              View & Edit in Strategy Hub
-            </a>
-          </div>
-        </div>
-      )}
-
-      {brand && !hasExistingDna && (
-        <div className="rounded-lg border border-white/10 bg-dark-700/50 p-4 space-y-3">
-          <h4 className="text-sm font-semibold text-text-secondary uppercase tracking-wider">Brand Summary</h4>
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            <div>
-              <span className="text-text-muted">Name:</span>
-              <span className="text-text-primary ml-2">{brand.brand_name}</span>
-            </div>
-            <div>
-              <span className="text-text-muted">Industry:</span>
-              <span className="text-text-primary ml-2">{brand.industry}</span>
-            </div>
-            <div>
-              <span className="text-text-muted">Region:</span>
-              <span className="text-text-primary ml-2">{brand.target_region}</span>
-            </div>
-            <div>
-              <span className="text-text-muted">Voice:</span>
-              <span className="text-text-primary ml-2 capitalize">{brand.voice_tone}</span>
-            </div>
-          </div>
-          {brand.goals && brand.goals.length > 0 && (
-            <div>
-              <span className="text-text-muted text-sm">Goals:</span>
-              <div className="flex flex-wrap gap-1 mt-1">
-                {brand.goals.map((g) => (
-                  <span key={g} className="px-2 py-0.5 rounded-md bg-primary/10 text-primary text-xs capitalize">{g}</span>
-                ))}
-              </div>
-            </div>
-          )}
-          {brand.audiences && brand.audiences.length > 0 && (
-            <div>
-              <span className="text-text-muted text-sm">Audiences:</span>
-              <div className="flex flex-wrap gap-1 mt-1">
-                {brand.audiences.map((a, i) => (
-                  <span key={i} className="px-2 py-0.5 rounded-md bg-secondary/10 text-secondary text-xs">{a}</span>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {error && (
-        <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
-          <ExclamationTriangleIcon className="w-4 h-4 flex-shrink-0" />
-          {error}
-        </div>
-      )}
-
-      {generated || hasExistingDna ? (
-        <div className="text-center">
-          {generated && (
-            <div className="flex items-center justify-center gap-2 text-green-400 mb-4">
-              <CheckCircleIcon className="w-5 h-5" />
-              <span className="font-medium">Brand DNA generated successfully!</span>
-            </div>
-          )}
-          <button onClick={onNext} className="btn-primary w-full py-3">
-            Continue
-          </button>
-        </div>
-      ) : (
-        <div className="flex gap-3">
-          {brand && (
-            <button onClick={handleGenerate} disabled={generating} className="btn-primary flex-1 py-3">
-              {generating ? 'Generating...' : 'Generate Brand DNA'}
-            </button>
-          )}
-          <button onClick={onNext} className="btn-secondary flex-1 py-3">
-            {brand ? 'Skip for Now' : 'Continue'}
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// =============================================
-// Step 6: Launch Plan
-// =============================================
-function LaunchPlanStep({ brandId, onNext }: { brandId: number | null; onNext: () => void }) {
-  const [frequency, setFrequency] = useState(3);
-  const [approvalRequired, setApprovalRequired] = useState(true);
-  const [formats, setFormats] = useState<string[]>(['text', 'image']);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  const formatOptions = [
-    { value: 'text', label: 'Text' },
-    { value: 'image', label: 'Image' },
-    { value: 'video', label: 'Video' },
-    { value: 'carousel', label: 'Carousel' },
-    { value: 'reel', label: 'Reel' },
-    { value: 'story', label: 'Story' },
-    { value: 'thread', label: 'Thread' },
-  ];
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!brandId) {
-      onNext();
-      return;
-    }
-    setLoading(true);
-    setError('');
-    try {
-      await onboardingService.createLaunchPlan({
-        brand: brandId,
-        post_frequency: frequency,
-        formats_allowed: formats,
-        approval_required: approvalRequired,
-      });
-      onNext();
-    } catch {
-      setError('Failed to save launch plan. Continuing anyway...');
-      setTimeout(onNext, 1500);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      {error && (
-        <div className="flex items-center gap-2 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 text-sm">
-          <ExclamationTriangleIcon className="w-4 h-4 flex-shrink-0" />
-          {error}
-        </div>
-      )}
-      <div>
-        <label className="block text-sm font-medium text-text-secondary mb-2">Posts per Week</label>
-        <div className="flex items-center gap-4">
-          <input type="range" min={1} max={14} value={frequency} onChange={(e) => setFrequency(Number(e.target.value))} className="flex-1 accent-primary" />
-          <span className="text-2xl font-bold text-primary w-12 text-center">{frequency}</span>
-        </div>
-        <p className="text-xs text-text-muted mt-1">How many posts would you like to publish per week?</p>
+        )}
       </div>
-      <div>
-        <label className="block text-sm font-medium text-text-secondary mb-2">Content Formats</label>
-        <div className="flex flex-wrap gap-2">
-          {formatOptions.map((f) => (
-            <button
-              key={f.value}
-              type="button"
-              onClick={() => setFormats(formats.includes(f.value) ? formats.filter((x) => x !== f.value) : [...formats, f.value])}
-              className={`px-4 py-2 rounded-lg text-sm border transition-all ${
-                formats.includes(f.value) ? 'bg-primary/20 border-primary text-primary' : 'border-white/10 text-text-secondary hover:border-white/20'
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="flex items-center justify-between p-4 rounded-lg border border-white/10">
-        <div>
-          <h4 className="font-medium text-text-primary">Require Approval</h4>
-          <p className="text-sm text-text-secondary">Posts need approval before scheduling</p>
-        </div>
-        <button
-          type="button"
-          onClick={() => setApprovalRequired(!approvalRequired)}
-          className={`w-12 h-6 rounded-full transition-colors relative ${approvalRequired ? 'bg-primary' : 'bg-dark-600'}`}
-        >
-          <div className={`w-5 h-5 rounded-full bg-white absolute top-0.5 transition-all ${approvalRequired ? 'left-6' : 'left-0.5'}`} />
-        </button>
-      </div>
-      <button type="submit" disabled={loading || formats.length === 0} className="btn-primary w-full py-3">
-        {loading ? 'Saving...' : 'Save Launch Plan & Continue'}
+
+      <button
+        type="submit"
+        disabled={!websiteUrl.trim() || totalSelected === 0 || loading}
+        className="btn-primary w-full py-3 disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {loading ? 'Setting up your brand...' : 'Continue'}
       </button>
     </form>
   );
 }
 
 // =============================================
-// Step 7: Complete
+// Step 2: All Set - Summary with Accordions
 // =============================================
-function CompleteStep({ completedSteps, onFinish }: { completedSteps: number[]; onFinish: () => void }) {
-  const stepChecklist = STEPS.slice(0, 6).map((s) => ({
-    ...s,
-    done: completedSteps.includes(s.number),
-  }));
+function AllSetStep({
+  workspace,
+  brand,
+  onFinish,
+}: {
+  workspace: Workspace;
+  brand: Brand;
+  onFinish: () => void;
+}) {
+  const [expandedSection, setExpandedSection] = useState<string | null>('brand');
+
+  const toggleSection = (section: string) => {
+    setExpandedSection(expandedSection === section ? null : section);
+  };
 
   return (
-    <div className="space-y-6 text-center">
-      <div className="w-24 h-24 rounded-full bg-gradient-to-br from-green-500/20 to-green-600/20 flex items-center justify-center mx-auto">
-        <CheckCircleIcon className="w-14 h-14 text-green-400" />
-      </div>
-      <div>
+    <div className="space-y-6">
+      <div className="text-center mb-8">
+        <div className="w-16 h-16 rounded-full bg-green-500/10 flex items-center justify-center mx-auto mb-4">
+          <CheckCircleIcon className="w-10 h-10 text-green-400" />
+        </div>
         <h3 className="text-2xl font-bold text-text-primary mb-2">You're All Set!</h3>
         <p className="text-text-secondary">
-          Your workspace and brand are configured. Start creating amazing content!
+          Your workspace and brand have been created. Review your setup below.
         </p>
       </div>
 
-      <div className="text-left space-y-2">
-        {stepChecklist.map((step) => (
-          <div key={step.number} className="flex items-center gap-3 py-2 px-3 rounded-lg border border-white/5">
-            <div className={`w-6 h-6 rounded-full flex items-center justify-center ${step.done ? 'bg-green-500/20 text-green-400' : 'bg-dark-600 text-text-muted'}`}>
-              {step.done ? <CheckCircleIcon className="w-4 h-4" /> : <span className="text-xs">{step.number}</span>}
-            </div>
-            <span className={`text-sm ${step.done ? 'text-text-primary' : 'text-text-muted'}`}>{step.title}</span>
+      {/* Brand Details Accordion */}
+      <div className="border border-white/10 rounded-lg overflow-hidden">
+        <button
+          onClick={() => toggleSection('brand')}
+          className="w-full px-5 py-4 flex items-center justify-between bg-white/[0.02] hover:bg-white/[0.04] transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <SparklesIcon className="w-5 h-5 text-primary" />
+            <span className="font-semibold text-text-primary">Brand Details</span>
           </div>
-        ))}
+          {expandedSection === 'brand' ? (
+            <ChevronUpIcon className="w-5 h-5 text-text-muted" />
+          ) : (
+            <ChevronDownIcon className="w-5 h-5 text-text-muted" />
+          )}
+        </button>
+        <AnimatePresence>
+          {expandedSection === 'brand' && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="overflow-hidden"
+            >
+              <div className="px-5 py-4 space-y-3 bg-dark-700/30">
+                <div>
+                  <p className="text-xs text-text-muted mb-1">Brand Name</p>
+                  <p className="text-text-primary font-medium">{brand.brand_name}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-text-muted mb-1">Industry</p>
+                  <p className="text-text-primary">{brand.industry}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-text-muted mb-1">Website</p>
+                  <a
+                    href={brand.website_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline"
+                  >
+                    {brand.website_url?.replace(/^https?:\/\//, '')}
+                  </a>
+                </div>
+                <div>
+                  <p className="text-xs text-text-muted mb-1">Target Region</p>
+                  <div className="flex items-center gap-2">
+                    <GlobeAltIcon className="w-4 h-4 text-text-muted" />
+                    <p className="text-text-primary">{brand.target_region}</p>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs text-text-muted mb-1">Voice Tone</p>
+                  <p className="text-text-primary capitalize">{brand.voice_tone || 'Professional'}</p>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
-      <button onClick={onFinish} className="btn-primary w-full py-3 text-lg">
-        Go to Dashboard
+      {/* Target Audiences Accordion */}
+      {brand.audiences && brand.audiences.length > 0 && (
+        <div className="border border-white/10 rounded-lg overflow-hidden">
+          <button
+            onClick={() => toggleSection('audiences')}
+            className="w-full px-5 py-4 flex items-center justify-between bg-white/[0.02] hover:bg-white/[0.04] transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <UserGroupIcon className="w-5 h-5 text-secondary" />
+              <span className="font-semibold text-text-primary">Target Audiences</span>
+            </div>
+            {expandedSection === 'audiences' ? (
+              <ChevronUpIcon className="w-5 h-5 text-text-muted" />
+            ) : (
+              <ChevronDownIcon className="w-5 h-5 text-text-muted" />
+            )}
+          </button>
+          <AnimatePresence>
+            {expandedSection === 'audiences' && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="px-5 py-4 bg-dark-700/30">
+                  <div className="flex flex-wrap gap-2">
+                    {brand.audiences.map((aud, i) => (
+                      <span
+                        key={i}
+                        className="px-3 py-1.5 rounded-lg bg-secondary/10 border border-secondary/20 text-sm text-secondary"
+                      >
+                        {aud}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
+
+      {/* Workspace Info Accordion */}
+      <div className="border border-white/10 rounded-lg overflow-hidden">
+        <button
+          onClick={() => toggleSection('workspace')}
+          className="w-full px-5 py-4 flex items-center justify-between bg-white/[0.02] hover:bg-white/[0.04] transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <BuildingOfficeIcon className="w-5 h-5 text-info" />
+            <span className="font-semibold text-text-primary">Workspace</span>
+          </div>
+          {expandedSection === 'workspace' ? (
+            <ChevronUpIcon className="w-5 h-5 text-text-muted" />
+          ) : (
+            <ChevronDownIcon className="w-5 h-5 text-text-muted" />
+          )}
+        </button>
+        <AnimatePresence>
+          {expandedSection === 'workspace' && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="overflow-hidden"
+            >
+              <div className="px-5 py-4 space-y-3 bg-dark-700/30">
+                <div>
+                  <p className="text-xs text-text-muted mb-1">Name</p>
+                  <p className="text-text-primary font-medium">{workspace.name}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-text-muted mb-1">Timezone</p>
+                  <p className="text-text-primary">{workspace.timezone}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-text-muted mb-1">Language</p>
+                  <p className="text-text-primary uppercase">{workspace.default_language}</p>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      <button onClick={onFinish} className="btn-primary w-full py-3 mt-8">
+        Get Started
       </button>
     </div>
   );
@@ -878,7 +503,6 @@ function CompleteStep({ completedSteps, onFinish }: { completedSteps: number[]; 
 export function OnboardingPage() {
   const navigate = useNavigate();
   const { fetchUser } = useAuthStore();
-  const [progress, setProgress] = useState<OnboardingProgress | null>(null);
   const [currentStep, setCurrentStep] = useState(1);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [brand, setBrand] = useState<Brand | null>(null);
@@ -891,88 +515,61 @@ export function OnboardingPage() {
   const loadProgress = async () => {
     try {
       const p = await onboardingService.getProgress();
-      setProgress(p);
-      setCurrentStep(p.current_step);
       if (p.is_completed) {
-        navigate('/', { replace: true });
+        navigate('/dashboard', { replace: true });
         return;
       }
-      // Load existing workspace/brand if steps already done
+      setCurrentStep(p.current_step);
+
+      // Load existing workspace/brand if step 1 already completed
       if (p.completed_steps.includes(1)) {
         try {
-          const workspaces = await onboardingService.getWorkspaces();
+          const [workspaces, brands] = await Promise.all([
+            onboardingService.getWorkspaces(),
+            onboardingService.getBrands(),
+          ]);
           if (workspaces.length > 0) setWorkspace(workspaces[0]);
-        } catch { /* ok */ }
-      }
-      if (p.completed_steps.includes(2)) {
-        try {
-          const brands = await onboardingService.getBrands();
           if (brands.length > 0) setBrand(brands[0]);
-        } catch { /* ok */ }
+          if (workspaces.length > 0 && brands.length > 0) {
+            setCurrentStep(2);
+          }
+        } catch {
+          /* ok */
+        }
       }
     } catch {
-      // No progress yet, start from 1
+      // No progress yet, start from step 1
     } finally {
       setLoading(false);
     }
   };
 
-  const completeStep = async (stepNumber: number) => {
-    try {
-      const updated = await onboardingService.completeStep(stepNumber);
-      setProgress(updated);
-      if (stepNumber < 7) {
-        setCurrentStep(stepNumber + 1);
-      }
-    } catch {
-      // Move to next step even if API fails
-      if (stepNumber < 7) {
-        setCurrentStep(stepNumber + 1);
-      }
-    }
-  };
-
   const handleFinish = async () => {
     try {
-      await onboardingService.completeStep(7);
+      await onboardingService.completeStep(2);
       await fetchUser();
-    } catch { /* ok */ }
-    navigate('/', { replace: true });
+    } catch {
+      /* ok */
+    }
+    navigate('/dashboard', { replace: true });
   };
 
   const renderStep = () => {
     switch (currentStep) {
       case 1:
         return (
-          <WorkspaceStep
-            existingWorkspace={workspace}
-            onNext={(ws) => {
+          <BrandWizardStep
+            onNext={(ws, br) => {
               setWorkspace(ws);
-              completeStep(1);
+              setBrand(br);
+              setCurrentStep(2);
             }}
           />
         );
       case 2:
-        return (
-          <BrandStep
-            workspaceId={workspace?.id || 0}
-            existingBrand={brand}
-            onNext={(b) => {
-              setBrand(b);
-              completeStep(2);
-            }}
-          />
-        );
-      case 3:
-        return <ConnectPlatformsStep onNext={() => completeStep(3)} />;
-      case 4:
-        return <AISetupStep onNext={() => completeStep(4)} />;
-      case 5:
-        return <BrandDNAStep brand={brand} onNext={() => completeStep(5)} />;
-      case 6:
-        return <LaunchPlanStep brandId={brand?.id || null} onNext={() => completeStep(6)} />;
-      case 7:
-        return <CompleteStep completedSteps={progress?.completed_steps || [1, 2, 3, 4, 5, 6]} onFinish={handleFinish} />;
+        return workspace && brand ? (
+          <AllSetStep workspace={workspace} brand={brand} onFinish={handleFinish} />
+        ) : null;
       default:
         return null;
     }
@@ -988,57 +585,66 @@ export function OnboardingPage() {
 
   return (
     <div className="min-h-screen bg-dark-900">
-      {/* Header - No skip button */}
+      {/* Header */}
       <div className="border-b border-white/5 px-6 py-4">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <h1 className="text-xl font-bold gradient-text">Sellanto Setup</h1>
-          <span className="text-sm text-text-muted">
-            Step {currentStep} of 7
-          </span>
+          <span className="text-sm text-text-muted">Step {currentStep} of 2</span>
         </div>
       </div>
 
       {/* Progress bar */}
       <div className="max-w-4xl mx-auto px-6 py-6">
-        <div className="flex items-center gap-1 mb-2">
-          {STEPS.map((step) => (
-            <div key={step.number} className="flex-1">
-              <div
-                className={`h-1.5 rounded-full transition-all duration-300 ${
-                  step.number < currentStep
-                    ? 'bg-green-500'
-                    : step.number === currentStep
-                    ? 'bg-primary'
-                    : 'bg-dark-600'
-                }`}
-              />
+        <div className="flex items-center gap-3 mb-3">
+          {STEPS.map((step, idx) => (
+            <div key={step.number} className="flex items-center flex-1">
+              <div className="flex-1">
+                <div
+                  className={`h-1.5 rounded-full transition-all duration-300 ${
+                    step.number < currentStep
+                      ? 'bg-green-500'
+                      : step.number === currentStep
+                      ? 'bg-primary'
+                      : 'bg-dark-600'
+                  }`}
+                />
+              </div>
+              {idx < STEPS.length - 1 && <div className="w-3" />}
             </div>
           ))}
         </div>
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-4">
             {STEPS.map((step) => (
               <div
                 key={step.number}
-                className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold transition-all ${
+                className={`flex items-center gap-2 transition-all ${
                   step.number < currentStep
-                    ? 'bg-green-500/20 text-green-400'
+                    ? 'text-green-400'
                     : step.number === currentStep
-                    ? 'bg-primary/20 text-primary ring-2 ring-primary/30'
-                    : 'bg-dark-600 text-text-muted'
+                    ? 'text-primary'
+                    : 'text-text-muted'
                 }`}
               >
-                {step.number < currentStep ? (
-                  <CheckCircleIcon className="w-4 h-4" />
-                ) : (
-                  step.number
-                )}
+                <div
+                  className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold ${
+                    step.number < currentStep
+                      ? 'bg-green-500/20'
+                      : step.number === currentStep
+                      ? 'bg-primary/20 ring-2 ring-primary/30'
+                      : 'bg-dark-600'
+                  }`}
+                >
+                  {step.number < currentStep ? (
+                    <CheckCircleIcon className="w-5 h-5" />
+                  ) : (
+                    step.number
+                  )}
+                </div>
+                <span className="text-sm font-medium hidden md:inline">{step.title}</span>
               </div>
             ))}
           </div>
-          <span className="text-sm text-text-secondary">
-            {STEPS[currentStep - 1]?.title}
-          </span>
         </div>
       </div>
 
@@ -1063,26 +669,18 @@ export function OnboardingPage() {
                   ) : null;
                 })()}
                 <div>
-                  <h2 className="text-xl font-bold text-text-primary">{STEPS[currentStep - 1]?.title}</h2>
-                  <p className="text-sm text-text-secondary">{STEPS[currentStep - 1]?.description}</p>
+                  <h2 className="text-xl font-bold text-text-primary">
+                    {STEPS[currentStep - 1]?.title}
+                  </h2>
+                  <p className="text-sm text-text-secondary">
+                    {STEPS[currentStep - 1]?.description}
+                  </p>
                 </div>
               </div>
               {renderStep()}
             </div>
           </motion.div>
         </AnimatePresence>
-
-        {/* Back button (for steps 2-6 only) */}
-        {currentStep > 1 && currentStep < 7 && (
-          <div className="mt-4">
-            <button
-              onClick={() => setCurrentStep(Math.max(1, currentStep - 1))}
-              className="btn-secondary flex items-center gap-2 text-sm"
-            >
-              <ArrowLeftIcon className="w-4 h-4" /> Previous Step
-            </button>
-          </div>
-        )}
       </div>
     </div>
   );

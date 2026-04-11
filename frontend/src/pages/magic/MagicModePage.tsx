@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useMagicModeStore } from '../../store/magicModeStore';
+import { useAuthStore } from '../../store';
 import { URLInputScreen } from './URLInputScreen';
 import { AIQuestionsScreen } from './AIQuestionsScreen';
 import { AIWorkingScreen } from './AIWorkingScreen';
@@ -92,7 +93,10 @@ const QUESTION_OPTIONS = {
  * Example: { industry: ['E-commerce / Online Store', 'Local Service Business'] } → "24"
  * Example: { tone: ['Professional & Authoritative'] } → "1"
  */
-function encodeAnswersToIndices(answers: Record<string, string | string[]>): Record<string, string> {
+function encodeAnswersToIndices(
+  answers: Record<string, string | string[]>,
+  customAnswers?: Record<string, string>
+): Record<string, string> {
   const encoded: Record<string, string> = {};
 
   Object.keys(QUESTION_OPTIONS).forEach((questionId) => {
@@ -121,6 +125,21 @@ function encodeAnswersToIndices(answers: Record<string, string | string[]>): Rec
     }
   });
 
+  // NEW: Add custom values for cache differentiation
+  if (customAnswers) {
+    Object.keys(customAnswers).forEach((key) => {
+      const value = customAnswers[key];
+      if (value && value.trim()) {
+        // Sanitize custom value for URL use (convert to slug)
+        const sanitized = value.toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-|-$/g, '')
+          .substring(0, 50); // Limit length
+        encoded[`${key}_custom`] = sanitized;
+      }
+    });
+  }
+
   return encoded;
 }
 
@@ -128,15 +147,33 @@ function encodeAnswersToIndices(answers: Record<string, string | string[]>): Rec
  * Save Magic Mode cache entry
  * Exported so ResultsScreen can call this after creating posts
  */
-export async function saveMagicModeCache(answers: Record<string, string | string[]>, postIds: number[]) {
-  const encoded = encodeAnswersToIndices(answers);
-  const cacheKey = `${encoded.industry}/${encoded.goal}/${encoded.tone}/${encoded.platforms}/${encoded.colors}`;
+export async function saveMagicModeCache(
+  answers: Record<string, string | string[]>,
+  postIds: number[],
+  customAnswers?: Record<string, string>
+) {
+  const encoded = encodeAnswersToIndices(answers, customAnswers);
+
+  // Build cache key with custom values appended
+  let cacheKey = `${encoded.industry}/${encoded.goal}/${encoded.tone}/${encoded.platforms}/${encoded.colors}`;
+
+  // Append custom industry if exists
+  if (encoded.industry_other_custom) {
+    cacheKey += `/${encoded.industry_other_custom}`;
+  }
+
+  // Get user ID from auth store
+  const userId = useAuthStore.getState().user?.id;
+  if (!userId) {
+    console.error('[MagicMode] Cannot save cache: No user ID available');
+    return false;
+  }
 
   console.log('[MagicMode] Saving cache with key:', cacheKey, 'post IDs:', postIds);
 
   try {
     const { api } = await import('../../services');
-    const response = await api.post(`/magic/posts/${cacheKey}/`, { post_ids: postIds });
+    const response = await api.post(`/magic/posts/${userId}/${cacheKey}/`, { post_ids: postIds });
     console.log('[MagicMode] Cache saved successfully:', response.data);
     return true;
   } catch (error) {
@@ -251,24 +288,39 @@ export function MagicModePage() {
 
   const handleQuestionsNext = useCallback(async () => {
     // Try to load cached posts based on current answer combination
-    const encoded = encodeAnswersToIndices(store.answers);
-    const cacheKey = `${encoded.industry}/${encoded.goal}/${encoded.tone}/${encoded.platforms}/${encoded.colors}`;
+    const encoded = encodeAnswersToIndices(store.answers, store.customAnswers);
+
+    // Build cache key with custom values
+    let cacheKey = `${encoded.industry}/${encoded.goal}/${encoded.tone}/${encoded.platforms}/${encoded.colors}`;
+
+    // Append custom industry if exists
+    if (encoded.industry_other_custom) {
+      cacheKey += `/${encoded.industry_other_custom}`;
+    }
+
+    // Get user ID from auth store
+    const userId = useAuthStore.getState().user?.id;
+    if (!userId) {
+      console.error('[MagicMode] Cannot lookup cache: No user ID available');
+      setScreen('working');
+      return;
+    }
 
     console.log('[MagicMode] Looking up cached posts with key:', cacheKey);
 
     try {
       const { api } = await import('../../services');
-      const response = await api.get(`/magic/posts/${cacheKey}/`);
+      const response = await api.get(`/magic/posts/${userId}/${cacheKey}/`);
 
       if (response.data && response.data.posts && response.data.posts.length > 0) {
         console.log('[MagicMode] Cache HIT - Loading', response.data.posts.length, 'existing posts');
         // Convert backend posts to MagicPost format
         const posts = response.data.posts.map((p: any) => ({
           id: p.id,
-          title: p.title || 'Post',
+          title: p.caption ? (p.caption.substring(0, 50) + (p.caption.length > 50 ? '...' : '')) : 'Post',
           platform: Array.isArray(p.platforms) ? p.platforms[0] : JSON.parse(p.platforms || '["LinkedIn"]')[0],
-          imageOverlay: p.image_overlay || '',
-          imageStyle: p.image_style || '',
+          imageOverlay: '',
+          imageStyle: '',
           caption: p.caption || '',
           imageUrl: Array.isArray(p.media_files) ? p.media_files[0] : JSON.parse(p.media_files || '[]')[0],
           status: p.status === 'draft' ? 'ready' : p.status,
@@ -457,7 +509,7 @@ export function MagicModePage() {
 
   switch (screen) {
     case 'url':
-      return <URLInputScreen onSubmit={handleURLSubmit} onSkip={handleURLSkip} />;
+      return <URLInputScreen onSubmit={handleURLSubmit} onSkip={handleURLSkip} initialUrl={existingBrand?.website_url} />;
     case 'questions':
       return (
         <AIQuestionsScreen
@@ -472,7 +524,7 @@ export function MagicModePage() {
     case 'results':
       return <ResultsScreen onGenerateMore={handleGenerateMore} onGoBack={handleGoBack} />;
     default:
-      return <URLInputScreen onSubmit={handleURLSubmit} onSkip={handleURLSkip} />;
+      return <URLInputScreen onSubmit={handleURLSubmit} onSkip={handleURLSkip} initialUrl={existingBrand?.website_url} />;
   }
 }
 
