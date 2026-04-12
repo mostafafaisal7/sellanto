@@ -120,12 +120,24 @@ def get_diamond_cost(feature, **kwargs):
 def pre_check(user, feature, **kwargs):
     """Check if user can afford an AI operation.
 
+    Uses SELECT FOR UPDATE to prevent race conditions during balance checks.
+
     Returns:
         tuple: (can_afford: bool, cost: int, balance: int)
     """
     from accounts.models import DiamondWallet
+    from django.db import transaction
+
     cost = get_diamond_cost(feature, **kwargs)
-    wallet, _ = DiamondWallet.objects.get_or_create(user=user)
+
+    # Use select_for_update() to lock the wallet row and prevent race conditions
+    with transaction.atomic():
+        try:
+            wallet = DiamondWallet.objects.select_for_update().get(user=user)
+        except DiamondWallet.DoesNotExist:
+            # Create wallet if it doesn't exist (should only happen for old users migrated before v1.9)
+            wallet = DiamondWallet.objects.create(user=user, balance=0, total_recharged=0)
+
     return (wallet.balance >= cost, cost, wallet.balance)
 
 
@@ -133,81 +145,121 @@ def deduct_diamonds(user, feature, provider='', raw_tokens=0,
                     model_used='', raw_cost_usd=0, **kwargs):
     """Deduct diamonds after a successful AI call.
 
+    Uses SELECT FOR UPDATE to prevent race conditions and ensure ACID compliance.
     Creates an immutable DiamondTransaction ledger entry.
 
     Returns:
         int: Diamonds deducted
+
+    Raises:
+        InsufficientDiamondsError: If user doesn't have enough diamonds
     """
     from accounts.models import DiamondWallet, DiamondTransaction
+    from django.db import transaction
+
     cost = get_diamond_cost(feature, **kwargs)
-    wallet, _ = DiamondWallet.objects.get_or_create(user=user)
 
-    if wallet.balance < cost:
-        raise InsufficientDiamondsError(wallet.balance, cost)
+    # CRITICAL: Use atomic transaction with row-level locking to prevent double-spending
+    with transaction.atomic():
+        try:
+            # Lock the wallet row for this transaction
+            wallet = DiamondWallet.objects.select_for_update().get(user=user)
+        except DiamondWallet.DoesNotExist:
+            raise InsufficientDiamondsError(0, cost)
 
-    wallet.balance -= cost
-    wallet.total_spent += cost
-    wallet.save()
+        # Check balance after acquiring lock
+        if wallet.balance < cost:
+            raise InsufficientDiamondsError(wallet.balance, cost)
 
-    DiamondTransaction.objects.create(
-        user=user,
-        amount=-cost,
-        transaction_type='deduction',
-        balance_after=wallet.balance,
-        feature=feature,
-        provider=provider,
-        raw_tokens=raw_tokens,
-        model_used=model_used,
-        raw_cost_usd=raw_cost_usd,
-    )
+        # Deduct diamonds
+        wallet.balance -= cost
+        wallet.total_spent += cost
+        wallet.save()
+
+        # Create immutable transaction record
+        DiamondTransaction.objects.create(
+            user=user,
+            amount=-cost,
+            transaction_type='deduction',
+            balance_after=wallet.balance,
+            feature=feature,
+            provider=provider,
+            raw_tokens=raw_tokens,
+            model_used=model_used,
+            raw_cost_usd=raw_cost_usd,
+        )
+
     return cost
 
 
 def recharge_diamonds(user, amount, recharged_by=None, note=''):
     """Admin recharges diamonds for a user.
 
+    Uses SELECT FOR UPDATE to prevent race conditions during recharge.
+
     Returns:
         int: New wallet balance
     """
     from accounts.models import DiamondWallet, DiamondTransaction
-    wallet, _ = DiamondWallet.objects.get_or_create(user=user)
-    wallet.balance += amount
-    wallet.total_recharged += amount
-    wallet.last_recharge_at = timezone.now()
-    wallet.save()
+    from django.db import transaction
 
-    DiamondTransaction.objects.create(
-        user=user,
-        amount=amount,
-        transaction_type='recharge',
-        balance_after=wallet.balance,
-        recharged_by=recharged_by,
-        note=note,
-    )
+    with transaction.atomic():
+        try:
+            wallet = DiamondWallet.objects.select_for_update().get(user=user)
+        except DiamondWallet.DoesNotExist:
+            # Create wallet if it doesn't exist
+            wallet = DiamondWallet.objects.create(user=user, balance=0, total_recharged=0)
+
+        wallet.balance += amount
+        wallet.total_recharged += amount
+        wallet.last_recharge_at = timezone.now()
+        wallet.save()
+
+        DiamondTransaction.objects.create(
+            user=user,
+            amount=amount,
+            transaction_type='recharge',
+            balance_after=wallet.balance,
+            recharged_by=recharged_by,
+            note=note,
+        )
+
     return wallet.balance
 
 
 def grant_plan_diamonds(user, plan):
     """Auto-grant diamonds when admin assigns a plan.
 
+    Uses SELECT FOR UPDATE to prevent race conditions during plan grants.
+
     Returns:
         int: New wallet balance
     """
     from accounts.models import DiamondWallet, DiamondTransaction
-    amount = PLAN_DIAMONDS.get(plan, PLAN_DIAMONDS['free'])
-    wallet, _ = DiamondWallet.objects.get_or_create(user=user)
-    wallet.balance += amount
-    wallet.total_recharged += amount
-    wallet.last_recharge_at = timezone.now()
-    wallet.save()
+    from django.db import transaction
 
-    DiamondTransaction.objects.create(
-        user=user,
-        amount=amount,
-        transaction_type='plan_grant',
-        balance_after=wallet.balance,
-        note=f'Plan grant: {plan} (+{amount} diamonds)',
-    )
+    amount = PLAN_DIAMONDS.get(plan, PLAN_DIAMONDS['free'])
+
+    with transaction.atomic():
+        try:
+            wallet = DiamondWallet.objects.select_for_update().get(user=user)
+        except DiamondWallet.DoesNotExist:
+            # Create wallet if it doesn't exist
+            wallet = DiamondWallet.objects.create(user=user, balance=0, total_recharged=0)
+
+        wallet.balance += amount
+        wallet.total_recharged += amount
+        wallet.last_recharge_at = timezone.now()
+        wallet.save()
+
+        DiamondTransaction.objects.create(
+            user=user,
+            amount=amount,
+            transaction_type='plan_grant',
+            balance_after=wallet.balance,
+            note=f'Plan grant: {plan} (+{amount} diamonds)',
+        )
+
     return wallet.balance
 
 

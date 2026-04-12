@@ -974,16 +974,9 @@ export function ResultsScreen({ onGenerateMore, onGoBack }: ResultsScreenProps) 
       }
       localStorage.setItem('magic_draft_post_ids', JSON.stringify(savedMap));
 
-      // Save cache entry for this answer combination
-      const postIds = Object.values(savedMap).map((entry) => entry.draftId);
-      if (postIds.length > 0) {
-        try {
-          const { saveMagicModeCache } = await import('./MagicModePage');
-          await saveMagicModeCache(answers, postIds, customAnswers);
-        } catch (err) {
-          console.error('[ResultsScreen] Failed to save cache:', err);
-        }
-      }
+      // ✅ REMOVED: Duplicate cache save
+      // Cache is already saved in AIWorkingScreen during generation
+      // No need to save again here - prevents database pollution
 
       draftSaveInProgress.current = false;
     })();

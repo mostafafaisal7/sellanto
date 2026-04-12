@@ -82,6 +82,9 @@ MIDDLEWARE = [
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'socialsync.middleware.ImpersonationMiddleware',
+    # Security middleware to detect cross-user data leakage
+    'socialsync.security_middleware.UserDataIsolationMiddleware',
+    'socialsync.security_middleware.ConcurrentUserCreationDetector',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -113,29 +116,72 @@ WSGI_APPLICATION = 'socialsync.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
-# OLD SQLite Configuration (COMMENTED OUT FOR BACKUP)
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
-}
+# ════════════════════════════════════════════════════════════════════════════
+# ENVIRONMENT-BASED DATABASE CONFIGURATION
+# ════════════════════════════════════════════════════════════════════════════
+# Set DB_ENGINE in .env file:
+#   - 'sqlite' (default) → Development, single-user testing
+#   - 'postgresql' → Production, multi-user environments
+#   - 'mysql' → Alternative production option
+#
+# IMPORTANT: SQLite is NOT safe for production with concurrent users!
+# Use PostgreSQL or MySQL for production deployments.
+# ════════════════════════════════════════════════════════════════════════════
 
-# MySQL Configuration (uses env vars for cPanel, falls back to local defaults)
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.mysql',
-#         'NAME': config('DB_NAME', default='sellento'),
-#         'USER': config('DB_USER', default='root'),
-#         'PASSWORD': config('DB_PASSWORD', default=''),
-#         'HOST': config('DB_HOST', default='localhost'),
-#         'PORT': config('DB_PORT', default='3306'),
-#         'OPTIONS': {
-#             'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
-#             'charset': 'utf8mb4',
-#         },
-#     }
-# }
+DB_ENGINE = config('DB_ENGINE', default='sqlite').lower()
+
+if DB_ENGINE == 'postgresql':
+    # PostgreSQL Configuration (PRODUCTION RECOMMENDED)
+    # Requires: pip install psycopg2-binary
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': config('DB_NAME', default='sellanto_db'),
+            'USER': config('DB_USER', default='sellanto_user'),
+            'PASSWORD': config('DB_PASSWORD', default=''),
+            'HOST': config('DB_HOST', default='localhost'),
+            'PORT': config('DB_PORT', default='5432'),
+            'ATOMIC_REQUESTS': True,  # Wrap each view in a transaction
+            'CONN_MAX_AGE': 600,  # Connection pooling (10 minutes)
+            'OPTIONS': {
+                'connect_timeout': 10,
+                'options': '-c default_transaction_isolation=read committed',
+            },
+        }
+    }
+
+elif DB_ENGINE == 'mysql':
+    # MySQL Configuration (PRODUCTION ALTERNATIVE)
+    # Requires: pip install mysqlclient
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.mysql',
+            'NAME': config('DB_NAME', default='sellanto_db'),
+            'USER': config('DB_USER', default='sellanto_user'),
+            'PASSWORD': config('DB_PASSWORD', default=''),
+            'HOST': config('DB_HOST', default='localhost'),
+            'PORT': config('DB_PORT', default='3306'),
+            'ATOMIC_REQUESTS': True,
+            'CONN_MAX_AGE': 600,
+            'OPTIONS': {
+                'init_command': "SET sql_mode='STRICT_TRANS_TABLES', innodb_lock_wait_timeout=10",
+                'charset': 'utf8mb4',
+                'isolation_level': 'read committed',
+            },
+        }
+    }
+
+else:
+    # SQLite Configuration (DEVELOPMENT ONLY - DEFAULT)
+    # ⚠️ WARNING: Not safe for production with concurrent users!
+    # File-level locking only, no row-level locks, weak ACID guarantees
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+            'ATOMIC_REQUESTS': True,  # Still wrap views in transactions for consistency
+        }
+    }
 
 
 
@@ -247,6 +293,10 @@ LOGGING = {
             'format': '[{asctime}] {levelname} {name} | {message}',
             'style': '{',
         },
+        'security': {
+            'format': '[{asctime}] SECURITY {levelname} | {message}',
+            'style': '{',
+        },
     },
     'handlers': {
         'console': {
@@ -257,6 +307,12 @@ LOGGING = {
             'class': 'logging.FileHandler',
             'filename': os.path.join(BASE_DIR, 'django.log'),
             'formatter': 'verbose',
+        },
+        'security_file': {
+            'class': 'logging.FileHandler',
+            'filename': os.path.join(BASE_DIR, 'security.log'),
+            'formatter': 'security',
+            'level': 'WARNING',  # Only log warnings and above for security
         },
     },
     'root': {
@@ -282,6 +338,11 @@ LOGGING = {
         'accounts': {
             'handlers': ['console', 'file'],
             'level': 'DEBUG',
+            'propagate': False,
+        },
+        'security': {
+            'handlers': ['console', 'security_file'],
+            'level': 'WARNING',
             'propagate': False,
         },
     },

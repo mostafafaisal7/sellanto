@@ -566,19 +566,35 @@ class UserRole(models.Model):
 
 @receiver(post_save, sender=User)
 def create_user_profile(sender, instance, created, **kwargs):
+    """
+    Create related objects for new users.
+    CRITICAL: This signal ONLY runs when created=True to prevent race conditions.
+    DO NOT add get_or_create() calls here that run on every save.
+    """
     if created:
-        UserProfile.objects.create(user=instance)
-        # Create Diamond Wallet with initial free-plan grant
-        wallet = DiamondWallet.objects.create(user=instance, balance=200, total_recharged=200)
-        DiamondTransaction.objects.create(
-            user=instance, amount=200, transaction_type='plan_grant',
-            balance_after=200, note='Initial free plan grant (200 diamonds)',
-        )
-        # Create OnboardingProgress for new users
-        from onboarding.models import OnboardingProgress
-        OnboardingProgress.objects.get_or_create(user=instance)
+        from django.db import transaction
 
+        # Wrap in atomic block to prevent race conditions
+        with transaction.atomic():
+            # Create UserProfile (should not exist yet for new user)
+            UserProfile.objects.create(user=instance)
 
-@receiver(post_save, sender=User)
-def save_user_profile(sender, instance, **kwargs):
-    UserProfile.objects.get_or_create(user=instance)
+            # Create Diamond Wallet with initial free-plan grant
+            wallet = DiamondWallet.objects.create(
+                user=instance,
+                balance=200,
+                total_recharged=200
+            )
+
+            # Create transaction record
+            DiamondTransaction.objects.create(
+                user=instance,
+                amount=200,
+                transaction_type='plan_grant',
+                balance_after=200,
+                note='Initial free plan grant (200 diamonds)',
+            )
+
+            # Create OnboardingProgress for new users
+            from onboarding.models import OnboardingProgress
+            OnboardingProgress.objects.create(user=instance)

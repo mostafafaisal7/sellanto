@@ -1,0 +1,11 @@
+# Additional requirements for PostgreSQL support
+# Add these to your main requirements.txt file
+
+# PostgreSQL database adapter (use binary version for easier installation)
+psycopg2-binary==2.9.9
+
+# Alternative: compile from source (better performance, requires PostgreSQL dev libraries)
+# psycopg2==2.9.9
+
+# For load testing (development only)
+aiohttp==3.9.1

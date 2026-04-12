@@ -2923,12 +2923,30 @@ class MagicModeCachedPostsView(APIView):
             # Serialize posts
             serialized_posts = []
             for post in posts:
+                # 🔧 Parse JSON TextField data for frontend compatibility
+                platforms = post.platforms
+                media_files = post.media_files
+
+                # If stored as JSON string, parse to array
+                if isinstance(platforms, str):
+                    try:
+                        platforms = json.loads(platforms) if platforms else []
+                    except json.JSONDecodeError:
+                        platforms = []
+
+                if isinstance(media_files, str):
+                    try:
+                        media_files = json.loads(media_files) if media_files else []
+                    except json.JSONDecodeError:
+                        media_files = []
+
                 serialized_posts.append({
                     'id': post.id,
                     'caption': post.caption,
-                    'platforms': post.platforms,
-                    'media_files': post.media_files,
+                    'platforms': platforms,
+                    'media_files': media_files,
                     'status': post.status,
+                    'magic_draft_id': post.magic_draft_id,  # 🔗 Link to Draft post
                     'created_at': post.created_at.isoformat(),
                 })
 
@@ -2955,7 +2973,7 @@ class MagicModeCachedPostsView(APIView):
 
     def post(self, request, industry, goal, tone, platforms, colors, custom=None, user_id=None):
         """Create/update cache entry for Magic Mode posts"""
-        from posts.models import MagicModeCache
+        from posts.models import MagicModeCache, Post
 
         # Security check: Verify user_id matches authenticated user
         if user_id is not None and user_id != request.user.id:
@@ -2971,14 +2989,28 @@ class MagicModeCachedPostsView(APIView):
         if not post_ids:
             return Response({'error': 'post_ids required'}, status=400)
 
-        print(f"[MagicCache] Saving cache for user {request.user.id} with params: {params_hash}, posts: {post_ids}")
+        # 🔒 SECURITY FIX: Validate ALL post_ids belong to current user
+        # Prevents malicious users from caching other users' posts
+        owned_posts = Post.objects.filter(id__in=post_ids, user=request.user).values_list('id', flat=True)
+        owned_post_ids = list(owned_posts)
+
+        if len(owned_post_ids) != len(post_ids):
+            # Some posts don't belong to this user
+            invalid_ids = set(post_ids) - set(owned_post_ids)
+            print(f"[MagicCache] ⚠️ SECURITY: User {request.user.id} attempted to cache posts they don't own: {invalid_ids}")
+            return Response({
+                'error': 'Unauthorized: Some post IDs do not belong to you',
+                'invalid_ids': list(invalid_ids)
+            }, status=403)
+
+        print(f"[MagicCache] Saving cache for user {request.user.id} with params: {params_hash}, posts: {owned_post_ids}")
 
         try:
-            # Create or update cache entry
+            # Create or update cache entry with validated post_ids
             cache_entry, created = MagicModeCache.objects.update_or_create(
                 user=request.user,
                 params_hash=params_hash,
-                defaults={'post_ids': post_ids}
+                defaults={'post_ids': owned_post_ids}
             )
 
             action = "Created" if created else "Updated"

@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { useMagicModeStore, type MagicPost, type MagicCaptionData } from '../../store/magicModeStore';
+import { useAuthStore } from '../../store';
 import api from '../../services/api';
 import strategyService from '../../services/strategyService';
 import captionService from '../../services/captionService';
 import imageService from '../../services/imageService';
 import type { ContentIdea, CaptionTone, CaptionPlatform } from '../../types';
+import { buildMagicCacheKey } from './cacheUtils';
 
 const STEPS = [
   { emoji: '🌐', label: 'Reading your website', desc: 'Understanding your brand identity...', estimatedMs: 3000 },
@@ -16,7 +18,7 @@ const STEPS = [
   { emoji: '✅', label: 'Final polish', desc: 'Making sure everything looks perfect...', estimatedMs: 1000 },
 ];
 
-interface AIWorkingScreenProps {
+interface AIWorkingScreenProps{
   onComplete: () => void;
   onStop?: () => void;
 }
@@ -53,6 +55,9 @@ export function AIWorkingScreen({ onComplete, onStop }: AIWorkingScreenProps) {
 
   const runPipeline = async () => {
     try {
+      // 🔄 Clear previous generation flag - we're generating fresh posts
+      store.setHasPreviousGeneration(false);
+
       // Step 0: Get or create brand
       setStep(0);
       let brandId: number = 0;
@@ -263,6 +268,62 @@ export function AIWorkingScreen({ onComplete, onStop }: AIWorkingScreenProps) {
         }
       }
       if (cancelledRef.current) return;
+
+      // 💾 Save posts to database (database = single source of truth)
+      console.log('[AIWorkingScreen] Saving posts to database...');
+      const savedPostIds: number[] = [];
+
+      for (let i = 0; i < posts.length; i++) {
+        const post = posts[i];
+
+        try {
+          const response = await api.post('/posts/', {
+            caption: post.caption,
+            media_files: JSON.stringify(post.imageUrl ? [post.imageUrl] : []),
+            platforms: JSON.stringify([post.platform.toLowerCase()]),
+            source: 'magic',
+            status: 'draft',
+            brand: brandId,
+          });
+
+          // Update post with real database ID
+          posts[i].id = response.data.id;
+          savedPostIds.push(response.data.id);
+          console.log(`[AIWorkingScreen] Saved post ${i + 1}/${posts.length} (ID: ${response.data.id})`);
+        } catch (err) {
+          console.error('[AIWorkingScreen] Failed to save post:', post.title, err);
+          // Continue with next post - don't let one failure block others
+        }
+      }
+
+      // 🗃️ Save cache mapping to enable "Previous Posts" button reuse
+      // CRITICAL FIX: Use unified cache key + include userId + set flag ONLY on success
+      if (savedPostIds.length > 0) {
+        try {
+          const userId = useAuthStore.getState().user?.id;
+          if (!userId) {
+            throw new Error('No user ID available for cache save');
+          }
+
+          // ✅ Use unified cache key generation (matches MagicModePage lookup)
+          const { cacheKey } = buildMagicCacheKey(store.answers, store.customAnswers, userId);
+
+          // ✅ Include userId in URL for backend validation
+          await api.post(`/magic/posts/${userId}/${cacheKey}/`, {
+            post_ids: savedPostIds,
+          });
+
+          console.log(`[AIWorkingScreen] ✅ Cache saved: ${cacheKey} → ${savedPostIds.length} posts`);
+
+          // ✅ ONLY set flag AFTER successful cache save
+          store.setHasPreviousGeneration(true);
+          console.log(`[AIWorkingScreen] hasPreviousGeneration = true (cache saved successfully)`);
+        } catch (err) {
+          console.error('[AIWorkingScreen] ❌ Failed to save cache:', err);
+          // ✅ Ensure flag is false on failure - no "Previous Posts" button if cache failed
+          store.setHasPreviousGeneration(false);
+        }
+      }
 
       // Step 6: Finalize
       setStep(6);

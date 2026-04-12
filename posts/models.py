@@ -63,6 +63,12 @@ class Post(models.Model):
     # Source — where this post was created from
     source = models.CharField(max_length=20, choices=SOURCE_CHOICES, default='manual', blank=True)
 
+    # Magic Link draft tracking
+    magic_draft_id = models.IntegerField(
+        null=True, blank=True,
+        help_text='Links Magic Mode post to its corresponding Draft post for "Add to Calendar" flow'
+    )
+
     # V1.2.1 - Draft/Strategy fields
     idea = models.ForeignKey(
         'brands.ContentIdea', on_delete=models.SET_NULL,

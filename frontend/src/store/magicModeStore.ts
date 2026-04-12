@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+// 🔒 SECURITY FIX: Removed persist middleware to prevent localStorage data leakage
+// All Magic Mode data now stored in database only
 
 export interface MagicPost {
   id: number;
@@ -17,6 +18,7 @@ export interface MagicPost {
   approvedPlatforms?: string[];
   platformCaptions?: Record<string, string>;
   deletedPlatforms?: string[];
+  magic_draft_id?: number; // 🔗 Database link to Draft post for "Add to Calendar" flow
 }
 
 export interface MagicIdeaData {
@@ -60,6 +62,7 @@ interface MagicModeState {
 
   // Smart regeneration tracking
   originalAnswers: Record<string, string | string[]>;
+  originalCustomAnswers: Record<string, string>; // Track original custom "Other" text values
   answersChanged: boolean;
 
   setScreen: (screen: MagicModeState['screen']) => void;
@@ -84,14 +87,13 @@ interface MagicModeState {
   setCaptionsData: (captions: MagicCaptionData[]) => void;
   setPipelineCompleted: (completed: boolean) => void;
   setOriginalAnswers: (answers: Record<string, string | string[]>) => void;
+  setOriginalCustomAnswers: (customAnswers: Record<string, string>) => void;
   markAnswersChanged: () => void;
   resetAnswersChanged: () => void;
   reset: () => void;
 }
 
-export const useMagicModeStore = create<MagicModeState>()(
-  persist(
-    (set) => ({
+export const useMagicModeStore = create<MagicModeState>()((set) => ({
       screen: 'mode',
       websiteUrl: '',
       answers: {},
@@ -110,6 +112,7 @@ export const useMagicModeStore = create<MagicModeState>()(
       captionsData: [],
       pipelineCompleted: false,
       originalAnswers: {},
+      originalCustomAnswers: {},
       answersChanged: false,
 
       setScreen: (screen) => set({ screen }),
@@ -156,15 +159,16 @@ export const useMagicModeStore = create<MagicModeState>()(
       setCaptionsData: (captionsData) => set({ captionsData }),
       setPipelineCompleted: (pipelineCompleted) => set({ pipelineCompleted }),
       setOriginalAnswers: (originalAnswers) => set({ originalAnswers, answersChanged: false }),
+      setOriginalCustomAnswers: (originalCustomAnswers) => set({ originalCustomAnswers }),
       markAnswersChanged: () => set({ answersChanged: true }),
       resetAnswersChanged: () => set({ answersChanged: false }),
       reset: () => {
-        localStorage.removeItem('magic_draft_post_ids');
+        // No localStorage cleanup needed - database is source of truth
         set({
           screen: 'mode',
           websiteUrl: '',
           answers: {},
-          customAnswers: {}, // NEW
+          customAnswers: {},
           generatedPosts: [],
           feedbackModal: null,
           postCount: 2,
@@ -179,27 +183,8 @@ export const useMagicModeStore = create<MagicModeState>()(
           captionsData: [],
           pipelineCompleted: false,
           originalAnswers: {},
+          originalCustomAnswers: {},
           answersChanged: false,
         });
       },
-    }),
-    {
-      name: 'magic-mode-storage',
-      partialize: (state) => ({
-        brandId: state.brandId,
-        websiteUrl: state.websiteUrl,
-        answers: state.answers,
-        customAnswers: state.customAnswers, // NEW
-        generatedPosts: state.generatedPosts,
-        postCount: state.postCount,
-        hasPreviousGeneration: state.hasPreviousGeneration,
-        trendingTopics: state.trendingTopics,
-        ideasData: state.ideasData,
-        captionsData: state.captionsData,
-        pipelineCompleted: state.pipelineCompleted,
-        originalAnswers: state.originalAnswers,
-        answersChanged: state.answersChanged,
-      }),
-    }
-  )
-);
+    }));

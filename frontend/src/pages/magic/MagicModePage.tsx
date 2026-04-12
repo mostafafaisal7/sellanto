@@ -6,6 +6,7 @@ import { AIQuestionsScreen } from './AIQuestionsScreen';
 import { AIWorkingScreen } from './AIWorkingScreen';
 import { ResultsScreen } from './ResultsScreen';
 import { onboardingService } from '../../services';
+import { buildMagicCacheKey } from './cacheUtils';
 
 interface ExistingBrand {
   id: number;
@@ -48,7 +49,32 @@ function mapBrandVoiceToTone(brandVoice: string): string {
     return 'Educational & Helpful';
   if (lower.includes('fun') || lower.includes('casual') || lower.includes('playful'))
     return 'Fun & Casual';
-  return 'Professional & Authoritative'; // Default
+}
+
+// 🔧 Helper: Robust JSON array parsing for backend TextField data
+function parseJsonArray(data: any, fieldName: string, fallback: any[] = []): any[] {
+  try {
+    // Already an array - return as is
+    if (Array.isArray(data)) return data;
+
+    // String that needs parsing
+    if (typeof data === 'string') {
+      const trimmed = data.trim();
+      // Empty string or empty array
+      if (!trimmed || trimmed === '[]') return fallback;
+
+      // Parse JSON string
+      const parsed = JSON.parse(trimmed);
+      return Array.isArray(parsed) ? parsed : fallback;
+    }
+
+    // Unexpected type
+    console.warn(`[MagicMode] Unexpected type for ${fieldName}:`, typeof data, data);
+    return fallback;
+  } catch (error) {
+    console.error(`[MagicMode] Failed to parse ${fieldName}:`, data, error);
+    return fallback;
+  }
 }
 
 // Extract platforms from social_platforms or target_audience
@@ -79,108 +105,10 @@ function extractPlatforms(brand: ExistingBrand): string[] {
   return platforms.length > 0 ? platforms : ['LinkedIn'];
 }
 
-// Question options in order (must match AIQuestionsScreen.tsx QUESTIONS array)
-const QUESTION_OPTIONS = {
-  industry: ['Digital Marketing Agency', 'E-commerce / Online Store', 'SaaS / Software Company', 'Local Service Business', 'Consulting / Freelancing', 'Other'],
-  goal: ['Get more customers / leads', 'Build brand awareness', 'Drive website traffic', 'Establish thought leadership', 'Showcase products / services'],
-  tone: ['Professional & Authoritative', 'Friendly & Approachable', 'Bold & Provocative', 'Educational & Helpful', 'Fun & Casual'],
-  platforms: ['LinkedIn', 'Instagram', 'Facebook', 'Twitter / X', 'TikTok'],
-  colors: ['Blue tones (trust, professional)', 'Red/Orange (energy, bold)', 'Green (growth, nature)', 'Purple (creative, premium)', 'Dark/Minimal (sleek, modern)', 'Use colors from my website'],
-};
-
-/**
- * Encode user answers to numerical indices for cache key
- * Example: { industry: ['E-commerce / Online Store', 'Local Service Business'] } → "24"
- * Example: { tone: ['Professional & Authoritative'] } → "1"
- */
-function encodeAnswersToIndices(
-  answers: Record<string, string | string[]>,
-  customAnswers?: Record<string, string>
-): Record<string, string> {
-  const encoded: Record<string, string> = {};
-
-  Object.keys(QUESTION_OPTIONS).forEach((questionId) => {
-    const answer = answers[questionId];
-    const options = QUESTION_OPTIONS[questionId as keyof typeof QUESTION_OPTIONS];
-
-    if (!answer) {
-      encoded[questionId] = '0'; // No selection
-      return;
-    }
-
-    const selectedValues = Array.isArray(answer) ? answer : [answer];
-    const indices: number[] = [];
-
-    selectedValues.forEach((value) => {
-      const index = options.indexOf(value);
-      if (index !== -1) {
-        indices.push(index + 1); // 1-based indexing
-      }
-    });
-
-    // Sort and join (e.g., [1, 3, 2] → "123")
-    encoded[questionId] = indices.sort((a, b) => a - b).join('');
-    if (!encoded[questionId]) {
-      encoded[questionId] = '0'; // Fallback if no valid indices
-    }
-  });
-
-  // NEW: Add custom values for cache differentiation
-  if (customAnswers) {
-    Object.keys(customAnswers).forEach((key) => {
-      const value = customAnswers[key];
-      if (value && value.trim()) {
-        // Sanitize custom value for URL use (convert to slug)
-        const sanitized = value.toLowerCase()
-          .replace(/[^a-z0-9]+/g, '-')
-          .replace(/^-|-$/g, '')
-          .substring(0, 50); // Limit length
-        encoded[`${key}_custom`] = sanitized;
-      }
-    });
-  }
-
-  return encoded;
-}
-
-/**
- * Save Magic Mode cache entry
- * Exported so ResultsScreen can call this after creating posts
- */
-export async function saveMagicModeCache(
-  answers: Record<string, string | string[]>,
-  postIds: number[],
-  customAnswers?: Record<string, string>
-) {
-  const encoded = encodeAnswersToIndices(answers, customAnswers);
-
-  // Build cache key with custom values appended
-  let cacheKey = `${encoded.industry}/${encoded.goal}/${encoded.tone}/${encoded.platforms}/${encoded.colors}`;
-
-  // Append custom industry if exists
-  if (encoded.industry_other_custom) {
-    cacheKey += `/${encoded.industry_other_custom}`;
-  }
-
-  // Get user ID from auth store
-  const userId = useAuthStore.getState().user?.id;
-  if (!userId) {
-    console.error('[MagicMode] Cannot save cache: No user ID available');
-    return false;
-  }
-
-  console.log('[MagicMode] Saving cache with key:', cacheKey, 'post IDs:', postIds);
-
-  try {
-    const { api } = await import('../../services');
-    const response = await api.post(`/magic/posts/${userId}/${cacheKey}/`, { post_ids: postIds });
-    console.log('[MagicMode] Cache saved successfully:', response.data);
-    return true;
-  } catch (error) {
-    console.error('[MagicMode] Failed to save cache:', error);
-    return false;
-  }
-}
+// ✅ OLD FUNCTIONS REMOVED - Now using unified cacheUtils.ts
+// - Deleted: QUESTION_OPTIONS (moved to cacheUtils.ts as MAGIC_QUESTION_OPTIONS)
+// - Deleted: encodeAnswersToIndices() (replaced by buildMagicCacheKey)
+// - Deleted: saveMagicModeCache() (no longer needed - cache saved in AIWorkingScreen)
 
 export function MagicModePage() {
   const store = useMagicModeStore();
@@ -238,6 +166,20 @@ export function MagicModePage() {
   const handleUsePrevious = useCallback(() => {
     if (!existingBrand) return;
 
+    // 🔒 SECURITY: Defensive check - verify current user owns this brand
+    // This should never happen if backend is correct, but adds defense-in-depth
+    const currentUser = useAuthStore.getState().user;
+    if (!currentUser) {
+      console.error('[MagicMode] Security: No current user found');
+      handleStartFresh();
+      return;
+    }
+
+    // Backend should already filter brands by user, but double-check for safety
+    // Note: existingBrand doesn't have userId field, but it came from user-filtered API
+    // so this is just a sanity check that we have a valid user session
+    console.log(`[MagicMode] Using brand from user ${currentUser.id}: ${existingBrand.brand_name}`);
+
     // Build pre-filled answers object
     const prefilledAnswers: Record<string, string | string[]> = {
       industry: mapIndustryToOption(existingBrand.industry),
@@ -255,6 +197,9 @@ export function MagicModePage() {
     // Store as "original answers" for change detection
     store.setOriginalAnswers(prefilledAnswers);
 
+    // Store original custom answers (currently empty, will be populated if user selects "Other")
+    store.setOriginalCustomAnswers(store.customAnswers || {});
+
     // Pre-fill URL and brand ID
     setUrl(existingBrand.website_url);
     setBrandId(existingBrand.id);
@@ -262,7 +207,7 @@ export function MagicModePage() {
     setSkipInitialQuestions(false); // Let user see and confirm the questions
     setShowPopup(false);
     setScreen('questions'); // Go to questions screen with pre-filled data
-  }, [existingBrand, setUrl, setAnswer, setSkipInitialQuestions, setBrandId, setScreen, store]);
+  }, [existingBrand, setUrl, setAnswer, setSkipInitialQuestions, setBrandId, setScreen, store, handleStartFresh]);
 
   const handleStartFresh = useCallback(() => {
     store.reset(); // Clear all stored data
@@ -287,21 +232,21 @@ export function MagicModePage() {
   }, [setAnswer, setScreen]);
 
   const handleQuestionsNext = useCallback(async () => {
-    // Try to load cached posts based on current answer combination
-    const encoded = encodeAnswersToIndices(store.answers, store.customAnswers);
-
-    // Build cache key with custom values
-    let cacheKey = `${encoded.industry}/${encoded.goal}/${encoded.tone}/${encoded.platforms}/${encoded.colors}`;
-
-    // Append custom industry if exists
-    if (encoded.industry_other_custom) {
-      cacheKey += `/${encoded.industry_other_custom}`;
-    }
-
     // Get user ID from auth store
     const userId = useAuthStore.getState().user?.id;
     if (!userId) {
       console.error('[MagicMode] Cannot lookup cache: No user ID available');
+      setScreen('working');
+      return;
+    }
+
+    // ✅ Use unified cache key generation (matches AIWorkingScreen save)
+    let cacheKey: string;
+    try {
+      const result = buildMagicCacheKey(store.answers, store.customAnswers, userId);
+      cacheKey = result.cacheKey;
+    } catch (err) {
+      console.error('[MagicMode] Failed to build cache key:', err);
       setScreen('working');
       return;
     }
@@ -315,20 +260,32 @@ export function MagicModePage() {
       if (response.data && response.data.posts && response.data.posts.length > 0) {
         console.log('[MagicMode] Cache HIT - Loading', response.data.posts.length, 'existing posts');
         // Convert backend posts to MagicPost format
-        const posts = response.data.posts.map((p: any) => ({
-          id: p.id,
-          title: p.caption ? (p.caption.substring(0, 50) + (p.caption.length > 50 ? '...' : '')) : 'Post',
-          platform: Array.isArray(p.platforms) ? p.platforms[0] : JSON.parse(p.platforms || '["LinkedIn"]')[0],
-          imageOverlay: '',
-          imageStyle: '',
-          caption: p.caption || '',
-          imageUrl: Array.isArray(p.media_files) ? p.media_files[0] : JSON.parse(p.media_files || '[]')[0],
-          status: p.status === 'draft' ? 'ready' : p.status,
-          approvedPlatforms: p.status === 'approved' ? p.platforms : undefined,
-        }));
+        const posts = response.data.posts.map((p: any) => {
+          const platforms = parseJsonArray(p.platforms, 'platforms', ['LinkedIn']);
+          const mediaFiles = parseJsonArray(p.media_files, 'media_files', []);
+
+          return {
+            id: p.id,
+            title: p.caption ? (p.caption.substring(0, 50) + (p.caption.length > 50 ? '...' : '')) : 'Post',
+            platform: platforms[0] || 'LinkedIn',
+            imageOverlay: '',
+            imageStyle: '',
+            caption: p.caption || '',
+            imageUrl: mediaFiles[0] || undefined,
+            status: p.status === 'draft' ? 'ready' : p.status,
+            approvedPlatforms: p.status === 'approved' ? platforms : undefined,
+          };
+        });
 
         store.setGeneratedPosts(posts);
-        store.setHasPreviousGeneration(true);
+        // ✅ Only mark as having previous posts if array is not empty
+        store.setHasPreviousGeneration(posts.length > 0);
+
+        // 🔍 CRITICAL FIX: Store current answers as "original" for change detection
+        // When user goes back and changes answers, we'll detect and show "Generate Posts" instead
+        store.setOriginalAnswers(store.answers);
+        store.setOriginalCustomAnswers(store.customAnswers || {});
+
         setScreen('results');
       } else {
         console.log('[MagicMode] Cache MISS - Generating new posts');

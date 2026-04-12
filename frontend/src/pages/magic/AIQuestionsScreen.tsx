@@ -65,9 +65,11 @@ export function AIQuestionsScreen({ onComplete, onNext, onBack, skipIndustry }: 
   const hasPreviousGeneration = useMagicModeStore((s) => s.hasPreviousGeneration);
   const setHasPreviousGeneration = useMagicModeStore((s) => s.setHasPreviousGeneration);
   const originalAnswers = useMagicModeStore((s) => s.originalAnswers);
+  const originalCustomAnswers = useMagicModeStore((s) => s.originalCustomAnswers);
   const answersChanged = useMagicModeStore((s) => s.answersChanged);
   const markAnswersChanged = useMagicModeStore((s) => s.markAnswersChanged);
-  const setCustomAnswer = useMagicModeStore((s) => s.setCustomAnswer); // NEW
+  const setCustomAnswer = useMagicModeStore((s) => s.setCustomAnswer);
+  const storeCustomAnswers = useMagicModeStore((s) => s.customAnswers);
 
   // Always start from Question 1 so user can review all pre-filled answers
   const [currentQ, setCurrentQ] = useState(0);
@@ -77,7 +79,20 @@ export function AIQuestionsScreen({ onComplete, onNext, onBack, skipIndustry }: 
     answerToSet(storeAnswers[filteredQuestions[0]?.id])
   );
   const [animating, setAnimating] = useState(false);
-  const [otherInputs, setOtherInputs] = useState<Record<string, string>>({}); // NEW: Track "Other" text inputs
+
+  // 🔧 FIX: Initialize otherInputs from store's customAnswers
+  // Convert "industry_other" → { industry: "..." }
+  const [otherInputs, setOtherInputs] = useState<Record<string, string>>(() => {
+    const inputs: Record<string, string> = {};
+    Object.entries(storeCustomAnswers || {}).forEach(([key, value]) => {
+      // Extract question ID from "industry_other" format
+      const match = key.match(/^(.+)_other$/);
+      if (match) {
+        inputs[match[1]] = value;
+      }
+    });
+    return inputs;
+  });
 
   const question = filteredQuestions[currentQ];
   const progress = ((currentQ) / filteredQuestions.length) * 100;
@@ -112,10 +127,14 @@ export function AIQuestionsScreen({ onComplete, onNext, onBack, skipIndustry }: 
     const newValue = Array.from(next);
     setAnswers({ ...answers, [qId]: newValue });
 
-    // Detect if this answer differs from original
-    if (!answersChanged && originalAnswers[qId] !== undefined) {
+    // 🔍 CRITICAL FIX: Detect if this answer differs from original
+    // Always run change detection (not just when originalAnswers exists)
+    if (!answersChanged) {
+      // Get original value (empty set if no original)
       const original = originalAnswers[qId];
-      const originalSet = new Set(Array.isArray(original) ? original : [original]);
+      const originalSet = original
+        ? new Set(Array.isArray(original) ? original : [original])
+        : new Set();
 
       // Check if the sets are different
       const hasChanged = next.size !== originalSet.size ||
@@ -227,6 +246,14 @@ export function AIQuestionsScreen({ onComplete, onNext, onBack, skipIndustry }: 
                         setOtherInputs({ ...otherInputs, [question.id]: newValue });
                         // Save to store immediately
                         setCustomAnswer(`${question.id}_other`, newValue);
+
+                        // 🔍 CRITICAL FIX: Detect if custom "Other" text changed from original
+                        if (!answersChanged && originalCustomAnswers[`${question.id}_other`] !== undefined) {
+                          const originalValue = originalCustomAnswers[`${question.id}_other`];
+                          if (newValue !== originalValue) {
+                            markAnswersChanged();
+                          }
+                        }
                       }}
                       placeholder={
                         question.id === 'industry'
@@ -257,8 +284,11 @@ export function AIQuestionsScreen({ onComplete, onNext, onBack, skipIndustry }: 
           })}
         </div>
 
-        {/* Next button(s) — visible when at least 1 option selected AND "Other" text is filled (if "Other" selected) */}
-        {multiSel.size > 0 && !(multiSel.has('Other') && (!otherInputs[question.id] || !otherInputs[question.id].trim())) && (
+        {/* Next button(s) — show based on question position and selection state */}
+        {/* For last question: Always show buttons (even if no selection) to allow partial generation */}
+        {/* For other questions: Require at least one selection AND Other text filled (if Other selected) */}
+        {((currentQ === filteredQuestions.length - 1) ||
+          (multiSel.size > 0 && !(multiSel.has('Other') && (!otherInputs[question.id] || !otherInputs[question.id].trim())))) && (
           <div className="mt-8">
             {/* Last question - show different buttons based on whether answers changed */}
             {currentQ === filteredQuestions.length - 1 ? (
@@ -275,7 +305,7 @@ export function AIQuestionsScreen({ onComplete, onNext, onBack, skipIndustry }: 
                   Generate Posts →
                 </button>
               ) : hasPreviousGeneration && onNext ? (
-                /* User DID NOT change answers → Show "Next" and "Regenerate" buttons */
+                /* User DID NOT change answers → Show "Previous Posts" and "Regenerate" buttons */
                 <div className="flex gap-3">
                   <button
                     onClick={onNext}
@@ -286,7 +316,7 @@ export function AIQuestionsScreen({ onComplete, onNext, onBack, skipIndustry }: 
                       color: 'rgb(var(--c-text-primary))',
                     }}
                   >
-                    Next →
+                    📋 Previous Posts
                   </button>
                   <button
                     onClick={() => {
