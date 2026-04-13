@@ -454,6 +454,8 @@ class PostViewSet(viewsets.ModelViewSet):
 
         media_files = []
         file_idx = 0
+        print(f"DEBUG FILES: request.FILES keys = {list(request.FILES.keys())}")
+        print(f"DEBUG FILES: request.content_type = {request.content_type}")
         for key in sorted(request.FILES.keys()):
             if key.startswith('media_'):
                 uploaded_file = request.FILES[key]
@@ -509,6 +511,7 @@ class PostViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
+        print(f"DEBUG FILES: Saving post with media_files = {media_files}")
         post = Post.objects.create(
             user=request.user,
             caption=serializer.validated_data['caption'],
@@ -520,6 +523,7 @@ class PostViewSet(viewsets.ModelViewSet):
             source=serializer.validated_data.get('source', 'manual'),
             hook=serializer.validated_data.get('hook', ''),
         )
+        print(f"DEBUG FILES: Post #{post.id} created, media_files in DB = {repr(post.media_files)}")
 
         return Response(PostSerializer(post, context={'request': request}).data, status=status.HTTP_201_CREATED)
 

@@ -42,7 +42,9 @@ export const postService = {
       formData.append('hook', data.hook);
     }
 
+    console.log('[PostService] media_files count:', data.media_files?.length, 'files:', data.media_files?.map(f => f?.name));
     data.media_files.forEach((file, index) => {
+      console.log(`[PostService] Appending media_${index}:`, file?.name, file?.size, file?.type);
       formData.append(`media_${index}`, file);
     });
 

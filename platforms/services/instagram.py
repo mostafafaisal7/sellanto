@@ -188,7 +188,7 @@ class InstagramService:
             ext = os.path.splitext(media_path)[1].lower()
             is_video = ext in ['.mp4', '.mov', '.avi']
             
-            print(f"         {'[VIDEO] VIDEO' if is_video else '📸 IMAGE'} Detected: {ext}")
+            print(f"         {'[VIDEO] VIDEO' if is_video else '[IMAGE] IMAGE'} Detected: {ext}")
             print(f"         Instagram Posting - YOUR Working Logic...")
             print(f"         Step 1: Upload to Facebook first...")
             

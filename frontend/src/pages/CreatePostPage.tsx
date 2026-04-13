@@ -53,6 +53,8 @@ export function CreatePostPage() {
   const isEditing = !!id;
   const { createPost, updatePost, posts } = usePostStore();
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
+  const mediaFilesRef = useRef<File[]>([]);
+  mediaFilesRef.current = mediaFiles;
   const [mediaPreviews, setMediaPreviews] = useState<string[]>([]);
   const [existingMedia, setExistingMedia] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -307,7 +309,7 @@ export function CreatePostPage() {
         platforms: data.platforms as PlatformType[],
         scheduled_time: scheduledTime.toISOString(),
         timezone: data.timezone,
-        media_files: mediaFiles,
+        media_files: mediaFilesRef.current,
       };
 
       if (isEditing && id) {
