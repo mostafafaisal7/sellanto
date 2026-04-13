@@ -132,6 +132,7 @@ export default function ConnectAccountsPage() {
   const [isDisconnecting, setIsDisconnecting] = useState(false);
   const [isValidating, setIsValidating] = useState<number | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [messengerEnabled, setMessengerEnabled] = useState(true);
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -139,10 +140,18 @@ export default function ConnectAccountsPage() {
     const headers = { Authorization: `Bearer ${token}` };
 
     try {
-      const [accountsRes, statsRes] = await Promise.all([
+      const [accountsRes, statsRes, fbStatusRes] = await Promise.all([
         authFetch('/api/v1/platforms/', { headers }),
-        authFetch('/api/v1/dashboard/stats/', { headers })
+        authFetch('/api/v1/dashboard/stats/', { headers }),
+        authFetch('/api/v1/platforms/facebook/status/', { headers }).catch(() => null),
       ]);
+
+      if (fbStatusRes?.ok) {
+        const fbData = await fbStatusRes.json();
+        if (typeof fbData.messenger_enabled === 'boolean') {
+          setMessengerEnabled(fbData.messenger_enabled);
+        }
+      }
 
       if (accountsRes.ok) {
         const data = await accountsRes.json();
@@ -325,7 +334,7 @@ export default function ConnectAccountsPage() {
                     </div>
                     <div>
                       <h3 className="text-lg font-bold text-text-primary">{platformNames[p]}</h3>
-                      <p className="text-[10px] text-text-muted">Pages · Instagram · Messenger</p>
+                      <p className="text-[10px] text-text-muted">Pages · Instagram{messengerEnabled ? ' · Messenger' : ''}</p>
                     </div>
                   </div>
                   <FacebookConnect onConnected={fetchData} />
@@ -458,7 +467,7 @@ export default function ConnectAccountsPage() {
       <section>
         {renderSectionHeader("🧠", "AI Chatbots", "Deploy intelligent AI agents to automate real-time communication.")}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {chatbotPlatforms.map(bot => (
+          {chatbotPlatforms.map(bot => bot.id === 'messenger' && !messengerEnabled ? { ...bot, status: 'Soon', canConnect: false } : bot).map(bot => (
             <motion.div
               key={bot.id}
               whileHover={bot.canConnect ? { y: -6 } : {}}

@@ -132,6 +132,11 @@ def auto_process_pdf(sender, instance, created, **kwargs):
     2. Existing PDF status is pending and no chunks exist
     """
     try:
+        from accounts.utils import is_messenger_enabled
+        if not is_messenger_enabled():
+            logger.info(f"[SIGNAL] Messenger disabled — skipping PDF processing for {instance.filename}")
+            return
+
         logger.info(f"[SIGNAL] PDF post_save: {instance.filename}, status={instance.status}, created={created}")
 
         # Only process PDFs with pending status

@@ -23,6 +23,9 @@ export { PermissionsPage } from './PermissionsPage';
 export { OverflowPage } from './OverflowPage';
 export { IdeaHistoryPage } from './IdeaHistoryPage';
 
+// Messenger Bot
+export { MessengerBotPage } from './MessengerBotPage';
+
 // V2 Redesign pages
 export { ModeSelectPage } from './magic/ModeSelectPage';
 export { MagicModePage } from './magic/MagicModePage';

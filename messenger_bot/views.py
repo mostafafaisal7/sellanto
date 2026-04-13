@@ -48,10 +48,21 @@ def _log_webhook(message):
         pass
 
 
+def _messenger_disabled_response(request):
+    """Return redirect for template views when messenger is disabled."""
+    from accounts.utils import is_messenger_enabled
+    if not is_messenger_enabled():
+        return redirect('/')
+    return None
+
+
 @login_required
 def connect_messenger(request):
     """Main connection page for Facebook Messenger"""
-    
+    blocked = _messenger_disabled_response(request)
+    if blocked:
+        return blocked
+
     try:
         connection = MessengerConnection.objects.get(user=request.user)
         return redirect('messenger_bot:dashboard')
@@ -138,7 +149,10 @@ def messenger_success(request):
 @login_required
 def messenger_dashboard(request):
     """Dashboard showing conversations, messages, and notifications"""
-    
+    blocked = _messenger_disabled_response(request)
+    if blocked:
+        return blocked
+
     try:
         connection = MessengerConnection.objects.get(user=request.user)
     except MessengerConnection.DoesNotExist:
@@ -196,7 +210,10 @@ def messenger_dashboard(request):
 @login_required
 def messenger_settings(request):
     """Settings page"""
-    
+    blocked = _messenger_disabled_response(request)
+    if blocked:
+        return blocked
+
     try:
         connection = MessengerConnection.objects.get(user=request.user)
         ai_config = connection.ai_config
@@ -419,6 +436,11 @@ def webhook(request):
         return HttpResponse(challenge, content_type='text/plain')
 
     elif request.method == 'POST':
+        # Kill switch — return 200 immediately (keeps Facebook happy) but do nothing
+        from accounts.utils import is_messenger_enabled
+        if not is_messenger_enabled():
+            return HttpResponse('OK', content_type='text/plain')
+
         try:
             data = json.loads(request.body)
             _log_webhook("=" * 50)

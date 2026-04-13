@@ -25,6 +25,7 @@ urlpatterns = [
     path('platforms/', include('platforms.urls')),
     path('ai-caption/', include('ai_caption.urls')),
     path('ai-image/', include('ai_image.urls')),
+    path('messenger/', include('messenger_bot.urls')),
     path('business-profile/', include('brands.urls')),
 
     # API Documentation (Swagger UI)
