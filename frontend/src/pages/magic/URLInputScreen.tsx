@@ -20,6 +20,13 @@ export function URLInputScreen({ onSubmit, onSkip, initialUrl }: URLInputScreenP
     inputRef.current?.focus();
   }, []);
 
+  // Update URL when initialUrl prop changes
+  useEffect(() => {
+    if (initialUrl) {
+      setUrl(initialUrl);
+    }
+  }, [initialUrl]);
+
   const handleLogoSelect = (file: File) => {
     if (!file.type.startsWith('image/')) return;
     setLogoFile(file);

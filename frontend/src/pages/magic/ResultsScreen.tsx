@@ -709,7 +709,7 @@ interface ResultsScreenProps {
 export function ResultsScreen({ onGenerateMore, onGoBack }: ResultsScreenProps) {
   const navigate = useNavigate();
   const magicStore = useMagicModeStore();
-  const { generatedPosts, feedbackModal, closeFeedback, resetPostStatus, setPostCount, postCount, setGeneratedPosts, answers, customAnswers } = magicStore;
+  const { generatedPosts, feedbackModal, closeFeedback, resetPostStatus, setPostCount, postCount, setGeneratedPosts, answers } = magicStore;
   const allApproved = generatedPosts.length > 0 && generatedPosts.every((p) => p.status === 'approved' || p.status === 'published' || p.status === 'scheduled');
   const approvedCount = generatedPosts.filter((p) => p.status !== 'ready').length;
   // All posts resolved (published/scheduled) or all deleted

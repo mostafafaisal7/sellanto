@@ -36,6 +36,25 @@ const REGION_OPTIONS = [
   { value: 'Australia & Oceania', label: 'Australia & Oceania' },
 ];
 
+const INDUSTRY_OPTIONS = [
+  { value: 'SaaS', label: 'SaaS' },
+  { value: 'E-commerce', label: 'E-commerce' },
+  { value: 'Digital Marketing', label: 'Digital Marketing' },
+  { value: 'Agency', label: 'Agency' },
+  { value: 'Consulting', label: 'Consulting' },
+  { value: 'Healthcare', label: 'Healthcare' },
+  { value: 'Education', label: 'Education' },
+  { value: 'Finance', label: 'Finance' },
+  { value: 'Real Estate', label: 'Real Estate' },
+  { value: 'Technology', label: 'Technology' },
+  { value: 'Retail', label: 'Retail' },
+  { value: 'Food & Beverage', label: 'Food & Beverage' },
+  { value: 'Travel & Hospitality', label: 'Travel & Hospitality' },
+  { value: 'Entertainment', label: 'Entertainment' },
+  { value: 'Fashion & Beauty', label: 'Fashion & Beauty' },
+  { value: 'Other', label: 'Other' },
+];
+
 const AUDIENCE_OPTIONS = [
   { value: 'Small Business Owners', label: 'Small Business Owners' },
   { value: 'Entrepreneurs', label: 'Entrepreneurs' },
@@ -57,11 +76,20 @@ const AUDIENCE_OPTIONS = [
 // =============================================
 // Step 1: Brand Wizard
 // =============================================
-function BrandWizardStep({ onNext }: { onNext: (workspace: Workspace, brand: Brand) => void }) {
-  const [websiteUrl, setWebsiteUrl] = useState('');
-  const [region, setRegion] = useState('Global');
+function BrandWizardStep({
+  onNext,
+  initialBrand,
+  initialWorkspace
+}: {
+  onNext: (workspace: Workspace, brand: Brand) => void;
+  initialBrand?: Brand | null;
+  initialWorkspace?: Workspace | null;
+}) {
+  const [websiteUrl, setWebsiteUrl] = useState(initialBrand?.website_url?.replace(/^https?:\/\//, '') || '');
+  const [industry, setIndustry] = useState(initialBrand?.industry || 'SaaS');
+  const [region, setRegion] = useState(initialBrand?.target_region || 'Global');
   const [selectedAudiences, setSelectedAudiences] = useState<string[]>([]);
-  const [customAudiences, setCustomAudiences] = useState<string[]>([]);
+  const [customAudiences, setCustomAudiences] = useState<string[]>(initialBrand?.audiences || []);
   const [newCustomAudience, setNewCustomAudience] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -130,37 +158,49 @@ function BrandWizardStep({ onNext }: { onNext: (workspace: Workspace, brand: Bra
       const brandName = extractDomainName(websiteUrl);
       const workspaceName = brandName || 'My Workspace';
 
-      // Create workspace first (auto-generated from brand)
-      const workspace = await onboardingService.createWorkspace({
-        name: workspaceName,
-        timezone: 'UTC',
-        default_language: 'en',
-      });
-
       // Combine selected and custom audiences
       const allAudiences = [
         ...selectedAudiences.filter((a) => a !== 'Other'),
         ...customAudiences,
       ];
 
-      // Create brand
-      const brand = await onboardingService.createBrand({
-        brand_name: brandName,
-        industry: brandName,
-        target_region: region,
-        website_url: normalizedUrl,
-        workspace: workspace.id,
-        voice_tone: 'professional',
-        audiences: allAudiences,
-        goals: [],
-      } as unknown as Partial<Brand>);
+      // If editing existing brand, update it
+      if (initialBrand && initialWorkspace) {
+        const updatedBrand = await onboardingService.updateBrand(initialBrand.id, {
+          brand_name: brandName,
+          industry: industry,
+          target_region: region,
+          website_url: normalizedUrl,
+          audiences: allAudiences,
+        });
 
-      // Mark step 1 as complete
-      await onboardingService.completeStep(1);
+        onNext(initialWorkspace, updatedBrand);
+      } else {
+        // Create new workspace and brand
+        const workspace = await onboardingService.createWorkspace({
+          name: workspaceName,
+          timezone: 'UTC',
+          default_language: 'en',
+        });
 
-      onNext(workspace, brand);
+        const brand = await onboardingService.createBrand({
+          brand_name: brandName,
+          industry: industry,
+          target_region: region,
+          website_url: normalizedUrl,
+          workspace: workspace.id,
+          voice_tone: 'professional',
+          audiences: allAudiences,
+          goals: [],
+        } as unknown as Partial<Brand>);
+
+        // Mark step 1 as complete
+        await onboardingService.completeStep(1);
+
+        onNext(workspace, brand);
+      }
     } catch (err) {
-      setError('Failed to create brand. Please try again.');
+      setError('Failed to save brand. Please try again.');
       setLoading(false);
     }
   };
@@ -193,6 +233,20 @@ function BrandWizardStep({ onNext }: { onNext: (workspace: Workspace, brand: Bra
         <p className="text-xs text-text-muted mt-1">
           We'll use this to automatically set up your brand name and workspace
         </p>
+      </div>
+
+      {/* Industry */}
+      <div>
+        <label className="block text-sm font-medium text-text-secondary mb-2">
+          Industry <span className="text-red-400">*</span>
+        </label>
+        <select value={industry} onChange={(e) => setIndustry(e.target.value)} className="input w-full">
+          {INDUSTRY_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
       </div>
 
       {/* Region */}
@@ -320,10 +374,12 @@ function AllSetStep({
   workspace,
   brand,
   onFinish,
+  onBack,
 }: {
   workspace: Workspace;
   brand: Brand;
   onFinish: () => void;
+  onBack: () => void;
 }) {
   const [expandedSection, setExpandedSection] = useState<string | null>('brand');
 
@@ -490,9 +546,14 @@ function AllSetStep({
         </AnimatePresence>
       </div>
 
-      <button onClick={onFinish} className="btn-primary w-full py-3 mt-8">
-        Get Started
-      </button>
+      <div className="flex gap-3 mt-8">
+        <button onClick={onBack} className="btn-secondary flex-1 py-3">
+          Back
+        </button>
+        <button onClick={onFinish} className="btn-primary flex-1 py-3">
+          Get Started
+        </button>
+      </div>
     </div>
   );
 }
@@ -554,11 +615,17 @@ export function OnboardingPage() {
     navigate('/dashboard', { replace: true });
   };
 
+  const handleBack = () => {
+    setCurrentStep(1);
+  };
+
   const renderStep = () => {
     switch (currentStep) {
       case 1:
         return (
           <BrandWizardStep
+            initialBrand={brand}
+            initialWorkspace={workspace}
             onNext={(ws, br) => {
               setWorkspace(ws);
               setBrand(br);
@@ -568,7 +635,7 @@ export function OnboardingPage() {
         );
       case 2:
         return workspace && brand ? (
-          <AllSetStep workspace={workspace} brand={brand} onFinish={handleFinish} />
+          <AllSetStep workspace={workspace} brand={brand} onFinish={handleFinish} onBack={handleBack} />
         ) : null;
       default:
         return null;

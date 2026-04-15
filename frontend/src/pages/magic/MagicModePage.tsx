@@ -49,6 +49,7 @@ function mapBrandVoiceToTone(brandVoice: string): string {
     return 'Educational & Helpful';
   if (lower.includes('fun') || lower.includes('casual') || lower.includes('playful'))
     return 'Fun & Casual';
+  return 'Professional & Authoritative'; // Default
 }
 
 // 🔧 Helper: Robust JSON array parsing for backend TextField data
@@ -136,21 +137,30 @@ export function MagicModePage() {
       try {
         const brands = await onboardingService.getBrands();
         if (cancelled) return;
-        // Find primary brand with DNA, or any brand with DNA
+
+        // Find brands with DNA (preferred for popup flow)
         const withDna = brands.filter(
           (b) => b.brand_dna && typeof b.brand_dna === 'object' && Object.keys(b.brand_dna).length > 0
         );
-        const primary = withDna.find((b) => b.is_primary) || withDna[0];
-        if (primary) {
+
+        // Fallback: if no DNA brands, use any brand with website (for URL pre-fill)
+        const anyBrand = brands.find((b) => b.website_url);
+
+        // Priority: Primary with DNA > Any with DNA > Any with website
+        const targetBrand = withDna.find((b) => b.is_primary) || withDna[0] || anyBrand;
+
+        if (targetBrand) {
           setExistingBrand({
-            id: primary.id,
-            brand_name: primary.brand_name,
-            website_url: primary.website_url || '',
-            industry: primary.industry,
-            brand_dna: primary.brand_dna || {},
+            id: targetBrand.id,
+            brand_name: targetBrand.brand_name,
+            website_url: targetBrand.website_url || '',
+            industry: targetBrand.industry,
+            brand_dna: targetBrand.brand_dna || {},
           });
-          // Only show popup if we're on the initial screen (not mid-flow or returning from results)
-          if (store.screen === 'url' || store.screen === 'mode') {
+
+          // Only show popup if brand has DNA data to pre-fill questions
+          const hasDna = withDna.length > 0;
+          if (hasDna && (store.screen === 'url' || store.screen === 'mode')) {
             setShowPopup(true);
           }
         }
@@ -162,6 +172,13 @@ export function MagicModePage() {
 
     return () => { cancelled = true; };
   }, [checked, store.screen]);
+
+  const handleStartFresh = useCallback(() => {
+    store.reset(); // Clear all stored data
+    setExistingBrand(null); // Clear existing brand data
+    setShowPopup(false);
+    setScreen('url');
+  }, [store, setScreen]);
 
   const handleUsePrevious = useCallback(() => {
     if (!existingBrand) return;
@@ -208,12 +225,6 @@ export function MagicModePage() {
     setShowPopup(false);
     setScreen('questions'); // Go to questions screen with pre-filled data
   }, [existingBrand, setUrl, setAnswer, setSkipInitialQuestions, setBrandId, setScreen, store, handleStartFresh]);
-
-  const handleStartFresh = useCallback(() => {
-    store.reset(); // Clear all stored data
-    setShowPopup(false);
-    setScreen('url');
-  }, [store, setScreen]);
 
   const handleURLSubmit = useCallback((url: string, logoFile?: File) => {
     setUrl(url);
@@ -459,6 +470,27 @@ export function MagicModePage() {
               No, start fresh
             </button>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show loading while checking for existing brand (prevents empty URL field flash)
+  if (!checked && screen === 'url') {
+    return (
+      <div
+        className="min-h-screen flex items-center justify-center"
+        style={{ background: 'rgb(var(--c-bg-primary))' }}
+      >
+        <div className="flex flex-col items-center gap-4">
+          <div
+            className="w-12 h-12 rounded-full border-4 animate-spin"
+            style={{
+              borderColor: 'rgba(232,54,79,0.2)',
+              borderTopColor: 'rgb(232,54,79)',
+            }}
+          />
+          <p className="text-[14px] text-text-secondary">Loading...</p>
         </div>
       </div>
     );
