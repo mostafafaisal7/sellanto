@@ -24,6 +24,11 @@ from posts.models import Post
 from platforms.models import SocialAccount
 from ai_caption.models import CaptionGeneration, CaptionTemplate, SavedCaption, UserAPISettings
 from ai_image.models import ImageGeneration, SavedImage, UserLogo, PromptTemplate, UserImageSettings
+from messenger_bot.models import (
+    MessengerConnection, AIConfiguration, PDFKnowledgeBase,
+    Conversation, Message, Notification, CustomPrompt,
+    ECommerceSettings, Product
+)
 from onboarding.models import OnboardingProgress
 from accounts.services.notification_service import notify_images_ready, notify_daily_limit_warning
 from brands.models import (
@@ -75,6 +80,18 @@ from .serializers import (
     # Brand DNA
     BrandDNAChunkSerializer,
     BrandDNAStatusSerializer,
+    # Messenger Bot
+    MessengerConnectionSerializer,
+    AIConfigurationSerializer,
+    PDFKnowledgeBaseSerializer,
+    ConversationSerializer,
+    ConversationListSerializer,
+    MessageSerializer,
+    NotificationSerializer,
+    CustomPromptSerializer,
+    ECommerceSettingsSerializer,
+    ProductSerializer,
+    ProductListSerializer,
 )
 
 from accounts.api_keys import get_openai_key, get_gemini_key, get_claude_key, mask_key
@@ -437,6 +454,8 @@ class PostViewSet(viewsets.ModelViewSet):
 
         media_files = []
         file_idx = 0
+        print(f"DEBUG FILES: request.FILES keys = {list(request.FILES.keys())}")
+        print(f"DEBUG FILES: request.content_type = {request.content_type}")
         for key in sorted(request.FILES.keys()):
             if key.startswith('media_'):
                 uploaded_file = request.FILES[key]
@@ -492,6 +511,7 @@ class PostViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
+        print(f"DEBUG FILES: Saving post with media_files = {media_files}")
         post = Post.objects.create(
             user=request.user,
             caption=serializer.validated_data['caption'],
@@ -503,6 +523,7 @@ class PostViewSet(viewsets.ModelViewSet):
             source=serializer.validated_data.get('source', 'manual'),
             hook=serializer.validated_data.get('hook', ''),
         )
+        print(f"DEBUG FILES: Post #{post.id} created, media_files in DB = {repr(post.media_files)}")
 
         return Response(PostSerializer(post, context={'request': request}).data, status=status.HTTP_201_CREATED)
 
@@ -953,7 +974,33 @@ class SocialAccountDetailViewSet(viewsets.ModelViewSet):
             account.status = 'active' if is_valid else 'invalid'
             account.last_validated_at = timezone.now()
             account.save()
-            
+
+            # Sync with MessengerConnection if platform is messenger
+            if platform == 'messenger' and is_valid:
+                from accounts.utils import is_messenger_enabled
+                if is_messenger_enabled():
+                    _page_id    = account.facebook_page_id
+                    _page_name  = account_name
+                    _page_token = account.facebook_access_token
+                    try:
+                        conn = MessengerConnection.objects.get(page_id=_page_id)
+                        conn.user              = request.user
+                        conn.page_name         = _page_name
+                        conn.page_access_token = _page_token
+                        conn.is_active         = True
+                        conn.save(update_fields=['user_id', 'page_name', 'page_access_token', 'is_active'])
+                    except MessengerConnection.DoesNotExist:
+                        conn, _ = MessengerConnection.objects.update_or_create(
+                            user=request.user,
+                            defaults={
+                                'page_id':            _page_id,
+                                'page_name':          _page_name,
+                                'page_access_token':  _page_token,
+                                'is_active':          True,
+                            }
+                        )
+                    AIConfiguration.objects.get_or_create(connection=conn)
+
             if not is_valid:
                 return Response({'error': f'Validation failed for {platform}'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -3028,3 +3075,483 @@ class MagicModeCachedPostsView(APIView):
                 'success': False,
                 'error': str(e)
             }, status=500)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# MESSENGER BOT VIEWS — gated by kill switch
+# ═══════════════════════════════════════════════════════════════════════════════
+
+from accounts.utils import is_messenger_enabled
+from rest_framework.exceptions import PermissionDenied as DRFPermissionDenied
+
+
+class MessengerGateMixin:
+    """Kill switch mixin — blocks ALL processing when messenger is disabled.
+    Runs in initial() so no DB queries, no serializers, nothing executes."""
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        if not is_messenger_enabled():
+            raise DRFPermissionDenied('Messenger feature is currently disabled by admin.')
+
+
+class MessengerConnectionViewSet(MessengerGateMixin, viewsets.ModelViewSet):
+    serializer_class = MessengerConnectionSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = None
+
+    def get_queryset(self):
+        return MessengerConnection.objects.filter(user=self.request.user)
+
+    def create(self, request, *args, **kwargs):
+        try:
+            existing = MessengerConnection.objects.get(user=request.user)
+            serializer = self.get_serializer(existing, data=request.data, partial=True)
+            serializer.is_valid(raise_exception=True)
+            connection = serializer.save()
+            base_url = request.build_absolute_uri('/').rstrip('/')
+            connection.webhook_url = f"{base_url}/messenger/webhook/"
+            connection.save(update_fields=['webhook_url'])
+            return Response(self.get_serializer(connection).data, status=status.HTTP_200_OK)
+        except MessengerConnection.DoesNotExist:
+            serializer = self.get_serializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            connection = serializer.save(user=request.user)
+            base_url = request.build_absolute_uri('/').rstrip('/')
+            connection.webhook_url = f"{base_url}/messenger/webhook/"
+            connection.save(update_fields=['webhook_url'])
+            return Response(self.get_serializer(connection).data, status=status.HTTP_201_CREATED)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+    @action(detail=True, methods=['post'])
+    def toggle_active(self, request, pk=None):
+        connection = self.get_object()
+        connection.is_active = not connection.is_active
+        connection.save()
+        return Response(MessengerConnectionSerializer(connection).data)
+
+
+class CrawlWebsiteView(MessengerGateMixin, APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, connection_id):
+        try:
+            connection = MessengerConnection.objects.get(id=connection_id, user=request.user)
+        except MessengerConnection.DoesNotExist:
+            return Response({'error': 'Connection not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        website_url = request.data.get('website_url') or connection.website_url
+        if not website_url:
+            return Response(
+                {'error': 'No website URL provided. Please enter a website URL.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if request.data.get('website_url'):
+            connection.website_url = website_url
+            connection.save(update_fields=['website_url'])
+
+        try:
+            ai_config = connection.ai_config
+            openai_api_key = ai_config.openai_api_key
+        except AIConfiguration.DoesNotExist:
+            openai_api_key = None
+
+        if not openai_api_key:
+            openai_api_key = get_openai_key(request.user)
+
+        if not openai_api_key:
+            return Response(
+                {'error': 'OpenAI API key not configured. Please add your API key in Settings.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            from brands.services.brand_dna_service import BrandDNAService
+
+            workspace = Workspace.objects.filter(owner=request.user).first()
+            if not workspace:
+                workspace = Workspace.objects.create(
+                    owner=request.user,
+                    name=f"{request.user.username}'s Workspace"
+                )
+            brand, _ = Brand.objects.get_or_create(
+                user=request.user,
+                is_primary=True,
+                defaults={
+                    'workspace': workspace,
+                    'brand_name': connection.page_name or f"{request.user.username}'s Brand",
+                    'industry': 'General',
+                    'target_region': 'Global',
+                    'website_url': website_url,
+                }
+            )
+
+            if brand.website_url != website_url:
+                brand.website_url = website_url
+                brand.save(update_fields=['website_url'])
+
+            service = BrandDNAService(openai_api_key=openai_api_key)
+            result = service.generate_brand_dna(brand)
+
+            if result['success']:
+                return Response({
+                    'success': True,
+                    'pages_crawled': result['pages_crawled'],
+                    'total_chunks': result['total_chunks'],
+                    'website_url': website_url,
+                    'message': f"Website crawled! {result['pages_crawled']} pages, {result['total_chunks']} knowledge chunks created."
+                })
+            else:
+                return Response(
+                    {'success': False, 'error': result.get('error', 'Failed to crawl website')},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return Response(
+                {'success': False, 'error': f'Website crawling failed: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    def get(self, request, connection_id):
+        try:
+            connection = MessengerConnection.objects.get(id=connection_id, user=request.user)
+        except MessengerConnection.DoesNotExist:
+            return Response({'error': 'Connection not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        brand = Brand.objects.filter(user=request.user, is_primary=True).first()
+        chunk_count = 0
+        brand_dna = {}
+        generated_at = None
+
+        if brand:
+            chunk_count = BrandDNAChunk.objects.filter(brand=brand).count()
+            brand_dna = brand.brand_dna or {}
+            generated_at = brand.brand_dna_generated_at
+
+        website_url = connection.website_url
+        if not website_url and brand:
+            website_url = brand.website_url
+
+        return Response({
+            'website_url': website_url,
+            'has_data': chunk_count > 0,
+            'chunk_count': chunk_count,
+            'pages_crawled': brand_dna.get('pages_crawled', 0),
+            'generated_at': generated_at,
+        })
+
+
+class AIConfigurationView(MessengerGateMixin, generics.RetrieveUpdateAPIView):
+    serializer_class = AIConfigurationSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self):
+        connection_id = self.kwargs.get('connection_id')
+        connection = MessengerConnection.objects.get(id=connection_id, user=self.request.user)
+        obj, _ = AIConfiguration.objects.get_or_create(connection=connection)
+        return obj
+
+
+class PDFKnowledgeBaseViewSet(MessengerGateMixin, viewsets.ModelViewSet):
+    serializer_class = PDFKnowledgeBaseSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = None
+    parser_classes = [MultiPartParser, FormParser]
+
+    def get_queryset(self):
+        connection_id = self.kwargs.get('connection_id')
+        return PDFKnowledgeBase.objects.filter(
+            connection_id=connection_id,
+            connection__user=self.request.user
+        )
+
+    def perform_create(self, serializer):
+        connection_id = self.kwargs.get('connection_id')
+        connection = MessengerConnection.objects.get(id=connection_id, user=self.request.user)
+        file_obj = self.request.FILES.get('file')
+        file_size = file_obj.size if file_obj else 0
+        filename = self.request.data.get('filename', file_obj.name if file_obj else 'unknown.pdf')
+        serializer.save(connection=connection, file_size=file_size, filename=filename)
+
+
+class ConversationViewSet(MessengerGateMixin, viewsets.ReadOnlyModelViewSet):
+    serializer_class = ConversationSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = None
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return ConversationListSerializer
+        return ConversationSerializer
+
+    def get_queryset(self):
+        connection_id = self.kwargs.get('connection_id')
+        if connection_id:
+            return Conversation.objects.filter(
+                connection_id=connection_id,
+                connection__user=self.request.user
+            ).order_by('-last_message_at')
+        return Conversation.objects.filter(
+            connection__user=self.request.user
+        ).order_by('-last_message_at')
+
+    @action(detail=True, methods=['post'])
+    def toggle_takeover(self, request, pk=None, connection_id=None):
+        conversation = self.get_object()
+        conversation.human_takeover = not conversation.human_takeover
+        conversation.save()
+        return Response(ConversationSerializer(conversation).data)
+
+    @action(detail=True, methods=['post'])
+    def send_message(self, request, pk=None, connection_id=None):
+        import requests as req
+
+        conversation = self.get_object()
+        content = request.data.get('content', '')
+
+        if not content:
+            return Response({'error': 'Message content is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        connection = conversation.connection
+
+        url = "https://graph.facebook.com/v18.0/me/messages"
+        payload = {
+            'recipient': {'id': conversation.sender_id},
+            'message': {'text': content},
+            'messaging_type': 'RESPONSE'
+        }
+        params = {'access_token': connection.page_access_token}
+
+        try:
+            fb_response = req.post(url, json=payload, params=params, timeout=10)
+
+            if fb_response.status_code == 200:
+                message = Message.objects.create(
+                    conversation=conversation,
+                    sender='bot',
+                    message_type='text',
+                    text=f"[Human] {content}",
+                    model_used='human',
+                    timestamp=timezone.now(),
+                    delivered=True,
+                )
+                conversation.message_count += 1
+                conversation.save()
+                return Response(MessageSerializer(message).data)
+            else:
+                return Response(
+                    {'error': f'Facebook API error: {fb_response.text}'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        except Exception as e:
+            return Response(
+                {'error': f'Failed to send message: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class NotificationViewSet(MessengerGateMixin, viewsets.ModelViewSet):
+    serializer_class = NotificationSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = None
+
+    def get_queryset(self):
+        return Notification.objects.filter(
+            connection__user=self.request.user
+        ).order_by('-created_at')
+
+    @action(detail=True, methods=['post'])
+    def mark_read(self, request, pk=None):
+        notification = self.get_object()
+        notification.is_read = True
+        notification.save()
+        return Response(NotificationSerializer(notification).data)
+
+    @action(detail=True, methods=['post'])
+    def resolve(self, request, pk=None):
+        notification = self.get_object()
+        notification.is_resolved = True
+        notification.resolved_at = timezone.now()
+        notification.save()
+        return Response(NotificationSerializer(notification).data)
+
+    @action(detail=False, methods=['post'])
+    def mark_all_read(self, request):
+        Notification.objects.filter(
+            connection__user=request.user,
+            is_read=False
+        ).update(is_read=True)
+        return Response({'message': 'All notifications marked as read'})
+
+
+class CustomPromptViewSet(MessengerGateMixin, viewsets.ModelViewSet):
+    serializer_class = CustomPromptSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = None
+
+    def get_queryset(self):
+        connection_id = self.kwargs.get('connection_id')
+        return CustomPrompt.objects.filter(
+            connection_id=connection_id,
+            connection__user=self.request.user
+        )
+
+    def perform_create(self, serializer):
+        connection_id = self.kwargs.get('connection_id')
+        connection = MessengerConnection.objects.get(id=connection_id, user=self.request.user)
+        serializer.save(connection=connection)
+
+    @action(detail=True, methods=['post'])
+    def activate(self, request, pk=None, connection_id=None):
+        prompt = self.get_object()
+        CustomPrompt.objects.filter(
+            connection=prompt.connection,
+            is_active=True
+        ).update(is_active=False)
+        prompt.is_active = True
+        prompt.save()
+        return Response(CustomPromptSerializer(prompt).data)
+
+
+class MessengerDashboardView(MessengerGateMixin, APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        connections = MessengerConnection.objects.filter(user=request.user)
+        connection_ids = connections.values_list('id', flat=True)
+
+        total_conversations = Conversation.objects.filter(connection_id__in=connection_ids).count()
+        active_conversations = Conversation.objects.filter(
+            connection_id__in=connection_ids, is_active=True
+        ).count()
+        total_messages = Message.objects.filter(conversation__connection_id__in=connection_ids).count()
+        unread_notifications = Notification.objects.filter(
+            connection_id__in=connection_ids, is_read=False
+        ).count()
+        total_tokens = Message.objects.filter(
+            conversation__connection_id__in=connection_ids, sender='bot'
+        ).aggregate(Sum('tokens_used'))['tokens_used__sum'] or 0
+
+        recent_conversations = Conversation.objects.filter(
+            connection_id__in=connection_ids
+        ).order_by('-last_message_at')[:5]
+
+        return Response({
+            'connections_count': connections.count(),
+            'active_connections': connections.filter(is_active=True).count(),
+            'total_conversations': total_conversations,
+            'active_conversations': active_conversations,
+            'total_messages': total_messages,
+            'unread_notifications': unread_notifications,
+            'total_tokens': total_tokens,
+            'recent_conversations': ConversationListSerializer(recent_conversations, many=True).data,
+        })
+
+
+# ===================== E-COMMERCE VIEWS (gated) =====================
+
+class ECommerceSettingsView(MessengerGateMixin, generics.RetrieveUpdateAPIView):
+    serializer_class = ECommerceSettingsSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self):
+        connection_id = self.kwargs.get('connection_id')
+        connection = MessengerConnection.objects.get(id=connection_id, user=self.request.user)
+        obj, _ = ECommerceSettings.objects.get_or_create(
+            connection=connection,
+            defaults={'store_url': '', 'consumer_key': '', 'consumer_secret': '', 'is_enabled': False}
+        )
+        return obj
+
+
+class TestECommerceConnectionView(MessengerGateMixin, APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, connection_id):
+        try:
+            connection = MessengerConnection.objects.get(id=connection_id, user=request.user)
+        except MessengerConnection.DoesNotExist:
+            return Response({'error': 'Connection not found'}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            ecom = connection.ecommerce_settings
+        except ECommerceSettings.DoesNotExist:
+            return Response({'error': 'E-Commerce settings not configured'}, status=status.HTTP_400_BAD_REQUEST)
+        if not ecom.consumer_key or not ecom.consumer_secret:
+            return Response({'success': False, 'message': 'Consumer key and secret are required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        from messenger_bot.services.woocommerce_service import WooCommerceService
+        service = WooCommerceService(ecom)
+        result = service.test_connection()
+        return Response(result, status=status.HTTP_200_OK if result['success'] else status.HTTP_400_BAD_REQUEST)
+
+
+class SyncProductsView(MessengerGateMixin, APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, connection_id):
+        try:
+            connection = MessengerConnection.objects.get(id=connection_id, user=request.user)
+        except MessengerConnection.DoesNotExist:
+            return Response({'error': 'Connection not found'}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            ecom = connection.ecommerce_settings
+        except ECommerceSettings.DoesNotExist:
+            return Response({'error': 'E-Commerce settings not configured'}, status=status.HTTP_400_BAD_REQUEST)
+        if not ecom.consumer_key or not ecom.consumer_secret:
+            return Response({'error': 'Consumer key and secret are required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        from messenger_bot.services.woocommerce_service import WooCommerceService
+        service = WooCommerceService(ecom)
+        result = service.sync_products()
+        if result.get('success'):
+            return Response(result)
+        return Response(result, status=status.HTTP_400_BAD_REQUEST)
+
+
+class RegenerateEmbeddingsView(MessengerGateMixin, APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, connection_id):
+        try:
+            connection = MessengerConnection.objects.get(id=connection_id, user=request.user)
+        except MessengerConnection.DoesNotExist:
+            return Response({'error': 'Connection not found'}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            ecom = connection.ecommerce_settings
+        except ECommerceSettings.DoesNotExist:
+            return Response({'error': 'E-Commerce settings not configured'}, status=status.HTTP_400_BAD_REQUEST)
+
+        openai_api_key = None
+        try:
+            openai_api_key = connection.ai_config.openai_api_key
+        except AIConfiguration.DoesNotExist:
+            pass
+        if not openai_api_key:
+            openai_api_key = get_openai_key(request.user)
+        if not openai_api_key:
+            return Response({'error': 'OpenAI API key not configured.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        from messenger_bot.services.woocommerce_service import WooCommerceService
+        service = WooCommerceService(ecom)
+        result = service.generate_product_embeddings(openai_api_key)
+        if result.get('success'):
+            return Response(result)
+        return Response(result, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ProductListView(MessengerGateMixin, generics.ListAPIView):
+    serializer_class = ProductListSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = None
+
+    def get_queryset(self):
+        connection_id = self.kwargs.get('connection_id')
+        return Product.objects.filter(
+            ecommerce_settings__connection_id=connection_id,
+            ecommerce_settings__connection__user=self.request.user,
+        )

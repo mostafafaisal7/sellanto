@@ -68,6 +68,7 @@ INSTALLED_APPS = [
     'ai_caption',
     'ai_image',
     'upcoming_features',
+    'messenger_bot',
     'api',
     'onboarding',
     'brands',

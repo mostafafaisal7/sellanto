@@ -11,6 +11,11 @@ from ai_image.models import (
     ImageGeneration, SavedImage, UserLogo, PromptTemplate, UserImageSettings,
     AssetPlatformVariant, CreativeVersionHistory
 )
+from messenger_bot.models import (
+    MessengerConnection, AIConfiguration, PDFKnowledgeBase,
+    Conversation, Message, Notification, CustomPrompt,
+    ECommerceSettings, Product
+)
 from onboarding.models import OnboardingProgress
 from brands.models import (
     Workspace, Brand, BrandAsset, LaunchPlan,
@@ -1313,4 +1318,165 @@ class CopyOverlayApplySerializer(serializers.Serializer):
         choices=['left', 'center', 'right'],
         default='center',
     )
+
+
+# ===================== MESSENGER BOT SERIALIZERS =====================
+
+class MessengerConnectionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = MessengerConnection
+        fields = [
+            'id', 'page_id', 'page_name', 'page_access_token',
+            'verify_token', 'webhook_url', 'is_webhook_verified',
+            'is_active', 'auto_reply_enabled', 'greeting_text',
+            'website_url', 'connected_at', 'last_synced',
+        ]
+        read_only_fields = ['id', 'verify_token', 'is_webhook_verified', 'connected_at', 'last_synced']
+        extra_kwargs = {
+            'page_access_token': {'write_only': True, 'required': False, 'allow_blank': True},
+            'webhook_url': {'required': False},
+        }
+
+
+class AIConfigurationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AIConfiguration
+        fields = [
+            'id', 'connection', 'openai_api_key', 'openai_model',
+            'embedding_model', 'temperature', 'max_tokens',
+            'rag_enabled', 'top_k_results', 'similarity_threshold',
+            'image_understanding_enabled', 'voice_transcription_enabled',
+            'voice_reply_enabled', 'voice_model',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'connection', 'created_at', 'updated_at']
+        extra_kwargs = {
+            'openai_api_key': {'write_only': True},
+        }
+
+
+class PDFKnowledgeBaseSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PDFKnowledgeBase
+        fields = [
+            'id', 'connection', 'filename', 'file', 'file_size',
+            'total_pages', 'total_chunks', 'status', 'error_message',
+            'uploaded_at', 'vectorized_at',
+        ]
+        read_only_fields = ['id', 'connection', 'file_size', 'total_pages', 'total_chunks',
+                           'status', 'error_message', 'uploaded_at', 'vectorized_at']
+
+
+class CustomPromptSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CustomPrompt
+        fields = [
+            'id', 'connection', 'name', 'system_prompt', 'tone',
+            'is_active', 'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'connection', 'created_at', 'updated_at']
+
+
+class MessageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Message
+        fields = [
+            'id', 'conversation', 'sender', 'message_type', 'text',
+            'image_url', 'file_url', 'tokens_used', 'processing_time',
+            'rag_context_used', 'image_description', 'model_used',
+            'timestamp',
+        ]
+        read_only_fields = ['id', 'tokens_used', 'processing_time',
+                           'rag_context_used', 'image_description',
+                           'model_used', 'timestamp']
+
+
+class ConversationListSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Conversation
+        fields = [
+            'id', 'connection', 'sender_id', 'sender_name', 'sender_profile_pic',
+            'is_active', 'human_takeover', 'message_count',
+            'last_message_at', 'started_at',
+        ]
+        read_only_fields = ['id', 'sender_id', 'sender_name', 'sender_profile_pic',
+                           'message_count', 'last_message_at', 'started_at']
+
+
+class ConversationSerializer(serializers.ModelSerializer):
+    messages = MessageSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Conversation
+        fields = [
+            'id', 'connection', 'sender_id', 'sender_name', 'sender_profile_pic',
+            'is_active', 'human_takeover', 'message_count',
+            'last_message_at', 'started_at', 'messages',
+        ]
+        read_only_fields = ['id', 'sender_id', 'sender_name', 'sender_profile_pic',
+                           'message_count', 'last_message_at', 'started_at']
+
+
+class NotificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Notification
+        fields = [
+            'id', 'connection', 'conversation', 'message',
+            'notification_type', 'title', 'summary', 'priority',
+            'is_read', 'is_resolved', 'resolved_at', 'created_at',
+        ]
+        read_only_fields = ['id', 'created_at']
+
+
+# ===================== E-COMMERCE SERIALIZERS =====================
+
+class ECommerceSettingsSerializer(serializers.ModelSerializer):
+    product_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ECommerceSettings
+        fields = [
+            'id', 'connection', 'platform_type', 'store_url',
+            'consumer_key', 'consumer_secret',
+            'is_enabled', 'product_match_threshold', 'currency_symbol',
+            'last_synced', 'product_count', 'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'connection', 'last_synced', 'created_at', 'updated_at']
+        extra_kwargs = {
+            'consumer_key': {'write_only': True, 'required': False, 'allow_blank': True},
+            'consumer_secret': {'write_only': True, 'required': False, 'allow_blank': True},
+            'store_url': {'required': False, 'allow_blank': True},
+        }
+
+    def get_product_count(self, obj):
+        return obj.products.count()
+
+
+class ProductSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Product
+        fields = [
+            'id', 'woo_product_id', 'name', 'description', 'short_description',
+            'price', 'regular_price', 'sale_price', 'sku',
+            'stock_status', 'stock_quantity', 'permalink',
+            'images', 'categories', 'synced_at',
+        ]
+        read_only_fields = ['id', 'synced_at']
+
+
+class ProductListSerializer(serializers.ModelSerializer):
+    first_image = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Product
+        fields = [
+            'id', 'woo_product_id', 'name', 'price', 'sale_price',
+            'sku', 'stock_status', 'stock_quantity',
+            'first_image', 'categories', 'synced_at',
+        ]
+
+    def get_first_image(self, obj):
+        if obj.images and len(obj.images) > 0:
+            return obj.images[0].get('src', '')
+        return ''
     add_text_shadow = serializers.BooleanField(default=True)

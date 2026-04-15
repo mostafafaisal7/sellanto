@@ -142,7 +142,14 @@ export function FacebookConnect({ onConnected, buttonLabel = 'Connect Facebook P
         return;
       }
 
-      if (activePages.length === 1) {
+      // Skip messenger setup if feature is disabled
+      if (status?.messenger_enabled === false) {
+        setStep('refreshing');
+        refreshStatus().then(() => {
+          setStep('done');
+          onConnected?.(receivedPages);
+        });
+      } else if (activePages.length === 1) {
         doSetupMessenger(activePages[0], receivedPages);
       } else {
         setStep('picking');
@@ -395,7 +402,8 @@ export function FacebookConnect({ onConnected, buttonLabel = 'Connect Facebook P
                 )}
               </StatusSection>
 
-              {/* Messenger Bot */}
+              {/* Messenger Bot — hidden when feature disabled */}
+              {status.messenger_enabled !== false && (
               <StatusSection title="Messenger Bot" icon="💬">
                 {!status.messenger.connected ? (
                   <EmptyRow text="Not set up" />
@@ -415,6 +423,7 @@ export function FacebookConnect({ onConnected, buttonLabel = 'Connect Facebook P
                   </div>
                 )}
               </StatusSection>
+              )}
 
               {/* Warnings */}
               {status.warnings.length > 0 && (

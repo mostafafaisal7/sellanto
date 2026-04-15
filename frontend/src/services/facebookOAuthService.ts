@@ -70,8 +70,10 @@ export interface FacebookConnectionStatus {
   };
   messenger: {
     connected: boolean;
+    enabled?: boolean;
     data: MessengerStatusData | null;
   };
+  messenger_enabled: boolean;
   missing: StatusItem[];
   warnings: StatusItem[];
 }
@@ -123,6 +125,7 @@ export interface FacebookAdminSettings {
   };
   is_configured: boolean;
   missing: string[];
+  messenger_feature_enabled: boolean;
   help: {
     where_to_find: string;
     redirect_uri_note: string;

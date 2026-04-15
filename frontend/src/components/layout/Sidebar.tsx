@@ -19,6 +19,7 @@ import {
   ClockIcon,
   DocumentDuplicateIcon,
   ArrowPathIcon,
+  ChatBubbleBottomCenterTextIcon,
 } from '@heroicons/react/24/outline';
 import { useAuthStore } from '../../store';
 
@@ -73,6 +74,7 @@ const mainNavItems: NavItem[] = [
       { name: 'Draft Post', href: '/posts/drafts', icon: DocumentDuplicateIcon },
     ],
   },
+  { name: 'Messenger Bot', href: '/messenger', icon: ChatBubbleBottomCenterTextIcon },
   { name: 'Calendar', href: '/calendar', icon: CalendarDaysIcon },
   { name: 'Connect Account', href: '/platforms', icon: LinkIcon },
 ];
@@ -157,6 +159,26 @@ function NavItemWithChildren({ item, onClose }: { item: NavItem; onClose: () => 
 
 export function Sidebar({ isOpen, onClose, isImpersonating }: SidebarProps) {
   const { user } = useAuthStore();
+  const [messengerEnabled, setMessengerEnabled] = useState(true);
+
+  useEffect(() => {
+    const token = localStorage.getItem('access_token');
+    if (!token) return;
+    fetch('/api/v1/platforms/facebook/status/', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data && typeof data.messenger_enabled === 'boolean') {
+          setMessengerEnabled(data.messenger_enabled);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const filteredNavItems = messengerEnabled
+    ? mainNavItems
+    : mainNavItems.filter(item => item.href !== '/messenger');
 
   const NavSection = ({ items, title }: { items: NavItem[]; title?: string }) => (
     <div className="mb-5">
@@ -230,7 +252,7 @@ export function Sidebar({ isOpen, onClose, isImpersonating }: SidebarProps) {
 
       {/* Navigation */}
       <div className="flex-1 overflow-y-auto py-4 px-3 no-scrollbar">
-        <NavSection items={mainNavItems} />
+        <NavSection items={filteredNavItems} />
         <NavSection items={settingsNavItems} title="Settings" />
       </div>
 

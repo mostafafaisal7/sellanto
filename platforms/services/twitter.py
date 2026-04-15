@@ -159,10 +159,10 @@ class TwitterService:
                             media = api.media_upload(media_path)
                         
                         media_ids.append(media.media_id)
-                        print(f"         ✓ Media uploaded: {media.media_id}")
+                        print(f"         [OK] Media uploaded: {media.media_id}")
                         
                     except Exception as e:
-                        print(f"         ⚠️ Media upload failed: {str(e)}")
+                        print(f"         [WARN]️ Media upload failed: {str(e)}")
                         continue
             
             # Post tweet
@@ -175,14 +175,14 @@ class TwitterService:
             
             if response.data:
                 tweet_id = response.data['id']
-                print(f"         ✅ Tweet posted: {tweet_id}")
+                print(f"         [OK] Tweet posted: {tweet_id}")
                 return True, tweet_id
             else:
                 return False, 'No response from Twitter'
             
         except Exception as e:
             error_msg = str(e)
-            print(f"         ❌ Twitter error: {error_msg}")
+            print(f"         [FAIL] Twitter error: {error_msg}")
             return False, error_msg
     
     @staticmethod

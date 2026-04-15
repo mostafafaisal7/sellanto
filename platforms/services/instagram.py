@@ -51,7 +51,7 @@
 #             if not fb_media_id:
 #                 return False, 'No media ID from Facebook'
             
-#             print(f"         ✓ Uploaded to FB: {fb_media_id}")
+#             print(f"         [OK] Uploaded to FB: {fb_media_id}")
             
 #             # Step 2: Get image URL from Facebook
 #             image_info_url = f"https://graph.facebook.com/v18.0/{fb_media_id}?fields=images&access_token={page_access_token}"
@@ -71,7 +71,7 @@
 #             if not image_url:
 #                 return False, 'Failed to get image URL from Facebook'
             
-#             print(f"         ✓ Image URL: {image_url}")
+#             print(f"         [OK] Image URL: {image_url}")
             
 #             # Step 3: Create Instagram container
 #             container_url = f"https://graph.facebook.com/v18.0/{business_account_id}/media"
@@ -93,7 +93,7 @@
 #                 return False, error_msg
             
 #             container_id = container_data['id']
-#             print(f"         ✓ Container created: {container_id}")
+#             print(f"         [OK] Container created: {container_id}")
             
 #             # Step 4: Wait for processing
 #             print(f"         Step 3: Waiting 10 seconds...")
@@ -115,7 +115,7 @@
             
 #             if 'id' in publish_data:
 #                 post_id = publish_data['id']
-#                 print(f"         ✅ SUCCESS! Post ID: {post_id}")
+#                 print(f"         [OK] SUCCESS! Post ID: {post_id}")
 #                 return True, post_id
 #             else:
 #                 error_msg = publish_data.get('error', {}).get('message', 'Publish failed')
@@ -123,7 +123,7 @@
             
 #         except Exception as e:
 #             error_msg = f"Exception: {str(e)}"
-#             print(f"         ❌ {error_msg}")
+#             print(f"         [FAIL] {error_msg}")
 #             return False, error_msg
     
 #     @staticmethod
@@ -188,7 +188,7 @@ class InstagramService:
             ext = os.path.splitext(media_path)[1].lower()
             is_video = ext in ['.mp4', '.mov', '.avi']
             
-            print(f"         {'🎥 VIDEO' if is_video else '📸 IMAGE'} Detected: {ext}")
+            print(f"         {'[VIDEO] VIDEO' if is_video else '[IMAGE] IMAGE'} Detected: {ext}")
             print(f"         Instagram Posting - YOUR Working Logic...")
             print(f"         Step 1: Upload to Facebook first...")
             
@@ -220,7 +220,7 @@ class InstagramService:
             if not fb_media_id:
                 return False, 'No media ID from Facebook'
             
-            print(f"         ✓ Uploaded to FB: {fb_media_id}")
+            print(f"         [OK] Uploaded to FB: {fb_media_id}")
             
              # Step 2: Get media URL from Facebook
             if is_video:
@@ -250,11 +250,11 @@ class InstagramService:
                     
                     if video_status == 'ready':
                         video_ready = True
-                        print(f"         ✅ Video is READY!")
+                        print(f"         [OK] Video is READY!")
                         break
                     elif video_status == 'processing':
                         progress = status.get('processing_progress', 0)
-                        print(f"         ⏳ Still processing... ({progress}%)")
+                        print(f"         [WAIT] Still processing... ({progress}%)")
                         continue
                     elif video_status == 'error':
                         return False, 'Facebook video processing failed'
@@ -276,7 +276,7 @@ class InstagramService:
                 if not media_url:
                     return False, 'Failed to get video source URL from Facebook'
                 
-                print(f"         ✓ Video URL: {media_url[:100]}...")
+                print(f"         [OK] Video URL: {media_url[:100]}...")
                 
             else:
                 # For images
@@ -293,7 +293,7 @@ class InstagramService:
                 else:
                     media_url = f"https://graph.facebook.com/{fb_media_id}/picture?type=large&access_token={page_access_token}"
                 
-                print(f"         ✓ Image URL: {media_url[:100]}...")
+                print(f"         [OK] Image URL: {media_url[:100]}...")
             
             # Step 3: Create Instagram container
             container_url = f"https://graph.facebook.com/v18.0/{business_account_id}/media"
@@ -324,7 +324,7 @@ class InstagramService:
                 return False, error_msg
             
             container_id = container_data['id']
-            print(f"         ✓ Container created: {container_id}")
+            print(f"         [OK] Container created: {container_id}")
             
             # Step 4: Wait for processing
             wait_time = 60 if is_video else 10
@@ -347,7 +347,7 @@ class InstagramService:
                 error_message = status_data.get('error_message', 'Unknown error')
                 status_obj = status_data.get('status', {})
                 
-                print(f"         ❌ ERROR DETAILS:")
+                print(f"         [FAIL] ERROR DETAILS:")
                 print(f"            - Error Message: {error_message}")
                 print(f"            - Status Object: {status_obj}")
                 
@@ -394,7 +394,7 @@ class InstagramService:
             
             if 'id' in publish_data:
                 post_id = publish_data['id']
-                print(f"         ✅ SUCCESS! Post ID: {post_id}")
+                print(f"         [OK] SUCCESS! Post ID: {post_id}")
                 return True, post_id
             else:
                 error_msg = publish_data.get('error', {}).get('message', 'Publish failed')
@@ -402,7 +402,7 @@ class InstagramService:
             
         except Exception as e:
             error_msg = f"Exception: {str(e)}"
-            print(f"         ❌ {error_msg}")
+            print(f"         [FAIL] {error_msg}")
             return False, error_msg
     
     @staticmethod

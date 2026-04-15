@@ -143,6 +143,18 @@ class Post(models.Model):
         """Set platforms from list"""
         self.platforms = json.dumps(platforms)
 
+    @property
+    def media_files_list(self):
+        """Get media files as list"""
+        try:
+            return json.loads(self.media_files)
+        except:
+            return []
+
+    def set_media_files(self, files):
+        """Set media files from list"""
+        self.media_files = json.dumps(files)
+
 
 class MagicModeCache(models.Model):
     """Cache for Magic Mode post generations based on answer combinations"""
