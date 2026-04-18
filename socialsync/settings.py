@@ -180,7 +180,13 @@ else:
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
             'NAME': BASE_DIR / 'db.sqlite3',
-            'ATOMIC_REQUESTS': True,  # Still wrap views in transactions for consistency
+            'ATOMIC_REQUESTS': False,  # ❌ Disabled to prevent database locks in SQLite
+            # Note: SQLite + ATOMIC_REQUESTS = write locks block all requests
+            # Each view transaction holds a file-level lock, causing "database is locked" errors
+            'OPTIONS': {
+                'timeout': 20,  # Increase timeout from 5s default to 20s
+                'init_command': 'PRAGMA journal_mode=WAL;',  # Enable Write-Ahead Logging for better concurrency
+            },
         }
     }
 

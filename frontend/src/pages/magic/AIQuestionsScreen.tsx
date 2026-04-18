@@ -30,6 +30,12 @@ const QUESTIONS: Question[] = [
     options: ['Professional & Authoritative', 'Friendly & Approachable', 'Bold & Provocative', 'Educational & Helpful', 'Fun & Casual'],
   },
   {
+    id: 'product_mode', emoji: '📦',
+    question: 'Do you want to feature your real products in posts?',
+    subtext: "Upload product images and we'll create posts featuring them",
+    options: ['Yes - I have product images', 'No - AI generates everything'],
+  },
+  {
     id: 'platforms', emoji: '📱',
     question: 'Where do you post most? (pick 1-2)',
     subtext: "We'll optimize content for these platforms",
@@ -53,15 +59,18 @@ interface AIQuestionsScreenProps {
   onComplete: (answers: Record<string, string | string[]>) => void;
   onNext?: () => void;
   onBack: () => void;
+  onProductUpload?: () => void; // NEW: Navigate to product upload screen
   skipIndustry?: boolean;
+  startAtQuestion?: number; // NEW: Start from specific question index (for product upload flow)
 }
 
-export function AIQuestionsScreen({ onComplete, onNext, onBack, skipIndustry }: AIQuestionsScreenProps) {
+export function AIQuestionsScreen({ onComplete, onNext, onBack, onProductUpload, skipIndustry, startAtQuestion }: AIQuestionsScreenProps) {
   const filteredQuestions = skipIndustry
     ? QUESTIONS.filter((q) => q.id !== 'industry')
     : QUESTIONS;
 
   const storeAnswers = useMagicModeStore((s) => s.answers);
+  const setAnswer = useMagicModeStore((s) => s.setAnswer); // NEW: Access setAnswer from store
   const hasPreviousGeneration = useMagicModeStore((s) => s.hasPreviousGeneration);
   const setHasPreviousGeneration = useMagicModeStore((s) => s.setHasPreviousGeneration);
   const originalAnswers = useMagicModeStore((s) => s.originalAnswers);
@@ -71,12 +80,12 @@ export function AIQuestionsScreen({ onComplete, onNext, onBack, skipIndustry }: 
   const setCustomAnswer = useMagicModeStore((s) => s.setCustomAnswer);
   const storeCustomAnswers = useMagicModeStore((s) => s.customAnswers);
 
-  // Always start from Question 1 so user can review all pre-filled answers
-  const [currentQ, setCurrentQ] = useState(0);
+  // Start from specified question or default to 0
+  const [currentQ, setCurrentQ] = useState(startAtQuestion || 0);
   const [answers, setAnswers] = useState<Record<string, string | string[]>>(storeAnswers);
-  // Initialize multiSel from Question 1's answer (currentQ = 0)
+  // Initialize multiSel from the starting question's answer
   const [multiSel, setMultiSel] = useState<Set<string>>(() =>
-    answerToSet(storeAnswers[filteredQuestions[0]?.id])
+    answerToSet(storeAnswers[filteredQuestions[startAtQuestion || 0]?.id])
   );
   const [animating, setAnimating] = useState(false);
 
@@ -101,6 +110,24 @@ export function AIQuestionsScreen({ onComplete, onNext, onBack, skipIndustry }: 
     if (animating) return;
     setAnimating(true);
 
+    // Check if current question is product_mode and user selected "Yes"
+    const currentQuestion = filteredQuestions[currentQ];
+    if (currentQuestion.id === 'product_mode' && onProductUpload) {
+      const selectedProductMode = Array.from(multiSel)[0]; // Get first selection
+      if (selectedProductMode === 'Yes - I have product images') {
+        // ✅ FIX: Save answer to GLOBAL store (not just local state)
+        const updatedAnswers = { ...answers, [currentQuestion.id]: Array.from(multiSel) };
+        setAnswers(updatedAnswers);
+
+        // Save ALL current answers to store before navigation
+        Object.entries(updatedAnswers).forEach(([key, val]) => setAnswer(key, val));
+
+        onProductUpload();
+        setAnimating(false);
+        return;
+      }
+    }
+
     const nextQ = currentQ + 1;
     if (nextQ >= filteredQuestions.length) {
       onComplete(answers);
@@ -113,7 +140,7 @@ export function AIQuestionsScreen({ onComplete, onNext, onBack, skipIndustry }: 
         setAnimating(false);
       }, 300);
     }
-  }, [currentQ, answers, animating, onComplete, filteredQuestions]);
+  }, [currentQ, answers, animating, onComplete, filteredQuestions, multiSel, onProductUpload, setAnswer]);
 
   const handleSelect = (option: string) => {
     if (animating) return;

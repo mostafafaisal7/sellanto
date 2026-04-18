@@ -28,7 +28,6 @@ import {
   // Messenger Bot
   MessengerBotPage,
   // V2 Redesign
-  ModeSelectPage,
   MagicModePage,
   MagicHistoryPage,
   MagicDraftPage,
@@ -88,8 +87,8 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
     if (user?.is_staff) {
       return <Navigate to="/admin-panel" replace />;
     }
-    // Regular users land on mode select page
-    return <Navigate to="/mode-select" replace />;
+    // Regular users land on dashboard
+    return <Navigate to="/" replace />;
   }
 
   return <>{children}</>;
@@ -134,16 +133,6 @@ function App() {
           element={
             <ProtectedRoute>
               <OnboardingPage />
-            </ProtectedRoute>
-          }
-        />
-
-        {/* Mode Select (full-screen, no layout) */}
-        <Route
-          path="/mode-select"
-          element={
-            <ProtectedRoute>
-              <ModeSelectPage />
             </ProtectedRoute>
           }
         />

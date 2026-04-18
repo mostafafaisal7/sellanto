@@ -382,6 +382,7 @@ def generate_image_ajax(request):
         # Save product image if uploaded
         has_product = False
         product_image_data = None
+        style_analysis = None
         if product_file:
             generation.product_image = product_file
             generation.save()
@@ -389,13 +390,71 @@ def generate_image_ajax(request):
             # Read product image data for compositing
             generation.product_image.seek(0)
             product_image_data = generation.product_image.read()
-        
+
+            # 🆕 NEW: Analyze product style if requested
+            analyze_style = request.POST.get('analyze_product_style', 'true') == 'true'
+            match_style = request.POST.get('match_product_style', 'true') == 'true'
+
+            if analyze_style:
+                try:
+                    from .product_style_analyzer import ProductStyleAnalyzer
+                    analyzer = ProductStyleAnalyzer()
+                    style_analysis = analyzer.analyze_image(product_image_data)
+
+                    # Store analysis in generation record for debugging/review
+                    generation.style_metadata = style_analysis
+                    generation.save()
+
+                    logger.info(f"Product style analysis completed: {style_analysis.get('style_mood', 'N/A')}, "
+                               f"{style_analysis.get('color_temperature', 'N/A')}, "
+                               f"{len(style_analysis.get('dominant_colors', []))} colors")
+
+                except Exception as e:
+                    logger.error(f"Product style analysis failed: {e}")
+                    style_analysis = None
+
         # Modify prompt for product compositing (generate background only)
         gen_prompt = prompt
         gen_negative = negative_prompt
         if has_product:
-            gen_prompt = enhance_product_prompt(prompt)
-            gen_negative = get_product_negative_prompt(negative_prompt)
+            # Use smart prompt builder if style analysis succeeded and user wants matching
+            match_style = request.POST.get('match_product_style', 'true') == 'true'
+            if match_style and style_analysis and style_analysis.get('success'):
+                try:
+                    from .smart_prompt_builder import (
+                        build_product_aware_prompt,
+                        get_style_aware_negative_prompt
+                    )
+
+                    # Get product context from form
+                    product_type = request.POST.get('product_type', '')
+                    background_style = request.POST.get('background_style', 'clean')
+
+                    # Build style-aware prompt
+                    gen_prompt = build_product_aware_prompt(
+                        original_prompt=prompt,
+                        product_analysis=style_analysis,
+                        product_type=product_type,
+                        background_style=background_style
+                    )
+
+                    # Build style-aware negative prompt
+                    gen_negative = get_style_aware_negative_prompt(
+                        product_analysis=style_analysis,
+                        existing_negative=negative_prompt
+                    )
+
+                    logger.info("Using style-aware prompt generation")
+
+                except Exception as e:
+                    logger.error(f"Smart prompt building failed: {e}, falling back to generic")
+                    # Fallback to generic product prompt
+                    gen_prompt = enhance_product_prompt(prompt)
+                    gen_negative = get_product_negative_prompt(negative_prompt)
+            else:
+                # Fallback to generic product prompt (old behavior)
+                gen_prompt = enhance_product_prompt(prompt)
+                gen_negative = get_product_negative_prompt(negative_prompt)
         
         # Get image service
         service = get_image_service(request.user, provider)

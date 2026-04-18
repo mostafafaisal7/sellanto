@@ -23,17 +23,110 @@ const STEPS = [
   { number: 2, title: 'All Set!', icon: CheckCircleIcon, description: "You're ready to go" },
 ];
 
-const REGION_OPTIONS = [
+// Helper function to format timezone with UTC offset
+const formatTimezone = (timezone: string): string => {
+  try {
+    // Get current date to calculate offset
+    const now = new Date();
+
+    // Create a date formatter for the specific timezone
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      timeZoneName: 'longOffset',
+    });
+
+    // Get the formatted parts
+    const parts = formatter.formatToParts(now);
+    const offsetPart = parts.find(part => part.type === 'timeZoneName');
+
+    if (offsetPart && offsetPart.value.includes('GMT')) {
+      const offset = offsetPart.value.replace('GMT', 'UTC');
+      return `${timezone} (${offset})`;
+    }
+
+    // Fallback: calculate offset manually
+    const utcDate = new Date(now.toLocaleString('en-US', { timeZone: 'UTC' }));
+    const tzDate = new Date(now.toLocaleString('en-US', { timeZone: timezone }));
+    const offsetMinutes = (tzDate.getTime() - utcDate.getTime()) / 60000;
+    const offsetHours = Math.floor(Math.abs(offsetMinutes) / 60);
+    const offsetMins = Math.abs(offsetMinutes) % 60;
+    const sign = offsetMinutes >= 0 ? '+' : '-';
+    const formattedOffset = `UTC${sign}${String(offsetHours).padStart(2, '0')}:${String(offsetMins).padStart(2, '0')}`;
+
+    return `${timezone} (${formattedOffset})`;
+  } catch {
+    // If timezone is invalid or calculation fails, return as-is
+    return timezone === 'UTC' ? 'UTC (UTC+00:00)' : timezone;
+  }
+};
+
+const COUNTRY_OPTIONS = [
   { value: 'Global', label: 'Global' },
-  { value: 'North America', label: 'North America' },
-  { value: 'South America', label: 'South America' },
-  { value: 'Europe', label: 'Europe' },
-  { value: 'Asia', label: 'Asia' },
-  { value: 'South Asia', label: 'South Asia' },
-  { value: 'Southeast Asia', label: 'Southeast Asia' },
-  { value: 'Middle East', label: 'Middle East' },
-  { value: 'Africa', label: 'Africa' },
-  { value: 'Australia & Oceania', label: 'Australia & Oceania' },
+  // North America
+  { value: 'United States', label: 'United States' },
+  { value: 'Canada', label: 'Canada' },
+  { value: 'Mexico', label: 'Mexico' },
+  // Europe
+  { value: 'United Kingdom', label: 'United Kingdom' },
+  { value: 'Germany', label: 'Germany' },
+  { value: 'France', label: 'France' },
+  { value: 'Italy', label: 'Italy' },
+  { value: 'Spain', label: 'Spain' },
+  { value: 'Netherlands', label: 'Netherlands' },
+  { value: 'Belgium', label: 'Belgium' },
+  { value: 'Switzerland', label: 'Switzerland' },
+  { value: 'Austria', label: 'Austria' },
+  { value: 'Sweden', label: 'Sweden' },
+  { value: 'Norway', label: 'Norway' },
+  { value: 'Denmark', label: 'Denmark' },
+  { value: 'Finland', label: 'Finland' },
+  { value: 'Poland', label: 'Poland' },
+  { value: 'Czech Republic', label: 'Czech Republic' },
+  { value: 'Portugal', label: 'Portugal' },
+  { value: 'Greece', label: 'Greece' },
+  { value: 'Ireland', label: 'Ireland' },
+  { value: 'Romania', label: 'Romania' },
+  { value: 'Hungary', label: 'Hungary' },
+  // Asia Pacific
+  { value: 'China', label: 'China' },
+  { value: 'Japan', label: 'Japan' },
+  { value: 'South Korea', label: 'South Korea' },
+  { value: 'India', label: 'India' },
+  { value: 'Singapore', label: 'Singapore' },
+  { value: 'Hong Kong', label: 'Hong Kong' },
+  { value: 'Taiwan', label: 'Taiwan' },
+  { value: 'Thailand', label: 'Thailand' },
+  { value: 'Malaysia', label: 'Malaysia' },
+  { value: 'Indonesia', label: 'Indonesia' },
+  { value: 'Philippines', label: 'Philippines' },
+  { value: 'Vietnam', label: 'Vietnam' },
+  { value: 'Bangladesh', label: 'Bangladesh' },
+  { value: 'Pakistan', label: 'Pakistan' },
+  { value: 'Australia', label: 'Australia' },
+  { value: 'New Zealand', label: 'New Zealand' },
+  // Middle East
+  { value: 'United Arab Emirates', label: 'United Arab Emirates' },
+  { value: 'Saudi Arabia', label: 'Saudi Arabia' },
+  { value: 'Israel', label: 'Israel' },
+  { value: 'Turkey', label: 'Turkey' },
+  { value: 'Qatar', label: 'Qatar' },
+  { value: 'Kuwait', label: 'Kuwait' },
+  { value: 'Egypt', label: 'Egypt' },
+  // South America
+  { value: 'Brazil', label: 'Brazil' },
+  { value: 'Argentina', label: 'Argentina' },
+  { value: 'Chile', label: 'Chile' },
+  { value: 'Colombia', label: 'Colombia' },
+  { value: 'Peru', label: 'Peru' },
+  // Africa
+  { value: 'South Africa', label: 'South Africa' },
+  { value: 'Nigeria', label: 'Nigeria' },
+  { value: 'Kenya', label: 'Kenya' },
+  { value: 'Egypt', label: 'Egypt' },
+  { value: 'Morocco', label: 'Morocco' },
+  // Other regions
+  { value: 'Russia', label: 'Russia' },
+  { value: 'Ukraine', label: 'Ukraine' },
 ];
 
 const INDUSTRY_OPTIONS = [
@@ -79,20 +172,65 @@ const AUDIENCE_OPTIONS = [
 function BrandWizardStep({
   onNext,
   initialBrand,
-  initialWorkspace
 }: {
   onNext: (workspace: Workspace, brand: Brand) => void;
   initialBrand?: Brand | null;
   initialWorkspace?: Workspace | null;
 }) {
   const [websiteUrl, setWebsiteUrl] = useState(initialBrand?.website_url?.replace(/^https?:\/\//, '') || '');
-  const [industry, setIndustry] = useState(initialBrand?.industry || 'SaaS');
-  const [region, setRegion] = useState(initialBrand?.target_region || 'Global');
+  const [selectedIndustries, setSelectedIndustries] = useState<string[]>([]);
+  const [customIndustries, setCustomIndustries] = useState<string[]>([]);
+  const [newCustomIndustry, setNewCustomIndustry] = useState('');
+  const [selectedCountries, setSelectedCountries] = useState<string[]>([]);
   const [selectedAudiences, setSelectedAudiences] = useState<string[]>([]);
   const [customAudiences, setCustomAudiences] = useState<string[]>(initialBrand?.audiences || []);
   const [newCustomAudience, setNewCustomAudience] = useState('');
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const handleIndustryToggle = (value: string) => {
+    if (value === 'Other') {
+      // Toggle Other option
+      if (selectedIndustries.includes('Other')) {
+        setSelectedIndustries(selectedIndustries.filter((i) => i !== 'Other'));
+        setCustomIndustries([]);
+      } else {
+        if (selectedIndustries.length + customIndustries.length < 3) {
+          setSelectedIndustries([...selectedIndustries, 'Other']);
+        }
+      }
+    } else {
+      if (selectedIndustries.includes(value)) {
+        setSelectedIndustries(selectedIndustries.filter((i) => i !== value));
+      } else {
+        const totalSelected = selectedIndustries.filter((i) => i !== 'Other').length + customIndustries.length;
+        if (totalSelected < 3) {
+          setSelectedIndustries([...selectedIndustries, value]);
+        }
+      }
+    }
+  };
+
+  const addCustomIndustry = () => {
+    if (newCustomIndustry.trim() && customIndustries.length < 3) {
+      const totalSelected = selectedIndustries.filter((i) => i !== 'Other').length + customIndustries.length;
+      if (totalSelected < 3) {
+        setCustomIndustries([...customIndustries, newCustomIndustry.trim()]);
+        setNewCustomIndustry('');
+      }
+    }
+  };
+
+  const removeCustomIndustry = (index: number) => {
+    setCustomIndustries(customIndustries.filter((_, i) => i !== index));
+  };
+
+  const handleCountryToggle = (value: string) => {
+    if (selectedCountries.includes(value)) {
+      setSelectedCountries(selectedCountries.filter((c) => c !== value));
+    } else {
+      setSelectedCountries([...selectedCountries, value]);
+    }
+  };
 
   const handleAudienceToggle = (value: string) => {
     if (value === 'Other') {
@@ -144,69 +282,85 @@ function BrandWizardStep({
       return;
     }
 
+    const totalIndustries = selectedIndustries.filter((i) => i !== 'Other').length + customIndustries.length;
+    if (totalIndustries === 0) {
+      setError('Please select at least one industry');
+      return;
+    }
+
+    if (selectedCountries.length === 0) {
+      setError('Please select at least one target region/country');
+      return;
+    }
+
     const totalAudiences = selectedAudiences.filter((a) => a !== 'Other').length + customAudiences.length;
     if (totalAudiences === 0) {
       setError('Please select at least one target audience');
       return;
     }
 
-    setLoading(true);
-    setError('');
+    // Just move to next step - DON'T SAVE YET
+    // Data will be saved when user clicks "Get Started" in Step 2
+    const normalizedUrl = normalizeUrl(websiteUrl);
+    const brandName = extractDomainName(websiteUrl);
+    const workspaceName = brandName || 'My Workspace';
 
-    try {
-      const normalizedUrl = normalizeUrl(websiteUrl);
-      const brandName = extractDomainName(websiteUrl);
-      const workspaceName = brandName || 'My Workspace';
+    // Combine selected and custom values
+    const allIndustries = [
+      ...selectedIndustries.filter((i) => i !== 'Other'),
+      ...customIndustries,
+    ];
+    const allAudiences = [
+      ...selectedAudiences.filter((a) => a !== 'Other'),
+      ...customAudiences,
+    ];
 
-      // Combine selected and custom audiences
-      const allAudiences = [
-        ...selectedAudiences.filter((a) => a !== 'Other'),
-        ...customAudiences,
-      ];
+    // For backward compatibility, join arrays as comma-separated strings
+    const industryString = allIndustries.join(', ');
+    const regionString = selectedCountries.join(', ');
 
-      // If editing existing brand, update it
-      if (initialBrand && initialWorkspace) {
-        const updatedBrand = await onboardingService.updateBrand(initialBrand.id, {
-          brand_name: brandName,
-          industry: industry,
-          target_region: region,
-          website_url: normalizedUrl,
-          audiences: allAudiences,
-        });
+    // Create temporary workspace and brand objects for preview
+    const tempWorkspace: Workspace = {
+      id: 0,
+      name: workspaceName,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      default_language: 'en',
+      max_generations_per_day: 200,
+      generations_today: 0,
+      is_active: true,
+      can_generate: true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
 
-        onNext(initialWorkspace, updatedBrand);
-      } else {
-        // Create new workspace and brand
-        const workspace = await onboardingService.createWorkspace({
-          name: workspaceName,
-          timezone: 'UTC',
-          default_language: 'en',
-        });
+    const tempBrand: Brand = {
+      id: 0,
+      workspace: 0,
+      brand_name: brandName,
+      industry: industryString,
+      target_region: regionString,
+      website_url: normalizedUrl,
+      social_links: {},
+      voice_tone: 'professional',
+      do_dont_rules: {},
+      goals: [],
+      audiences: allAudiences,
+      brand_dna: {},
+      brand_dna_source: '',
+      is_primary: true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
 
-        const brand = await onboardingService.createBrand({
-          brand_name: brandName,
-          industry: industry,
-          target_region: region,
-          website_url: normalizedUrl,
-          workspace: workspace.id,
-          voice_tone: 'professional',
-          audiences: allAudiences,
-          goals: [],
-        } as unknown as Partial<Brand>);
-
-        // Mark step 1 as complete
-        await onboardingService.completeStep(1);
-
-        onNext(workspace, brand);
-      }
-    } catch (err) {
-      setError('Failed to save brand. Please try again.');
-      setLoading(false);
-    }
+    // Move to Step 2 with temporary data (not saved yet)
+    onNext(tempWorkspace, tempBrand);
   };
 
-  const totalSelected = selectedAudiences.filter((a) => a !== 'Other').length + customAudiences.length;
-  const canAddMore = totalSelected < 3;
+  const totalIndustries = selectedIndustries.filter((i) => i !== 'Other').length + customIndustries.length;
+  const canAddMoreIndustries = totalIndustries < 3;
+
+  const totalAudiences = selectedAudiences.filter((a) => a !== 'Other').length + customAudiences.length;
+  const canAddMoreAudiences = totalAudiences < 3;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -238,27 +392,134 @@ function BrandWizardStep({
       {/* Industry */}
       <div>
         <label className="block text-sm font-medium text-text-secondary mb-2">
-          Industry <span className="text-red-400">*</span>
+          Industry <span className="text-red-400">*</span>{' '}
+          <span className="text-xs text-text-muted">(Select up to 3)</span>
         </label>
-        <select value={industry} onChange={(e) => setIndustry(e.target.value)} className="input w-full">
-          {INDUSTRY_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
+        <div className="space-y-2 max-h-64 overflow-y-auto pr-2">
+          {INDUSTRY_OPTIONS.map((opt) => {
+            const isSelected = selectedIndustries.includes(opt.value);
+            const isDisabled = !canAddMoreIndustries && !isSelected;
+
+            return (
+              <div key={opt.value}>
+                <button
+                  type="button"
+                  onClick={() => !isDisabled && handleIndustryToggle(opt.value)}
+                  disabled={isDisabled}
+                  className={`w-full text-left px-4 py-3 rounded-lg border transition-all ${
+                    isSelected
+                      ? 'bg-primary/20 border-primary text-primary'
+                      : isDisabled
+                      ? 'border-white/5 text-text-muted opacity-50 cursor-not-allowed'
+                      : 'border-white/10 text-text-secondary hover:border-white/20 hover:bg-white/[0.02]'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm">{opt.label}</span>
+                    {isSelected && <CheckCircleIcon className="w-5 h-5" />}
+                  </div>
+                </button>
+
+                {/* Custom industry input for "Other" */}
+                {opt.value === 'Other' && isSelected && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    className="mt-2 ml-4 space-y-2"
+                  >
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newCustomIndustry}
+                        onChange={(e) => setNewCustomIndustry(e.target.value)}
+                        placeholder="Specify your industry..."
+                        className="input flex-1"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            addCustomIndustry();
+                          }
+                        }}
+                        disabled={customIndustries.length >= 3}
+                      />
+                      <button
+                        type="button"
+                        onClick={addCustomIndustry}
+                        disabled={customIndustries.length >= 3 || !newCustomIndustry.trim()}
+                        className="btn-secondary px-4 disabled:opacity-50"
+                      >
+                        <PlusIcon className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    {customIndustries.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {customIndustries.map((ind, i) => (
+                          <span
+                            key={i}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-sm text-primary"
+                          >
+                            {ind}
+                            <button
+                              type="button"
+                              onClick={() => removeCustomIndustry(i)}
+                              className="hover:text-red-400 transition-colors"
+                            >
+                              <XMarkIcon className="w-3 h-3" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </motion.div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {totalIndustries > 0 && (
+          <p className="text-xs text-text-muted mt-2">
+            {totalIndustries} of 3 industries selected
+          </p>
+        )}
       </div>
 
-      {/* Region */}
+      {/* Target Regions/Countries */}
       <div>
-        <label className="block text-sm font-medium text-text-secondary mb-2">Target Region</label>
-        <select value={region} onChange={(e) => setRegion(e.target.value)} className="input w-full">
-          {REGION_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
+        <label className="block text-sm font-medium text-text-secondary mb-2">
+          Target Regions/Countries <span className="text-red-400">*</span>{' '}
+          <span className="text-xs text-text-muted">(Select one or more)</span>
+        </label>
+        <div className="space-y-2 max-h-64 overflow-y-auto pr-2">
+          {COUNTRY_OPTIONS.map((opt) => {
+            const isSelected = selectedCountries.includes(opt.value);
+
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => handleCountryToggle(opt.value)}
+                className={`w-full text-left px-4 py-3 rounded-lg border transition-all ${
+                  isSelected
+                    ? 'bg-primary/20 border-primary text-primary'
+                    : 'border-white/10 text-text-secondary hover:border-white/20 hover:bg-white/[0.02]'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-sm">{opt.label}</span>
+                  {isSelected && <CheckCircleIcon className="w-5 h-5" />}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {selectedCountries.length > 0 && (
+          <p className="text-xs text-text-muted mt-2">
+            {selectedCountries.length} {selectedCountries.length === 1 ? 'region' : 'regions'} selected
+          </p>
+        )}
       </div>
 
       {/* Target Audiences */}
@@ -269,7 +530,7 @@ function BrandWizardStep({
         <div className="space-y-2 max-h-64 overflow-y-auto pr-2">
           {AUDIENCE_OPTIONS.map((opt) => {
             const isSelected = selectedAudiences.includes(opt.value);
-            const isDisabled = !canAddMore && !isSelected;
+            const isDisabled = !canAddMoreAudiences && !isSelected;
 
             return (
               <div key={opt.value}>
@@ -349,19 +610,19 @@ function BrandWizardStep({
           })}
         </div>
 
-        {totalSelected > 0 && (
+        {totalAudiences > 0 && (
           <p className="text-xs text-text-muted mt-2">
-            {totalSelected} of 3 audiences selected
+            {totalAudiences} of 3 audiences selected
           </p>
         )}
       </div>
 
       <button
         type="submit"
-        disabled={!websiteUrl.trim() || totalSelected === 0 || loading}
+        disabled={!websiteUrl.trim() || totalIndustries === 0 || selectedCountries.length === 0 || totalAudiences === 0}
         className="btn-primary w-full py-3 disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        {loading ? 'Setting up your brand...' : 'Continue'}
+        Continue
       </button>
     </form>
   );
@@ -382,6 +643,13 @@ function AllSetStep({
   onBack: () => void;
 }) {
   const [expandedSection, setExpandedSection] = useState<string | null>('brand');
+  const [saving, setSaving] = useState(false);
+
+  const handleFinish = async () => {
+    setSaving(true);
+    await onFinish();
+    // Don't set saving to false - we're navigating away
+  };
 
   const toggleSection = (section: string) => {
     setExpandedSection(expandedSection === section ? null : section);
@@ -449,10 +717,6 @@ function AllSetStep({
                     <GlobeAltIcon className="w-4 h-4 text-text-muted" />
                     <p className="text-text-primary">{brand.target_region}</p>
                   </div>
-                </div>
-                <div>
-                  <p className="text-xs text-text-muted mb-1">Voice Tone</p>
-                  <p className="text-text-primary capitalize">{brand.voice_tone || 'Professional'}</p>
                 </div>
               </div>
             </motion.div>
@@ -534,7 +798,7 @@ function AllSetStep({
                 </div>
                 <div>
                   <p className="text-xs text-text-muted mb-1">Timezone</p>
-                  <p className="text-text-primary">{workspace.timezone}</p>
+                  <p className="text-text-primary">{formatTimezone(workspace.timezone)}</p>
                 </div>
                 <div>
                   <p className="text-xs text-text-muted mb-1">Language</p>
@@ -547,11 +811,15 @@ function AllSetStep({
       </div>
 
       <div className="flex gap-3 mt-8">
-        <button onClick={onBack} className="btn-secondary flex-1 py-3">
+        <button onClick={onBack} className="btn-secondary flex-1 py-3" disabled={saving}>
           Back
         </button>
-        <button onClick={onFinish} className="btn-primary flex-1 py-3">
-          Get Started
+        <button
+          onClick={handleFinish}
+          className="btn-primary flex-1 py-3 disabled:opacity-50 disabled:cursor-not-allowed"
+          disabled={saving}
+        >
+          {saving ? 'Saving your setup...' : 'Get Started'}
         </button>
       </div>
     </div>
@@ -606,13 +874,49 @@ export function OnboardingPage() {
   };
 
   const handleFinish = async () => {
+    if (!workspace || !brand) return;
+
     try {
-      await onboardingService.completeStep(2);
+      // If workspace and brand don't have IDs, they haven't been saved yet
+      if (workspace.id === 0 && brand.id === 0) {
+        // Create workspace
+        const savedWorkspace = await onboardingService.createWorkspace({
+          name: workspace.name,
+          timezone: workspace.timezone,
+          default_language: workspace.default_language,
+        });
+
+        // Create brand
+        const savedBrand = await onboardingService.createBrand({
+          brand_name: brand.brand_name,
+          industry: brand.industry,
+          target_region: brand.target_region,
+          website_url: brand.website_url,
+          workspace: savedWorkspace.id,
+          voice_tone: brand.voice_tone,
+          audiences: brand.audiences,
+          goals: brand.goals,
+        } as unknown as Partial<Brand>);
+
+        // Update local state with saved data
+        setWorkspace(savedWorkspace);
+        setBrand(savedBrand);
+
+        // Mark steps as complete
+        await onboardingService.completeStep(1);
+        await onboardingService.completeStep(2);
+      } else {
+        // Data already exists (user came back), just mark step 2 complete
+        await onboardingService.completeStep(2);
+      }
+
       await fetchUser();
-    } catch {
-      /* ok */
+      navigate('/dashboard', { replace: true });
+    } catch (error) {
+      console.error('Failed to save onboarding data:', error);
+      // Show error to user
+      alert('Failed to complete setup. Please try again.');
     }
-    navigate('/dashboard', { replace: true });
   };
 
   const handleBack = () => {

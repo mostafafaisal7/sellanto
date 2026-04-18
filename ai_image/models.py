@@ -316,6 +316,13 @@ class ImageGeneration(models.Model):
     product_scale = models.IntegerField(default=50, help_text="Product size as percentage (20-90)")
     composited_image = models.ImageField(upload_to=generated_image_path, blank=True, null=True, help_text="Final composited image with product")
 
+    # Product Style Analysis (for style-aware background generation)
+    style_metadata = models.JSONField(
+        blank=True,
+        null=True,
+        help_text="Product style analysis data (colors, lighting, mood) for matching background generation"
+    )
+
     # Copy Overlay (post-generation Pillow overlay)
     copy_overlay_image = models.ImageField(upload_to=generated_image_path, blank=True, null=True, help_text="Image with copy text overlay applied")
     copy_overlay_text = models.CharField(max_length=200, blank=True, default='', help_text="The copy text overlaid on the image")

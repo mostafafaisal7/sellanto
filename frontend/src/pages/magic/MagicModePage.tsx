@@ -3,10 +3,11 @@ import { useMagicModeStore } from '../../store/magicModeStore';
 import { useAuthStore } from '../../store';
 import { URLInputScreen } from './URLInputScreen';
 import { AIQuestionsScreen } from './AIQuestionsScreen';
+import { ProductUploadScreen } from './ProductUploadScreen';
 import { AIWorkingScreen } from './AIWorkingScreen';
 import { ResultsScreen } from './ResultsScreen';
 import { onboardingService } from '../../services';
-import { buildMagicCacheKey } from './cacheUtils';
+import { lookupCachedPosts } from './cacheUtils';
 
 interface ExistingBrand {
   id: number;
@@ -52,32 +53,6 @@ function mapBrandVoiceToTone(brandVoice: string): string {
   return 'Professional & Authoritative'; // Default
 }
 
-// 🔧 Helper: Robust JSON array parsing for backend TextField data
-function parseJsonArray(data: any, fieldName: string, fallback: any[] = []): any[] {
-  try {
-    // Already an array - return as is
-    if (Array.isArray(data)) return data;
-
-    // String that needs parsing
-    if (typeof data === 'string') {
-      const trimmed = data.trim();
-      // Empty string or empty array
-      if (!trimmed || trimmed === '[]') return fallback;
-
-      // Parse JSON string
-      const parsed = JSON.parse(trimmed);
-      return Array.isArray(parsed) ? parsed : fallback;
-    }
-
-    // Unexpected type
-    console.warn(`[MagicMode] Unexpected type for ${fieldName}:`, typeof data, data);
-    return fallback;
-  } catch (error) {
-    console.error(`[MagicMode] Failed to parse ${fieldName}:`, data, error);
-    return fallback;
-  }
-}
-
 // Extract platforms from social_platforms or target_audience
 function extractPlatforms(brand: ExistingBrand): string[] {
   const platforms: string[] = [];
@@ -120,13 +95,64 @@ export function MagicModePage() {
   const [showResumeWarning, setShowResumeWarning] = useState(false);
   const [checked, setChecked] = useState(false);
 
-  // Show resume warning if pipeline was completed and there are unfinished posts
+  // ✅ FIX: Check for resume flag on mount (survives page refresh via localStorage)
+  // This replaces the old pipelineCompleted check which was lost on page refresh
   useEffect(() => {
+    if (checked) return;
+
+    // Check in-memory store first (for in-session navigation)
     if (store.pipelineCompleted && store.generatedPosts.length > 0 && store.screen !== 'results') {
+      console.log('[MagicMode] ✅ In-session posts found - showing resume warning');
       setShowResumeWarning(true);
       setChecked(true);
+      return;
     }
+
+    // Check localStorage flag (for page refresh / cross-session)
+    try {
+      const userId = useAuthStore.getState().user?.id;
+      if (!userId) {
+        setChecked(true);
+        return;
+      }
+
+      const resumeFlagKey = `magic_has_posts_${userId}`;
+      const hasPostsFlag = localStorage.getItem(resumeFlagKey);
+
+      // ✅ Only show resume popup if NOT already on results screen
+      // If user just generated and is on results, don't interrupt with popup
+      if (hasPostsFlag === 'true' && store.screen !== 'results') {
+        console.log('[MagicMode] ✅ Resume flag found - showing resume warning');
+        setShowResumeWarning(true);
+      } else if (hasPostsFlag === 'true' && store.screen === 'results') {
+        console.log('[MagicMode] ℹ️ Resume flag exists but already on results screen - skipping popup');
+      }
+    } catch (error) {
+      console.error('[MagicMode] Failed to check localStorage resume flag:', error);
+    }
+
+    setChecked(true);
   }, []);
+
+  // ✅ WATCH: Update resume warning when posts are generated during session
+  useEffect(() => {
+    if (!checked) return;
+
+    if (store.pipelineCompleted && store.generatedPosts.length > 0 && store.screen !== 'results' && !showResumeWarning) {
+      console.log('[MagicMode] ✅ Posts completed during session - enabling resume warning');
+      setShowResumeWarning(true);
+
+      // Set localStorage flag for next page load
+      try {
+        const userId = useAuthStore.getState().user?.id;
+        if (userId) {
+          localStorage.setItem(`magic_has_posts_${userId}`, 'true');
+        }
+      } catch (error) {
+        console.error('[MagicMode] Failed to set localStorage resume flag:', error);
+      }
+    }
+  }, [store.pipelineCompleted, store.generatedPosts.length, store.screen, checked]);
 
   // On mount, check for existing brand with DNA
   useEffect(() => {
@@ -239,8 +265,10 @@ export function MagicModePage() {
 
   const handleQuestionsComplete = useCallback((answers: Record<string, string | string[]>) => {
     Object.entries(answers).forEach(([key, val]) => setAnswer(key, val));
+    // Reset product upload flag after completing all questions
+    store.setReturningFromProductUpload(false);
     setScreen('working');
-  }, [setAnswer, setScreen]);
+  }, [setAnswer, setScreen, store]);
 
   const handleQuestionsNext = useCallback(async () => {
     // Get user ID from auth store
@@ -251,64 +279,45 @@ export function MagicModePage() {
       return;
     }
 
-    // ✅ Use unified cache key generation (matches AIWorkingScreen save)
-    let cacheKey: string;
-    try {
-      const result = buildMagicCacheKey(store.answers, store.customAnswers, userId);
-      cacheKey = result.cacheKey;
-    } catch (err) {
-      console.error('[MagicMode] Failed to build cache key:', err);
-      setScreen('working');
-      return;
-    }
+    // ✅ Use unified cache lookup function
+    const cachedPosts = await lookupCachedPosts(store.answers, store.customAnswers || {}, userId);
 
-    console.log('[MagicMode] Looking up cached posts with key:', cacheKey);
+    if (cachedPosts.length > 0) {
+      console.log('[MagicMode] Cache HIT - Loading cached posts');
 
-    try {
-      const { api } = await import('../../services');
-      const response = await api.get(`/magic/posts/${userId}/${cacheKey}/`);
+      store.setGeneratedPosts(cachedPosts as any);
+      store.setHasPreviousGeneration(true);
 
-      if (response.data && response.data.posts && response.data.posts.length > 0) {
-        console.log('[MagicMode] Cache HIT - Loading', response.data.posts.length, 'existing posts');
-        // Convert backend posts to MagicPost format
-        const posts = response.data.posts.map((p: any) => {
-          const platforms = parseJsonArray(p.platforms, 'platforms', ['LinkedIn']);
-          const mediaFiles = parseJsonArray(p.media_files, 'media_files', []);
+      // 🔍 CRITICAL FIX: Store current answers as "original" for change detection
+      // When user goes back and changes answers, we'll detect and show "Generate Posts" instead
+      store.setOriginalAnswers(store.answers);
+      store.setOriginalCustomAnswers(store.customAnswers || {});
 
-          return {
-            id: p.id,
-            title: p.caption ? (p.caption.substring(0, 50) + (p.caption.length > 50 ? '...' : '')) : 'Post',
-            platform: platforms[0] || 'LinkedIn',
-            imageOverlay: '',
-            imageStyle: '',
-            caption: p.caption || '',
-            imageUrl: mediaFiles[0] || undefined,
-            status: p.status === 'draft' ? 'ready' : p.status,
-            approvedPlatforms: p.status === 'approved' ? platforms : undefined,
-          };
-        });
-
-        store.setGeneratedPosts(posts);
-        // ✅ Only mark as having previous posts if array is not empty
-        store.setHasPreviousGeneration(posts.length > 0);
-
-        // 🔍 CRITICAL FIX: Store current answers as "original" for change detection
-        // When user goes back and changes answers, we'll detect and show "Generate Posts" instead
-        store.setOriginalAnswers(store.answers);
-        store.setOriginalCustomAnswers(store.customAnswers || {});
-
-        setScreen('results');
-      } else {
-        console.log('[MagicMode] Cache MISS - Generating new posts');
-        // No cached posts, need to generate
-        setScreen('working');
-      }
-    } catch (error) {
-      console.error('[MagicMode] Cache lookup failed:', error);
-      // On error, generate new posts
+      setScreen('results');
+    } else {
+      console.log('[MagicMode] Cache MISS - Generating new posts');
       setScreen('working');
     }
   }, [store, setScreen]);
+
+  const handleProductUpload = useCallback(() => {
+    // Mark that we're entering product upload flow
+    store.setReturningFromProductUpload(true);
+    setScreen('product_upload');
+  }, [setScreen, store]);
+
+  const handleProductUploadNext = useCallback(() => {
+    // After product upload, continue to remaining questions (platforms & colors)
+    // Keep returningFromProductUpload=true so AIQuestionsScreen starts at Q5
+    setScreen('questions');
+  }, [setScreen]);
+
+  const handleProductUploadBack = useCallback(() => {
+    // Go back to questions screen (will resume at product_mode question)
+    // Reset flag so it starts from product_mode question, not platforms
+    store.setReturningFromProductUpload(false);
+    setScreen('questions');
+  }, [setScreen, store]);
 
   const handleQuestionsBack = useCallback(() => {
     if (store.skipInitialQuestions && existingBrand) {
@@ -338,9 +347,69 @@ export function MagicModePage() {
     setScreen('working');
   }, [setScreen]);
 
+  const handleResumeFromFlag = useCallback(async () => {
+    // Load recent magic posts from backend
+    try {
+      const { api } = await import('../../services');
+      const response = await api.get('/magic/history/');
+
+      // Extract posts from history (limited to recent 10)
+      const posts = (response.data?.sessions?.[0]?.posts || []).slice(0, 10);
+
+      if (posts.length > 0) {
+        console.log('[MagicMode] ✅ Loaded', posts.length, 'posts from history for resume');
+
+        // Convert to MagicPost format
+        const magicPosts = posts.map((p: any) => {
+          const platforms = typeof p.platforms_list === 'string'
+            ? JSON.parse(p.platforms_list || '["LinkedIn"]')
+            : (p.platforms_list || ['LinkedIn']);
+          const mediaFiles = p.media_urls || [];
+
+          return {
+            id: p.id,
+            title: p.caption ? (p.caption.substring(0, 50) + (p.caption.length > 50 ? '...' : '')) : 'Post',
+            platform: platforms[0] || 'LinkedIn',
+            imageOverlay: '',
+            imageStyle: '',
+            caption: p.caption || '',
+            imageUrl: mediaFiles[0] || undefined,
+            status: p.status === 'draft' ? 'ready' : p.status,
+            approvedPlatforms: p.status === 'approved' ? platforms : undefined,
+          };
+        });
+
+        store.setGeneratedPosts(magicPosts as any);
+        store.setPipelineCompleted(true);
+        setShowResumeWarning(false);
+        setScreen('results');
+      } else {
+        console.log('[MagicMode] ⚠️ No posts found in history - clearing resume flag');
+        // Clear localStorage flag if no posts found
+        const userId = useAuthStore.getState().user?.id;
+        if (userId) {
+          localStorage.removeItem(`magic_has_posts_${userId}`);
+        }
+        setShowResumeWarning(false);
+        store.reset();
+        setScreen('url');
+      }
+    } catch (error) {
+      console.error('[MagicMode] Failed to load posts for resume:', error);
+      setShowResumeWarning(false);
+      store.reset();
+      setScreen('url');
+    }
+  }, [store, setScreen]);
+
   // Show resume warning for unfinished posts
-  if (showResumeWarning && store.generatedPosts.length > 0) {
-    const unfinished = store.generatedPosts.filter((p) => p.status !== 'published' && p.status !== 'scheduled').length;
+  // ✅ FIX: Changed condition to allow showing even when store.generatedPosts is empty
+  // (happens on page refresh - posts will be loaded when user clicks Resume)
+  if (showResumeWarning) {
+    const unfinished = store.generatedPosts.length > 0
+      ? store.generatedPosts.filter((p) => p.status !== 'published' && p.status !== 'scheduled').length
+      : 0;
+
     return (
       <div
         className="min-h-screen flex items-center justify-center px-4"
@@ -357,16 +426,28 @@ export function MagicModePage() {
           <div className="text-center mb-6">
             <div className="text-[48px] mb-3">📝</div>
             <h2 className="text-[24px] font-extrabold text-text-primary mb-2">
-              Unfinished posts found
+              {store.generatedPosts.length > 0 ? 'Unfinished posts found' : 'Previous session found'}
             </h2>
             <p className="text-[15px] text-text-secondary">
-              You have {unfinished} unfinished post{unfinished !== 1 ? 's' : ''} from your last session.
+              {store.generatedPosts.length > 0
+                ? `You have ${unfinished} unfinished post${unfinished !== 1 ? 's' : ''} from your last session.`
+                : 'You have posts from a previous Magic Mode session.'
+              }
             </p>
           </div>
 
           <div className="flex flex-col gap-3">
             <button
-              onClick={() => { setShowResumeWarning(false); setScreen('results'); }}
+              onClick={() => {
+                if (store.generatedPosts.length > 0) {
+                  // Posts already loaded - go to results
+                  setShowResumeWarning(false);
+                  setScreen('results');
+                } else {
+                  // Posts not loaded - fetch from backend first
+                  handleResumeFromFlag();
+                }
+              }}
               className="w-full py-3.5 rounded-[14px] text-[15px] font-bold text-white transition-all"
               style={{
                 background: 'linear-gradient(135deg, rgb(var(--c-coral)), rgb(var(--c-coral-hover)))',
@@ -376,7 +457,16 @@ export function MagicModePage() {
               Resume where I left off
             </button>
             <button
-              onClick={() => { setShowResumeWarning(false); store.reset(); setScreen('url'); }}
+              onClick={() => {
+                setShowResumeWarning(false);
+                // Clear localStorage flag
+                const userId = useAuthStore.getState().user?.id;
+                if (userId) {
+                  localStorage.removeItem(`magic_has_posts_${userId}`);
+                }
+                store.reset();
+                setScreen('url');
+              }}
               className="w-full py-3.5 rounded-[14px] text-[15px] font-semibold transition-all"
               style={{
                 background: 'rgba(255,255,255,0.06)',
@@ -505,9 +595,13 @@ export function MagicModePage() {
           onComplete={handleQuestionsComplete}
           onNext={handleQuestionsNext}
           onBack={handleQuestionsBack}
+          onProductUpload={handleProductUpload}
           skipIndustry={store.skipInitialQuestions}
+          startAtQuestion={store.returningFromProductUpload ? 4 : undefined}
         />
       );
+    case 'product_upload':
+      return <ProductUploadScreen onNext={handleProductUploadNext} onBack={handleProductUploadBack} />;
     case 'working':
       return <AIWorkingScreen onComplete={handleWorkingComplete} onStop={handleWorkingStop} />;
     case 'results':

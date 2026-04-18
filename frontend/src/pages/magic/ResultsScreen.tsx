@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 import { useMagicModeStore, type MagicPost } from '../../store/magicModeStore';
+import { useAuthStore } from '../../store';
 import { FeedbackModal } from '../../components/redesign/FeedbackModal';
 import captionService from '../../services/captionService';
 import imageService from '../../services/imageService';
@@ -150,7 +151,21 @@ function ApprovedPlatformCard({
   );
 }
 
-function PostCard({ post, index, justUpdated, onApproveClick, onConnectError }: { post: MagicPost; index: number; justUpdated?: boolean; onApproveClick: (postId: number) => void; onConnectError: (msg: string) => void }) {
+function PostCard({
+  post,
+  index,
+  justUpdated,
+  onApproveClick,
+  onConnectError,
+  onCompletionCheck
+}: {
+  post: MagicPost;
+  index: number;
+  justUpdated?: boolean;
+  onApproveClick: (postId: number) => void;
+  onConnectError: (msg: string) => void;
+  onCompletionCheck: () => void;
+}) {
   const { openFeedback, generatedPosts, setGeneratedPosts } = useMagicModeStore();
   const isApproved = post.status === 'approved';
   const isPublished = post.status === 'published';
@@ -273,6 +288,16 @@ function PostCard({ post, index, justUpdated, onApproveClick, onConnectError }: 
           p.id === post.id ? { ...p, status: 'scheduled' as const, scheduledTime: scheduledTime } : p
         )
       );
+
+      // ✅ Check if all posts are now completed and clear flag
+      const updatedPosts = generatedPosts.map((p) =>
+        p.id === post.id ? { ...p, status: 'scheduled' as const, scheduledTime: scheduledTime } : p
+      );
+      const allCompleted = updatedPosts.every((p) => p.status === 'published' || p.status === 'scheduled');
+      if (allCompleted) {
+        onCompletionCheck();
+      }
+
       setShowScheduler(false);
     } catch (err: any) {
       const msg = err?.response?.data?.error || err?.message || 'Failed to schedule post.';
@@ -354,6 +379,16 @@ function PostCard({ post, index, justUpdated, onApproveClick, onConnectError }: 
           p.id === post.id ? { ...p, status: 'published' as const } : p
         )
       );
+
+      // ✅ Check if all posts are now completed and clear flag
+      // Note: This uses updated generatedPosts from map above
+      const updatedPosts = generatedPosts.map((p) =>
+        p.id === post.id ? { ...p, status: 'published' as const } : p
+      );
+      const allCompleted = updatedPosts.every((p) => p.status === 'published' || p.status === 'scheduled');
+      if (allCompleted) {
+        onCompletionCheck();
+      }
     } catch (err: any) {
       const msg = err?.response?.data?.error || err?.message || 'Failed to publish post.';
       if (msg.toLowerCase().includes('no connected account')) {
@@ -726,6 +761,65 @@ export function ResultsScreen({ onGenerateMore, onGoBack }: ResultsScreenProps) 
   const [approveModalPostId, setApproveModalPostId] = useState<number | null>(null);
   const selectedPlatforms: string[] = Array.isArray(answers.platforms) ? answers.platforms as string[] : [];
   const [loadingPosts, setLoadingPosts] = useState(false);
+
+  // ✅ HELPER: Check if all posts are completed and clear localStorage flag
+  const checkAndClearCompletionFlag = () => {
+    try {
+      // Check if ALL posts are either published or scheduled
+      const allPostsCompleted = generatedPosts.every(
+        (p) => p.status === 'published' || p.status === 'scheduled'
+      );
+
+      if (allPostsCompleted && generatedPosts.length > 0) {
+        const userId = useAuthStore.getState().user?.id;
+        if (userId) {
+          const flagKey = `magic_has_posts_${userId}`;
+          localStorage.removeItem(flagKey);
+          console.log('[ResultsScreen] ✅ All posts completed - cleared localStorage resume flag');
+        }
+      }
+    } catch (error) {
+      console.error('[ResultsScreen] Failed to clear completion flag:', error);
+    }
+  };
+
+  // ✅ AUTO-CHECK: Watch for all posts being completed and clear flag automatically
+  useEffect(() => {
+    if (generatedPosts.length > 0) {
+      const allCompleted = generatedPosts.every(
+        (p) => p.status === 'published' || p.status === 'scheduled'
+      );
+
+      if (allCompleted) {
+        // Small delay to ensure state has settled
+        const timer = setTimeout(() => {
+          checkAndClearCompletionFlag();
+        }, 500);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [generatedPosts]);
+
+  // ✅ SET RESUME FLAG: Only when user LEAVES with unfinished posts
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      // Check if there are truly unfinished posts
+      const hasUnfinishedPosts = generatedPosts.some(
+        (p) => p.status !== 'published' && p.status !== 'scheduled'
+      );
+
+      if (hasUnfinishedPosts && generatedPosts.length > 0) {
+        const userId = useAuthStore.getState().user?.id;
+        if (userId) {
+          localStorage.setItem(`magic_has_posts_${userId}`, 'true');
+          console.log('[ResultsScreen] ⚠️ User leaving with unfinished posts - setting resume flag');
+        }
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [generatedPosts]);
 
   // Load posts from backend if generatedPosts is empty (e.g., page refresh or localStorage cleared)
   useEffect(() => {
@@ -1178,7 +1272,15 @@ export function ResultsScreen({ onGenerateMore, onGoBack }: ResultsScreenProps) 
         {/* Posts */}
         <div className="space-y-6">
           {generatedPosts.map((post, i) => (
-            <PostCard key={post.id} post={post} index={i} justUpdated={justUpdatedId === post.id} onApproveClick={handleApproveClick} onConnectError={setConnectModalError} />
+            <PostCard
+              key={post.id}
+              post={post}
+              index={i}
+              justUpdated={justUpdatedId === post.id}
+              onApproveClick={handleApproveClick}
+              onConnectError={setConnectModalError}
+              onCompletionCheck={checkAndClearCompletionFlag}
+            />
           ))}
         </div>
 

@@ -96,6 +96,7 @@ from .serializers import (
 
 from accounts.api_keys import get_openai_key, get_gemini_key, get_claude_key, mask_key
 from accounts.services.diamond_service import pre_check, deduct_diamonds
+from .db_utils import safe_model_save
 
 
 def diamond_gate(user, feature, **kwargs):
@@ -2087,8 +2088,11 @@ class GenerateBrandDNAView(APIView):
         # Accept website_url from POST body
         website_url = request.data.get('website_url', '').strip()
         if website_url:
-            brand.website_url = website_url
-            brand.save(update_fields=['website_url'])
+            # Only save if URL actually changed (avoid unnecessary DB writes)
+            if brand.website_url != website_url:
+                brand.website_url = website_url
+                # Use safe_model_save with retry logic for SQLite concurrency
+                safe_model_save(brand, update_fields=['website_url'])
         elif not brand.website_url:
             return Response(
                 {'error': 'Please provide your website URL.'},

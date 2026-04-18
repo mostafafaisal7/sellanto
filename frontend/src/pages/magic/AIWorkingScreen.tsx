@@ -243,30 +243,91 @@ export function AIWorkingScreen({ onComplete, onStop }: AIWorkingScreenProps) {
 
       // Step 5: Generate images for each post
       setStep(5);
-      for (let i = 0; i < posts.length; i++) {
-        if (cancelledRef.current) return;
-        try {
-          const post = posts[i];
-          const imgReq: Parameters<typeof imageService.generate>[0] = {
-            prompt: `Create a professional social media image for: "${post.title}". ${post.imageStyle}`,
-            title: post.title,
-            provider: 'gemini',
-            style: 'modern',
-            enhance_prompt: true,
-          };
-          if (brandLogoId) {
-            imgReq.brand_logo_id = brandLogoId;
-            imgReq.logo_position = 'bottom_right';
+
+      // Check if user selected product mode
+      const productMode = store.answers.product_mode;
+      const useProductImages = Array.isArray(productMode)
+        ? productMode[0] === 'Yes - I have product images'
+        : productMode === 'Yes - I have product images';
+
+      if (useProductImages && store.productImages.length > 0) {
+        // PRODUCT-BASED IMAGE GENERATION
+        console.log('[AIWorkingScreen] Using product-based image generation with', store.productImages.length, 'product images');
+
+        for (let i = 0; i < posts.length; i++) {
+          if (cancelledRef.current) return;
+          try {
+            const post = posts[i];
+            // Use product images in round-robin fashion
+            const productImage = store.productImages[i % store.productImages.length];
+
+            // Build prompt incorporating product details
+            const productType = store.productAnswers.type || 'product';
+            const productFeatures = store.productAnswers.features || '';
+            const backgroundStyle = store.productAnswers.background || 'clean';
+
+            const productPrompt = `Professional ${backgroundStyle} background showcasing ${productType} for social media post about "${post.title}". ${productFeatures}. ${post.imageStyle}. Ensure product is prominent and well-lit.`;
+
+            const imgReq: Parameters<typeof imageService.generate>[0] = {
+              prompt: productPrompt,
+              title: post.title,
+              provider: 'gemini',
+              style: 'modern',
+              enhance_prompt: true,
+              product_image: productImage,
+              product_type: store.productAnswers.type || 'product',
+              background_style: store.productAnswers.background || 'clean',
+              analyze_product_style: true,
+              match_product_style: true,
+              product_position: 'center_bottom',  // ✅ FIX: Place product on table/surface instead of floating
+              product_scale: 1.0,
+            };
+
+            if (brandLogoId) {
+              imgReq.brand_logo_id = brandLogoId;
+              imgReq.logo_position = 'bottom_right';
+            }
+
+            const imgResult = await imageService.generate(imgReq);
+            const imgUrl = imgResult.generated_image_with_logo || imgResult.generated_image || imgResult.composited_image;
+            if (imgUrl) {
+              posts[i] = { ...post, imageUrl: imgUrl };
+            }
+          } catch (error) {
+            console.error('[AIWorkingScreen] Product image generation failed:', error);
+            // Non-fatal — post will show placeholder with generate button
           }
-          const imgResult = await imageService.generate(imgReq);
-          const imgUrl = imgResult.generated_image_with_logo || imgResult.generated_image || imgResult.composited_image;
-          if (imgUrl) {
-            posts[i] = { ...post, imageUrl: imgUrl };
+        }
+      } else {
+        // AI-ONLY IMAGE GENERATION (Current flow)
+        console.log('[AIWorkingScreen] Using AI-only image generation');
+
+        for (let i = 0; i < posts.length; i++) {
+          if (cancelledRef.current) return;
+          try {
+            const post = posts[i];
+            const imgReq: Parameters<typeof imageService.generate>[0] = {
+              prompt: `Create a professional social media image for: "${post.title}". ${post.imageStyle}`,
+              title: post.title,
+              provider: 'gemini',
+              style: 'modern',
+              enhance_prompt: true,
+            };
+            if (brandLogoId) {
+              imgReq.brand_logo_id = brandLogoId;
+              imgReq.logo_position = 'bottom_right';
+            }
+            const imgResult = await imageService.generate(imgReq);
+            const imgUrl = imgResult.generated_image_with_logo || imgResult.generated_image || imgResult.composited_image;
+            if (imgUrl) {
+              posts[i] = { ...post, imageUrl: imgUrl };
+            }
+          } catch {
+            // Non-fatal — post will show placeholder with generate button
           }
-        } catch {
-          // Non-fatal — post will show placeholder with generate button
         }
       }
+
       if (cancelledRef.current) return;
 
       // 💾 Save posts to database (database = single source of truth)
@@ -329,6 +390,10 @@ export function AIWorkingScreen({ onComplete, onStop }: AIWorkingScreenProps) {
       setStep(6);
       store.setGeneratedPosts(posts);
       store.setPipelineCompleted(true);
+
+      // ✅ Only set in-memory pipeline completion flag
+      // localStorage flag will be set by ResultsScreen on beforeunload if posts are unfinished
+      console.log('[AIWorkingScreen] ✅ Generation complete, navigating to results');
 
       // Brief pause so user sees the final step
       await new Promise((r) => setTimeout(r, 800));

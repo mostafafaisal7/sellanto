@@ -1,5 +1,6 @@
 import api, { setTokens, clearTokens } from './api';
 import type { User, LoginCredentials, RegisterData, AuthTokens } from '../types';
+import { useAuthStore } from '../store';
 
 export const authService = {
   async login(credentials: LoginCredentials): Promise<{ user: User; tokens: AuthTokens }> {
@@ -37,6 +38,17 @@ export const authService = {
         console.log('[Auth] Magic Mode state cleared on logout');
       } catch (err) {
         console.error('[Auth] Failed to clear Magic Mode state:', err);
+      }
+
+      // ✅ Clear localStorage resume flag on logout
+      try {
+        const userId = useAuthStore.getState().user?.id;
+        if (userId) {
+          localStorage.removeItem(`magic_has_posts_${userId}`);
+          console.log('[Auth] Magic Mode resume flag cleared from localStorage');
+        }
+      } catch (err) {
+        console.error('[Auth] Failed to clear Magic Mode resume flag:', err);
       }
     }
   },

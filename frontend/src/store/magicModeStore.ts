@@ -21,6 +21,12 @@ export interface MagicPost {
   magic_draft_id?: number; // 🔗 Database link to Draft post for "Add to Calendar" flow
 }
 
+export interface ProductAnswers {
+  type?: string;
+  features?: string;
+  background?: string;
+}
+
 export interface MagicIdeaData {
   id: number;
   title: string;
@@ -38,7 +44,7 @@ export interface MagicCaptionData {
 }
 
 interface MagicModeState {
-  screen: 'mode' | 'url' | 'questions' | 'working' | 'results';
+  screen: 'mode' | 'url' | 'questions' | 'product_upload' | 'working' | 'results';
   websiteUrl: string;
   answers: Record<string, string | string[]>;
   customAnswers: Record<string, string>; // NEW: Store custom "Other" text values
@@ -54,6 +60,10 @@ interface MagicModeState {
   // Logo (not persisted — File objects can't be serialized)
   logoFile: File | null;
 
+  // Product upload (not persisted — File objects can't be serialized)
+  productImages: File[];
+  productAnswers: ProductAnswers;
+
   // Intermediate pipeline data (for Overflow bridge)
   trendingTopics: string[];
   ideasData: MagicIdeaData[];
@@ -64,6 +74,9 @@ interface MagicModeState {
   originalAnswers: Record<string, string | string[]>;
   originalCustomAnswers: Record<string, string>; // Track original custom "Other" text values
   answersChanged: boolean;
+
+  // Product upload flow tracking
+  returningFromProductUpload: boolean;
 
   setScreen: (screen: MagicModeState['screen']) => void;
   setUrl: (url: string) => void;
@@ -90,6 +103,12 @@ interface MagicModeState {
   setOriginalCustomAnswers: (customAnswers: Record<string, string>) => void;
   markAnswersChanged: () => void;
   resetAnswersChanged: () => void;
+  setProductImages: (images: File[]) => void;
+  addProductImage: (image: File) => void;
+  removeProductImage: (index: number) => void;
+  setProductAnswer: (key: keyof ProductAnswers, value: string) => void;
+  clearProductData: () => void;
+  setReturningFromProductUpload: (value: boolean) => void;
   reset: () => void;
 }
 
@@ -107,6 +126,8 @@ export const useMagicModeStore = create<MagicModeState>()((set) => ({
       error: null,
       hasPreviousGeneration: false,
       logoFile: null,
+      productImages: [],
+      productAnswers: {},
       trendingTopics: [],
       ideasData: [],
       captionsData: [],
@@ -114,6 +135,7 @@ export const useMagicModeStore = create<MagicModeState>()((set) => ({
       originalAnswers: {},
       originalCustomAnswers: {},
       answersChanged: false,
+      returningFromProductUpload: false,
 
       setScreen: (screen) => set({ screen }),
       setUrl: (websiteUrl) => set({ websiteUrl }),
@@ -162,6 +184,15 @@ export const useMagicModeStore = create<MagicModeState>()((set) => ({
       setOriginalCustomAnswers: (originalCustomAnswers) => set({ originalCustomAnswers }),
       markAnswersChanged: () => set({ answersChanged: true }),
       resetAnswersChanged: () => set({ answersChanged: false }),
+      setProductImages: (productImages) => set({ productImages }),
+      addProductImage: (image) =>
+        set((state) => ({ productImages: [...state.productImages, image] })),
+      removeProductImage: (index) =>
+        set((state) => ({ productImages: state.productImages.filter((_, i) => i !== index) })),
+      setProductAnswer: (key, value) =>
+        set((state) => ({ productAnswers: { ...state.productAnswers, [key]: value } })),
+      clearProductData: () => set({ productImages: [], productAnswers: {} }),
+      setReturningFromProductUpload: (returningFromProductUpload) => set({ returningFromProductUpload }),
       reset: () => {
         // No localStorage cleanup needed - database is source of truth
         set({
@@ -174,6 +205,8 @@ export const useMagicModeStore = create<MagicModeState>()((set) => ({
           postCount: 2,
           brandId: null,
           logoFile: null,
+          productImages: [],
+          productAnswers: {},
           skipInitialQuestions: false,
           loading: false,
           error: null,
@@ -185,6 +218,7 @@ export const useMagicModeStore = create<MagicModeState>()((set) => ({
           originalAnswers: {},
           originalCustomAnswers: {},
           answersChanged: false,
+          returningFromProductUpload: false,
         });
       },
     }));

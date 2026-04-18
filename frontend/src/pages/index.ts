@@ -27,7 +27,6 @@ export { IdeaHistoryPage } from './IdeaHistoryPage';
 export { MessengerBotPage } from './MessengerBotPage';
 
 // V2 Redesign pages
-export { ModeSelectPage } from './magic/ModeSelectPage';
 export { MagicModePage } from './magic/MagicModePage';
 export { MagicHistoryPage } from './magic/MagicHistoryPage';
 export { MagicDraftPage } from './magic/MagicDraftPage';

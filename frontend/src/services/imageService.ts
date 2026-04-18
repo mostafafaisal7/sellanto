@@ -41,6 +41,10 @@ export interface GenerateImageRequest {
   add_lighting?: string;
   camera_angle?: string;
   product_image?: File;
+  product_type?: string;
+  background_style?: string;
+  analyze_product_style?: boolean;
+  match_product_style?: boolean;
   product_position?: string;
   product_scale?: number;
   with_copy?: boolean;
@@ -93,6 +97,10 @@ export const imageService = {
     if (data.camera_angle) formData.append('camera_angle', data.camera_angle);
     if (data.product_image) {
       formData.append('product_image', data.product_image);
+      if (data.product_type) formData.append('product_type', data.product_type);
+      if (data.background_style) formData.append('background_style', data.background_style);
+      if (data.analyze_product_style != null) formData.append('analyze_product_style', String(data.analyze_product_style));
+      if (data.match_product_style != null) formData.append('match_product_style', String(data.match_product_style));
       if (data.product_position) formData.append('product_position', data.product_position);
       if (data.product_scale != null) formData.append('product_scale', String(data.product_scale));
     }
