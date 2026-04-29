@@ -21,10 +21,26 @@ export interface MagicPost {
   magic_draft_id?: number; // 🔗 Database link to Draft post for "Add to Calendar" flow
 }
 
+export interface Product {
+  id: string; // Unique ID for each product
+  images: File[];
+  title: string;
+  description?: string;
+  quantity?: string;
+  price?: string;
+}
+
+export interface CustomQA {
+  id: string;
+  question: string;
+  answer: string;
+}
+
 export interface ProductAnswers {
   type?: string;
   features?: string;
   background?: string;
+  customBackground?: string; // Custom background prompt from user
 }
 
 export interface MagicIdeaData {
@@ -61,8 +77,13 @@ interface MagicModeState {
   logoFile: File | null;
 
   // Product upload (not persisted — File objects can't be serialized)
-  productImages: File[];
+  productImages: File[]; // Legacy - keeping for backward compatibility
   productAnswers: ProductAnswers;
+
+  // New multi-product structure
+  products: Product[];
+  selectedProductIds: string[]; // IDs of products selected for AI training
+  customQAs: CustomQA[];
 
   // Intermediate pipeline data (for Overflow bridge)
   trendingTopics: string[];
@@ -77,6 +98,9 @@ interface MagicModeState {
 
   // Product upload flow tracking
   returningFromProductUpload: boolean;
+
+  // DNA generation control
+  skipDNAGeneration: boolean; // Skip DNA generation when using existing brand data
 
   setScreen: (screen: MagicModeState['screen']) => void;
   setUrl: (url: string) => void;
@@ -103,17 +127,31 @@ interface MagicModeState {
   setOriginalCustomAnswers: (customAnswers: Record<string, string>) => void;
   markAnswersChanged: () => void;
   resetAnswersChanged: () => void;
+  // Legacy product actions (keeping for backward compatibility)
   setProductImages: (images: File[]) => void;
-  addProductImage: (image: File) => void;
-  removeProductImage: (index: number) => void;
+  addProductImageLegacy: (image: File) => void;
+  removeProductImageLegacy: (index: number) => void;
   setProductAnswer: (key: keyof ProductAnswers, value: string) => void;
   clearProductData: () => void;
   setReturningFromProductUpload: (value: boolean) => void;
+
+  // New multi-product actions
+  addProduct: () => void;
+  removeProduct: (productId: string) => void;
+  updateProduct: (productId: string, updates: Partial<Product>) => void;
+  addProductImage: (productId: string, image: File) => void;
+  removeProductImage: (productId: string, imageIndex: number) => void;
+  toggleProductSelection: (productId: string) => void;
+  addCustomQA: () => void;
+  removeCustomQA: (qaId: string) => void;
+  updateCustomQA: (qaId: string, updates: Partial<CustomQA>) => void;
+  setSkipDNAGeneration: (skip: boolean) => void;
+
   reset: () => void;
 }
 
 export const useMagicModeStore = create<MagicModeState>()((set) => ({
-      screen: 'mode',
+      screen: 'url',  // Start with URL screen to allow brand loading and popup
       websiteUrl: '',
       answers: {},
       customAnswers: {}, // NEW
@@ -128,6 +166,9 @@ export const useMagicModeStore = create<MagicModeState>()((set) => ({
       logoFile: null,
       productImages: [],
       productAnswers: {},
+      products: [],
+      selectedProductIds: [],
+      customQAs: [],
       trendingTopics: [],
       ideasData: [],
       captionsData: [],
@@ -136,6 +177,7 @@ export const useMagicModeStore = create<MagicModeState>()((set) => ({
       originalCustomAnswers: {},
       answersChanged: false,
       returningFromProductUpload: false,
+      skipDNAGeneration: false,
 
       setScreen: (screen) => set({ screen }),
       setUrl: (websiteUrl) => set({ websiteUrl }),
@@ -184,19 +226,96 @@ export const useMagicModeStore = create<MagicModeState>()((set) => ({
       setOriginalCustomAnswers: (originalCustomAnswers) => set({ originalCustomAnswers }),
       markAnswersChanged: () => set({ answersChanged: true }),
       resetAnswersChanged: () => set({ answersChanged: false }),
+
+      // Legacy product actions
       setProductImages: (productImages) => set({ productImages }),
-      addProductImage: (image) =>
+      addProductImageLegacy: (image) =>
         set((state) => ({ productImages: [...state.productImages, image] })),
-      removeProductImage: (index) =>
+      removeProductImageLegacy: (index) =>
         set((state) => ({ productImages: state.productImages.filter((_, i) => i !== index) })),
       setProductAnswer: (key, value) =>
         set((state) => ({ productAnswers: { ...state.productAnswers, [key]: value } })),
-      clearProductData: () => set({ productImages: [], productAnswers: {} }),
+      clearProductData: () => set({ productImages: [], productAnswers: {}, products: [], selectedProductIds: [], customQAs: [] }),
       setReturningFromProductUpload: (returningFromProductUpload) => set({ returningFromProductUpload }),
+
+      // New multi-product actions
+      addProduct: () =>
+        set((state) => {
+          const newProduct: Product = {
+            id: `product-${Date.now()}-${Math.random()}`,
+            images: [],
+            title: '',
+          };
+          return { products: [...state.products, newProduct] };
+        }),
+
+      removeProduct: (productId) =>
+        set((state) => ({
+          products: state.products.filter((p) => p.id !== productId),
+          selectedProductIds: state.selectedProductIds.filter((id) => id !== productId),
+        })),
+
+      updateProduct: (productId, updates) =>
+        set((state) => ({
+          products: state.products.map((p) =>
+            p.id === productId ? { ...p, ...updates } : p
+          ),
+        })),
+
+      addProductImage: (productId, image) =>
+        set((state) => ({
+          products: state.products.map((p) =>
+            p.id === productId ? { ...p, images: [...p.images, image] } : p
+          ),
+        })),
+
+      removeProductImage: (productId, imageIndex) =>
+        set((state) => ({
+          products: state.products.map((p) =>
+            p.id === productId
+              ? { ...p, images: p.images.filter((_, i) => i !== imageIndex) }
+              : p
+          ),
+        })),
+
+      toggleProductSelection: (productId) =>
+        set((state) => {
+          const isSelected = state.selectedProductIds.includes(productId);
+          return {
+            selectedProductIds: isSelected
+              ? state.selectedProductIds.filter((id) => id !== productId)
+              : [...state.selectedProductIds, productId],
+          };
+        }),
+
+      addCustomQA: () =>
+        set((state) => {
+          const newQA: CustomQA = {
+            id: `qa-${Date.now()}-${Math.random()}`,
+            question: '',
+            answer: '',
+          };
+          return { customQAs: [...state.customQAs, newQA] };
+        }),
+
+      removeCustomQA: (qaId) =>
+        set((state) => ({
+          customQAs: state.customQAs.filter((qa) => qa.id !== qaId),
+        })),
+
+      updateCustomQA: (qaId, updates) =>
+        set((state) => ({
+          customQAs: state.customQAs.map((qa) =>
+            qa.id === qaId ? { ...qa, ...updates } : qa
+          ),
+        })),
+
+      setSkipDNAGeneration: (skipDNAGeneration) => set({ skipDNAGeneration }),
+
       reset: () => {
         // No localStorage cleanup needed - database is source of truth
         set({
-          screen: 'mode',
+          screen: 'url',  // Reset to URL screen (mode is legacy)
           websiteUrl: '',
           answers: {},
           customAnswers: {},
@@ -207,6 +326,9 @@ export const useMagicModeStore = create<MagicModeState>()((set) => ({
           logoFile: null,
           productImages: [],
           productAnswers: {},
+          products: [],
+          selectedProductIds: [],
+          customQAs: [],
           skipInitialQuestions: false,
           loading: false,
           error: null,
@@ -219,6 +341,7 @@ export const useMagicModeStore = create<MagicModeState>()((set) => ({
           originalCustomAnswers: {},
           answersChanged: false,
           returningFromProductUpload: false,
+          skipDNAGeneration: false,
         });
       },
     }));

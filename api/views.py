@@ -118,6 +118,7 @@ def diamond_gate(user, feature, **kwargs):
 class RegisterView(generics.CreateAPIView):
     """User registration endpoint — returns JWT tokens for immediate login"""
     permission_classes = [AllowAny]
+    authentication_classes = []
     serializer_class = RegisterSerializer
 
     def create(self, request, *args, **kwargs):
@@ -1300,6 +1301,8 @@ def generate_image(request):
     import uuid
     from django.core.files.base import ContentFile
     from ai_image.image_service import ImageService
+    import logging
+    logger = logging.getLogger(__name__)
 
     try:
         # Diamond Token check
@@ -1536,6 +1539,8 @@ def generate_image(request):
                 enhance=enhance,
                 model=model if model else None
             )
+
+            # If generation fails, return error immediately (no fallback)
             if not result.get('success'):
                 gen_record.status = 'failed'
                 gen_record.error_message = result.get('error', 'Unknown error')

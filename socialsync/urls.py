@@ -27,6 +27,7 @@ urlpatterns = [
     path('ai-image/', include('ai_image.urls')),
     path('messenger/', include('messenger_bot.urls')),
     path('business-profile/', include('brands.urls')),
+    path('video-studio/', include('video_studio.urls')),  # AI Video Generation
 
     # API Documentation (Swagger UI)
     path('doc/api/schema/', SpectacularAPIView.as_view(), name='schema'),

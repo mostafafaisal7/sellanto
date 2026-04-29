@@ -73,8 +73,64 @@ class GeminiVideoService:
         }
         return intensity_prompts.get(intensity, "")
     
-    def enhance_prompt(self, prompt, style='realistic', camera_motion=None, motion_intensity=None):
-        """Enhance user prompt with style and technical details"""
+    def build_brand_aware_prompt(self, prompt, brand=None, workspace=None):
+        """
+        Inject BrandDNA and Workspace context into video prompt
+
+        Args:
+            prompt: User's original prompt
+            brand: Brand model instance (optional)
+            workspace: Workspace model instance (optional)
+
+        Returns:
+            Enhanced prompt with brand context
+        """
+        enhanced = prompt
+
+        if brand:
+            # Extract BrandDNA
+            brand_dna = brand.brand_dna or {}
+            voice_tone = brand.voice_tone or 'professional'
+            industry = brand.industry or ''
+
+            # Build brand context
+            brand_context = f"\n\n🎨 Brand Context: {brand.brand_name}"
+
+            if industry:
+                brand_context += f" ({industry} industry)"
+
+            brand_context += f"\n• Voice & Tone: {voice_tone}"
+
+            # Add visual style from BrandDNA
+            if 'visual_style' in brand_dna:
+                brand_context += f"\n• Visual Style: {brand_dna['visual_style']}"
+
+            # Add color palette (key for brand consistency)
+            if 'color_palette' in brand_dna and brand_dna['color_palette']:
+                colors = ', '.join(brand_dna['color_palette'][:3])
+                brand_context += f"\n• Brand Colors: {colors}"
+            elif 'primary_color' in brand_dna:
+                brand_context += f"\n• Primary Color: {brand_dna['primary_color']}"
+
+            # Add mood/aesthetic
+            if 'mood' in brand_dna:
+                brand_context += f"\n• Mood: {brand_dna['mood']}"
+
+            enhanced += brand_context
+
+        if workspace:
+            enhanced += f"\n\n🏢 Workspace: {workspace.name}"
+
+        return enhanced
+
+    def enhance_prompt(self, prompt, style='realistic', camera_motion=None, motion_intensity=None, brand=None, workspace=None):
+        """Enhance user prompt with style, technical details, and BrandDNA"""
+
+        # First, add BrandDNA context if available
+        if brand or workspace:
+            prompt = self.build_brand_aware_prompt(prompt, brand=brand, workspace=workspace)
+
+        # Then add style and technical details
         style_addition = self._get_style_prompt(style) or ''
         motion_addition = self._get_camera_motion_prompt(camera_motion) if camera_motion else ''
         intensity_addition = self._get_motion_intensity_prompt(motion_intensity) if motion_intensity else ''
@@ -101,9 +157,9 @@ Additional guidance: Ensure smooth transitions, consistent lighting throughout t
     def generate_video(self, prompt, style='realistic', duration=5, resolution='1080p',
                        aspect_ratio='16:9', fps=30, negative_prompt=None,
                        camera_motion=None, motion_intensity=None, enhance=True, seed=None,
-                       reference_image=None):
+                       reference_image=None, brand=None, workspace=None):
         """
-        Generate video using Gemini/Veo API
+        Generate video using Gemini/Veo API with BrandDNA integration
         """
         if not self.api_key:
             return {
@@ -114,9 +170,9 @@ Additional guidance: Ensure smooth transitions, consistent lighting throughout t
         start_time = time.time()
 
         try:
-            # Enhance prompt if requested
+            # Enhance prompt if requested (includes BrandDNA injection)
             if enhance:
-                final_prompt = self.enhance_prompt(prompt, style, camera_motion, motion_intensity)
+                final_prompt = self.enhance_prompt(prompt, style, camera_motion, motion_intensity, brand=brand, workspace=workspace)
             else:
                 final_prompt = prompt
 

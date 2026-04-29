@@ -121,14 +121,17 @@ export function AIWorkingScreen({ onComplete, onStop }: AIWorkingScreenProps) {
       }
       if (cancelledRef.current) return;
 
-      // Step 1: Generate DNA (if URL provided)
+      // Step 1: Generate DNA (if URL provided and not skipped)
       setStep(1);
-      if (store.websiteUrl) {
+      if (store.websiteUrl && !store.skipDNAGeneration) {
         try {
+          console.log('[AIWorkingScreen] Generating DNA for brand:', brandId);
           await strategyService.generateDNA(brandId, store.websiteUrl);
         } catch {
           // Non-fatal — continue without DNA
         }
+      } else if (store.skipDNAGeneration) {
+        console.log('[AIWorkingScreen] Skipping DNA generation - using existing brand DNA');
       }
       if (cancelledRef.current) return;
 

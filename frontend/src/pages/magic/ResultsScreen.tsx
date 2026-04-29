@@ -822,6 +822,9 @@ export function ResultsScreen({ onGenerateMore, onGoBack }: ResultsScreenProps) 
   }, [generatedPosts]);
 
   // Load posts from backend if generatedPosts is empty (e.g., page refresh or localStorage cleared)
+  // Track if we've already attempted to load to prevent duplicate calls
+  const hasAttemptedLoadRef = useRef(false);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -829,6 +832,13 @@ export function ResultsScreen({ onGenerateMore, onGoBack }: ResultsScreenProps) 
       // Only load if we have no posts - don't check pipelineCompleted
       if (generatedPosts.length > 0) return;
 
+      // Prevent duplicate loads - if already loading or already attempted, skip
+      if (loadingPosts || hasAttemptedLoadRef.current) {
+        console.log('[ResultsScreen] Skipping duplicate load attempt');
+        return;
+      }
+
+      hasAttemptedLoadRef.current = true;
       console.log('[ResultsScreen] generatedPosts empty, loading from backend...');
       setLoadingPosts(true);
 
@@ -881,7 +891,7 @@ export function ResultsScreen({ onGenerateMore, onGoBack }: ResultsScreenProps) 
     loadFromBackend();
 
     return () => { cancelled = true; };
-  }, [generatedPosts.length, setGeneratedPosts]);
+  }, []); // Empty deps - only run once on mount. generatedPosts check inside prevents re-load
 
   const handleApproveClick = (postId: number) => {
     if (selectedPlatforms.length <= 1) {

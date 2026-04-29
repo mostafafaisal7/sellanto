@@ -148,8 +148,9 @@ Ensure professional quality with clear composition, consistent lighting, and a c
     def _generate_with_gemini_flash(self, prompt, width, height):
         """Generate using Gemini Flash with image output (tries latest first)"""
         models_to_try = [
-            'gemini-3.1-flash-image-preview',
-            'gemini-2.5-flash-preview-image-generation',
+            'gemini-3.1-flash-image-preview',      # Nano Banana 2 (Fast, efficient)
+            'gemini-2.5-flash-image',              # Nano Banana (Original)
+            'gemini-3-pro-image-preview',          # Nano Banana Pro (High quality)
         ]
 
         last_error = 'No models available'
@@ -169,7 +170,9 @@ Ensure professional quality with clear composition, consistent lighting, and a c
                         }]
                     }],
                     'generationConfig': {
-                        'responseModalities': ['TEXT', 'IMAGE']
+                        'responseModalities': ['TEXT', 'IMAGE'],  # Required for image generation
+                        'temperature': 1.0,
+                        'topP': 0.95,
                     }
                 }
 
@@ -305,7 +308,7 @@ Ensure professional quality with clear composition, consistent lighting, and a c
                                 'image_data': image_data
                             }
             
-            return {'success': False, 'error': 'Imagen model not available'}
+            return {'success': False, 'error': 'Imagen model not available. This may be due to: 1) Invalid Gemini API key, 2) Imagen not available in your region, or 3) API quota exceeded. Try using OpenAI instead.'}
                 
         except Exception as e:
             return {'success': False, 'error': str(e)}

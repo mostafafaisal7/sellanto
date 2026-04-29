@@ -22,7 +22,9 @@ export function URLInputScreen({ onSubmit, onSkip, initialUrl }: URLInputScreenP
 
   // Update URL when initialUrl prop changes
   useEffect(() => {
+    console.log('[URLInputScreen] initialUrl changed:', initialUrl);
     if (initialUrl) {
+      console.log('[URLInputScreen] Setting URL to:', initialUrl);
       setUrl(initialUrl);
     }
   }, [initialUrl]);
@@ -235,14 +237,15 @@ export function URLInputScreen({ onSubmit, onSkip, initialUrl }: URLInputScreenP
         </div>
       )}
 
-      {/* Skip option */}
-      <button
-        onClick={onSkip}
-        className="mt-8 text-[13px] transition-colors au4"
-        style={{ color: 'rgb(var(--c-coral))', fontWeight: 600, cursor: 'pointer' }}
-      >
-        Don't have a website? No problem — answer questions instead
-      </button>
+      {/* Skip button */}
+      {!loading && (
+        <button
+          onClick={onSkip}
+          className="mt-4 text-[14px] font-medium text-text-muted hover:text-text-secondary transition-colors"
+        >
+        </button>
+      )}
+
     </div>
   );
 }

@@ -1,22 +1,22 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { normalizeUrl, isValidUrl, extractDomainName } from '../utils/url';
 import {
   SparklesIcon,
   CheckCircleIcon,
-  XMarkIcon,
-  PlusIcon,
   ExclamationTriangleIcon,
   ChevronDownIcon,
   ChevronUpIcon,
   GlobeAltIcon,
   BuildingOfficeIcon,
   UserGroupIcon,
+  PencilSquareIcon,
 } from '@heroicons/react/24/outline';
 import onboardingService from '../services/onboardingService';
 import { useAuthStore } from '../store';
 import type { Workspace, Brand } from '../types';
+import { SearchableMultiSelect } from '../components/redesign/SearchableMultiSelect';
 
 const STEPS = [
   { number: 1, title: 'Brand Wizard', icon: SparklesIcon, description: 'Define your brand identity' },
@@ -177,92 +177,108 @@ function BrandWizardStep({
   initialBrand?: Brand | null;
   initialWorkspace?: Workspace | null;
 }) {
-  const [websiteUrl, setWebsiteUrl] = useState(initialBrand?.website_url?.replace(/^https?:\/\//, '') || '');
-  const [selectedIndustries, setSelectedIndustries] = useState<string[]>([]);
-  const [customIndustries, setCustomIndustries] = useState<string[]>([]);
-  const [newCustomIndustry, setNewCustomIndustry] = useState('');
-  const [selectedCountries, setSelectedCountries] = useState<string[]>([]);
-  const [selectedAudiences, setSelectedAudiences] = useState<string[]>([]);
-  const [customAudiences, setCustomAudiences] = useState<string[]>(initialBrand?.audiences || []);
-  const [newCustomAudience, setNewCustomAudience] = useState('');
-  const [error, setError] = useState('');
+  const STORAGE_KEY = 'sellanto_onboarding_draft';
 
-  const handleIndustryToggle = (value: string) => {
-    if (value === 'Other') {
-      // Toggle Other option
-      if (selectedIndustries.includes('Other')) {
-        setSelectedIndustries(selectedIndustries.filter((i) => i !== 'Other'));
-        setCustomIndustries([]);
-      } else {
-        if (selectedIndustries.length + customIndustries.length < 3) {
-          setSelectedIndustries([...selectedIndustries, 'Other']);
-        }
+  // Load from localStorage or initial values
+  const loadDraft = () => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        return JSON.parse(saved);
       }
-    } else {
-      if (selectedIndustries.includes(value)) {
-        setSelectedIndustries(selectedIndustries.filter((i) => i !== value));
-      } else {
-        const totalSelected = selectedIndustries.filter((i) => i !== 'Other').length + customIndustries.length;
-        if (totalSelected < 3) {
-          setSelectedIndustries([...selectedIndustries, value]);
-        }
-      }
+    } catch (err) {
+      console.error('Failed to load draft:', err);
     }
+    return null;
   };
 
-  const addCustomIndustry = () => {
-    if (newCustomIndustry.trim() && customIndustries.length < 3) {
-      const totalSelected = selectedIndustries.filter((i) => i !== 'Other').length + customIndustries.length;
-      if (totalSelected < 3) {
-        setCustomIndustries([...customIndustries, newCustomIndustry.trim()]);
-        setNewCustomIndustry('');
-      }
+  const draft = loadDraft();
+
+  const [websiteUrl, setWebsiteUrl] = useState(
+    draft?.websiteUrl || initialBrand?.website_url?.replace(/^https?:\/\//, '') || ''
+  );
+  const [selectedIndustries, setSelectedIndustries] = useState<string[]>(draft?.selectedIndustries || []);
+  const [customIndustries, setCustomIndustries] = useState<string[]>(draft?.customIndustries || []);
+  const [selectedCountries, setSelectedCountries] = useState<string[]>(draft?.selectedCountries || []);
+  const [selectedAudiences, setSelectedAudiences] = useState<string[]>(draft?.selectedAudiences || []);
+  const [customAudiences, setCustomAudiences] = useState<string[]>(
+    draft?.customAudiences || initialBrand?.audiences || []
+  );
+  const [error, setError] = useState('');
+  const [urlError, setUrlError] = useState('');
+  const [isUrlValid, setIsUrlValid] = useState(false);
+  const [lastSaved, setLastSaved] = useState<Date | null>(draft ? new Date(draft.timestamp) : null);
+
+  // Real-time URL validation
+  useEffect(() => {
+    if (!websiteUrl.trim()) {
+      setUrlError('');
+      setIsUrlValid(false);
+      return;
     }
+
+    if (!isValidUrl(websiteUrl)) {
+      setUrlError('Please enter a valid website URL (e.g., example.com)');
+      setIsUrlValid(false);
+    } else {
+      setUrlError('');
+      setIsUrlValid(true);
+    }
+  }, [websiteUrl]);
+
+  // Extract brand name for preview
+  const extractedBrandName = useMemo(() => {
+    if (isUrlValid && websiteUrl) {
+      return extractDomainName(websiteUrl);
+    }
+    return '';
+  }, [isUrlValid, websiteUrl]);
+
+  // Auto-save to localStorage
+  useEffect(() => {
+    const saveDraft = () => {
+      const data = {
+        websiteUrl,
+        selectedIndustries,
+        customIndustries,
+        selectedCountries,
+        selectedAudiences,
+        customAudiences,
+        timestamp: new Date().toISOString(),
+      };
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        setLastSaved(new Date());
+      } catch (err) {
+        console.error('Failed to save draft:', err);
+      }
+    };
+
+    // Debounce auto-save
+    const timer = setTimeout(saveDraft, 1000);
+    return () => clearTimeout(timer);
+  }, [
+    websiteUrl,
+    selectedIndustries,
+    customIndustries,
+    selectedCountries,
+    selectedAudiences,
+    customAudiences,
+    STORAGE_KEY,
+  ]);
+
+  const addCustomIndustry = (value: string) => {
+    // No limit on custom industries - users can add as many as they want
+    setCustomIndustries([...customIndustries, value]);
   };
 
   const removeCustomIndustry = (index: number) => {
     setCustomIndustries(customIndustries.filter((_, i) => i !== index));
   };
 
-  const handleCountryToggle = (value: string) => {
-    if (selectedCountries.includes(value)) {
-      setSelectedCountries(selectedCountries.filter((c) => c !== value));
-    } else {
-      setSelectedCountries([...selectedCountries, value]);
-    }
-  };
-
-  const handleAudienceToggle = (value: string) => {
-    if (value === 'Other') {
-      // Toggle Other option
-      if (selectedAudiences.includes('Other')) {
-        setSelectedAudiences(selectedAudiences.filter((a) => a !== 'Other'));
-        setCustomAudiences([]);
-      } else {
-        if (selectedAudiences.length + customAudiences.length < 3) {
-          setSelectedAudiences([...selectedAudiences, 'Other']);
-        }
-      }
-    } else {
-      if (selectedAudiences.includes(value)) {
-        setSelectedAudiences(selectedAudiences.filter((a) => a !== value));
-      } else {
-        const totalSelected = selectedAudiences.filter((a) => a !== 'Other').length + customAudiences.length;
-        if (totalSelected < 3) {
-          setSelectedAudiences([...selectedAudiences, value]);
-        }
-      }
-    }
-  };
-
-  const addCustomAudience = () => {
-    if (newCustomAudience.trim() && customAudiences.length < 3) {
-      const totalSelected = selectedAudiences.filter((a) => a !== 'Other').length + customAudiences.length;
-      if (totalSelected < 3) {
-        setCustomAudiences([...customAudiences, newCustomAudience.trim()]);
-        setNewCustomAudience('');
-      }
-    }
+  const addCustomAudience = (value: string) => {
+    // No limit on custom audiences - users can add as many as they want
+    setCustomAudiences([...customAudiences, value]);
   };
 
   const removeCustomAudience = (index: number) => {
@@ -352,18 +368,32 @@ function BrandWizardStep({
       updated_at: new Date().toISOString(),
     };
 
+    // Clear draft from localStorage
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch (err) {
+      console.error('Failed to clear draft:', err);
+    }
+
     // Move to Step 2 with temporary data (not saved yet)
     onNext(tempWorkspace, tempBrand);
   };
 
   const totalIndustries = selectedIndustries.filter((i) => i !== 'Other').length + customIndustries.length;
-  const canAddMoreIndustries = totalIndustries < 3;
-
   const totalAudiences = selectedAudiences.filter((a) => a !== 'Other').length + customAudiences.length;
-  const canAddMoreAudiences = totalAudiences < 3;
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
+      {/* Draft saved indicator */}
+      {lastSaved && (
+        <div className="flex items-center justify-end gap-2 text-xs text-text-muted">
+          <CheckCircleIcon className="w-4 h-4 text-green-400" />
+          <span>
+            Draft saved {new Date(lastSaved).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </span>
+        </div>
+      )}
+
       {error && (
         <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
           <ExclamationTriangleIcon className="w-4 h-4 flex-shrink-0" />
@@ -376,246 +406,83 @@ function BrandWizardStep({
         <label className="block text-sm font-medium text-text-secondary mb-2">
           Website URL <span className="text-red-400">*</span>
         </label>
-        <input
-          type="text"
-          value={websiteUrl}
-          onChange={(e) => setWebsiteUrl(e.target.value)}
-          placeholder="e.g., yourbrand.com"
-          className="input w-full"
-          required
-        />
-        <p className="text-xs text-text-muted mt-1">
-          We'll use this to automatically set up your brand name and workspace
-        </p>
+        <div className="relative">
+          <input
+            type="text"
+            value={websiteUrl}
+            onChange={(e) => setWebsiteUrl(e.target.value)}
+            placeholder="e.g., yourbrand.com"
+            className={`input w-full pr-10 ${
+              websiteUrl.trim() && (isUrlValid ? 'border-green-500/50' : 'border-red-500/50')
+            }`}
+            required
+          />
+          {websiteUrl.trim() && (
+            <div className="absolute right-3 top-1/2 -translate-y-1/2">
+              {isUrlValid ? (
+                <CheckCircleIcon className="w-5 h-5 text-green-400" />
+              ) : (
+                <ExclamationTriangleIcon className="w-5 h-5 text-red-400" />
+              )}
+            </div>
+          )}
+        </div>
+        {urlError && (
+          <p className="text-xs text-red-400 mt-1">{urlError}</p>
+        )}
+        {isUrlValid && extractedBrandName && (
+          <p className="text-xs text-green-400 mt-1">
+            ✓ Brand name will be set to: <span className="font-semibold">{extractedBrandName}</span>
+          </p>
+        )}
+        {!urlError && !isUrlValid && (
+          <p className="text-xs text-text-muted mt-1">
+            We'll use this to automatically set up your brand name and workspace
+          </p>
+        )}
       </div>
 
       {/* Industry */}
-      <div>
-        <label className="block text-sm font-medium text-text-secondary mb-2">
-          Industry <span className="text-red-400">*</span>{' '}
-          <span className="text-xs text-text-muted">(Select up to 3)</span>
-        </label>
-        <div className="space-y-2 max-h-64 overflow-y-auto pr-2">
-          {INDUSTRY_OPTIONS.map((opt) => {
-            const isSelected = selectedIndustries.includes(opt.value);
-            const isDisabled = !canAddMoreIndustries && !isSelected;
-
-            return (
-              <div key={opt.value}>
-                <button
-                  type="button"
-                  onClick={() => !isDisabled && handleIndustryToggle(opt.value)}
-                  disabled={isDisabled}
-                  className={`w-full text-left px-4 py-3 rounded-lg border transition-all ${
-                    isSelected
-                      ? 'bg-primary/20 border-primary text-primary'
-                      : isDisabled
-                      ? 'border-white/5 text-text-muted opacity-50 cursor-not-allowed'
-                      : 'border-white/10 text-text-secondary hover:border-white/20 hover:bg-white/[0.02]'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm">{opt.label}</span>
-                    {isSelected && <CheckCircleIcon className="w-5 h-5" />}
-                  </div>
-                </button>
-
-                {/* Custom industry input for "Other" */}
-                {opt.value === 'Other' && isSelected && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    className="mt-2 ml-4 space-y-2"
-                  >
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={newCustomIndustry}
-                        onChange={(e) => setNewCustomIndustry(e.target.value)}
-                        placeholder="Specify your industry..."
-                        className="input flex-1"
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            addCustomIndustry();
-                          }
-                        }}
-                        disabled={customIndustries.length >= 3}
-                      />
-                      <button
-                        type="button"
-                        onClick={addCustomIndustry}
-                        disabled={customIndustries.length >= 3 || !newCustomIndustry.trim()}
-                        className="btn-secondary px-4 disabled:opacity-50"
-                      >
-                        <PlusIcon className="w-4 h-4" />
-                      </button>
-                    </div>
-
-                    {customIndustries.length > 0 && (
-                      <div className="flex flex-wrap gap-2">
-                        {customIndustries.map((ind, i) => (
-                          <span
-                            key={i}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-sm text-primary"
-                          >
-                            {ind}
-                            <button
-                              type="button"
-                              onClick={() => removeCustomIndustry(i)}
-                              className="hover:text-red-400 transition-colors"
-                            >
-                              <XMarkIcon className="w-3 h-3" />
-                            </button>
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </motion.div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        {totalIndustries > 0 && (
-          <p className="text-xs text-text-muted mt-2">
-            {totalIndustries} of 3 industries selected
-          </p>
-        )}
-      </div>
+      <SearchableMultiSelect
+        label="Industry"
+        options={INDUSTRY_OPTIONS}
+        selected={selectedIndustries}
+        onChange={setSelectedIndustries}
+        maxSelectionsForPreset={3}
+        placeholder="Select industries..."
+        required
+        allowCustom
+        onAddCustom={addCustomIndustry}
+        customSelected={customIndustries}
+        onRemoveCustom={removeCustomIndustry}
+        icon={BuildingOfficeIcon}
+      />
 
       {/* Target Regions/Countries */}
-      <div>
-        <label className="block text-sm font-medium text-text-secondary mb-2">
-          Target Regions/Countries <span className="text-red-400">*</span>{' '}
-          <span className="text-xs text-text-muted">(Select one or more)</span>
-        </label>
-        <div className="space-y-2 max-h-64 overflow-y-auto pr-2">
-          {COUNTRY_OPTIONS.map((opt) => {
-            const isSelected = selectedCountries.includes(opt.value);
-
-            return (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => handleCountryToggle(opt.value)}
-                className={`w-full text-left px-4 py-3 rounded-lg border transition-all ${
-                  isSelected
-                    ? 'bg-primary/20 border-primary text-primary'
-                    : 'border-white/10 text-text-secondary hover:border-white/20 hover:bg-white/[0.02]'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <span className="text-sm">{opt.label}</span>
-                  {isSelected && <CheckCircleIcon className="w-5 h-5" />}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-
-        {selectedCountries.length > 0 && (
-          <p className="text-xs text-text-muted mt-2">
-            {selectedCountries.length} {selectedCountries.length === 1 ? 'region' : 'regions'} selected
-          </p>
-        )}
-      </div>
+      <SearchableMultiSelect
+        label="Target Regions/Countries"
+        options={COUNTRY_OPTIONS}
+        selected={selectedCountries}
+        onChange={setSelectedCountries}
+        placeholder="Select target regions..."
+        required
+        icon={GlobeAltIcon}
+      />
 
       {/* Target Audiences */}
-      <div>
-        <label className="block text-sm font-medium text-text-secondary mb-2">
-          Target Audiences <span className="text-xs text-text-muted">(Select up to 3)</span>
-        </label>
-        <div className="space-y-2 max-h-64 overflow-y-auto pr-2">
-          {AUDIENCE_OPTIONS.map((opt) => {
-            const isSelected = selectedAudiences.includes(opt.value);
-            const isDisabled = !canAddMoreAudiences && !isSelected;
-
-            return (
-              <div key={opt.value}>
-                <button
-                  type="button"
-                  onClick={() => !isDisabled && handleAudienceToggle(opt.value)}
-                  disabled={isDisabled}
-                  className={`w-full text-left px-4 py-3 rounded-lg border transition-all ${
-                    isSelected
-                      ? 'bg-primary/20 border-primary text-primary'
-                      : isDisabled
-                      ? 'border-white/5 text-text-muted opacity-50 cursor-not-allowed'
-                      : 'border-white/10 text-text-secondary hover:border-white/20 hover:bg-white/[0.02]'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm">{opt.label}</span>
-                    {isSelected && <CheckCircleIcon className="w-5 h-5" />}
-                  </div>
-                </button>
-
-                {/* Custom audience input for "Other" */}
-                {opt.value === 'Other' && isSelected && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    className="mt-2 ml-4 space-y-2"
-                  >
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={newCustomAudience}
-                        onChange={(e) => setNewCustomAudience(e.target.value)}
-                        placeholder="Specify your target audience..."
-                        className="input flex-1"
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            addCustomAudience();
-                          }
-                        }}
-                        disabled={customAudiences.length >= 3}
-                      />
-                      <button
-                        type="button"
-                        onClick={addCustomAudience}
-                        disabled={customAudiences.length >= 3 || !newCustomAudience.trim()}
-                        className="btn-secondary px-4 disabled:opacity-50"
-                      >
-                        <PlusIcon className="w-4 h-4" />
-                      </button>
-                    </div>
-
-                    {customAudiences.length > 0 && (
-                      <div className="flex flex-wrap gap-2">
-                        {customAudiences.map((aud, i) => (
-                          <span
-                            key={i}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 text-sm text-primary"
-                          >
-                            {aud}
-                            <button
-                              type="button"
-                              onClick={() => removeCustomAudience(i)}
-                              className="hover:text-red-400 transition-colors"
-                            >
-                              <XMarkIcon className="w-3 h-3" />
-                            </button>
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </motion.div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        {totalAudiences > 0 && (
-          <p className="text-xs text-text-muted mt-2">
-            {totalAudiences} of 3 audiences selected
-          </p>
-        )}
-      </div>
+      <SearchableMultiSelect
+        label="Target Audiences"
+        options={AUDIENCE_OPTIONS}
+        selected={selectedAudiences}
+        onChange={setSelectedAudiences}
+        maxSelectionsForPreset={3}
+        placeholder="Select target audiences..."
+        allowCustom
+        onAddCustom={addCustomAudience}
+        customSelected={customAudiences}
+        onRemoveCustom={removeCustomAudience}
+        icon={UserGroupIcon}
+      />
 
       <button
         type="submit"
@@ -662,8 +529,12 @@ function AllSetStep({
           <CheckCircleIcon className="w-10 h-10 text-green-400" />
         </div>
         <h3 className="text-2xl font-bold text-text-primary mb-2">You're All Set!</h3>
-        <p className="text-text-secondary">
-          Your workspace and brand have been created. Review your setup below.
+        <p className="text-text-secondary mb-2">
+          Review your setup below and click "Get Started" to begin.
+        </p>
+        <p className="text-xs text-text-muted flex items-center justify-center gap-1.5">
+          <PencilSquareIcon className="w-4 h-4" />
+          Need to make changes? Click "Back" to edit your information.
         </p>
       </div>
 

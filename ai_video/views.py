@@ -15,11 +15,12 @@ from django.core.paginator import Paginator
 from django.core.files.base import ContentFile
 
 from .models import (
-    UserVideoSettings, VideoLogo, VideoGeneration, 
+    UserVideoSettings, VideoLogo, VideoGeneration,
     SavedVideo, VideoPromptTemplate
 )
 from .gemini_service import GeminiVideoService
 from accounts.api_keys import get_gemini_key
+from brands.models import Workspace, Brand
 
 
 def get_user_api_key(user):
@@ -145,23 +146,31 @@ def manage_logos(request):
 @login_required
 def video_generator(request):
     """Main video generator page"""
-    
+
     video_settings = get_or_create_video_settings(request.user)
     has_api_key = bool(get_user_api_key(request.user))
 
     # Get user's logos
     logos = VideoLogo.objects.filter(user=request.user)
     default_logo = logos.filter(is_default=True).first()
-    
+
     # Get recent generations
     recent_generations = VideoGeneration.objects.filter(
         user=request.user,
         status='completed'
     ).order_by('-created_at')[:6]
-    
+
     # Get prompt templates
     templates = VideoPromptTemplate.objects.filter(is_global=True)[:6]
-    
+
+    # Get user's workspaces and brands (NEW - BrandDNA Integration)
+    workspaces = Workspace.objects.filter(owner=request.user, is_active=True)
+    brands = Brand.objects.filter(user=request.user)
+
+    # Get default workspace/brand if any
+    default_workspace = workspaces.first()
+    default_brand = brands.filter(is_primary=True).first() or brands.first()
+
     context = {
         'has_api_key': has_api_key,
         'video_settings': video_settings,
@@ -175,8 +184,13 @@ def video_generator(request):
         'aspect_ratio_choices': VideoGeneration.ASPECT_RATIO_CHOICES,
         'fps_choices': VideoGeneration.FPS_CHOICES,
         'position_choices': VideoGeneration.LOGO_POSITION_CHOICES,
+        # BrandDNA Integration (NEW)
+        'workspaces': workspaces,
+        'brands': brands,
+        'default_workspace': default_workspace,
+        'default_brand': default_brand,
     }
-    
+
     return render(request, 'ai_video/generator.html', context)
 
 
@@ -204,6 +218,25 @@ def generate_video_ajax(request):
         resolution = request.POST.get('resolution', '1080p')
         aspect_ratio = request.POST.get('aspect_ratio', '16:9')
         fps = int(request.POST.get('fps', 30))
+
+        # Get workspace and brand (NEW - BrandDNA Integration)
+        workspace_id = request.POST.get('workspace_id')
+        brand_id = request.POST.get('brand_id')
+
+        workspace = None
+        brand = None
+
+        if workspace_id:
+            try:
+                workspace = Workspace.objects.get(id=workspace_id, owner=request.user)
+            except Workspace.DoesNotExist:
+                pass
+
+        if brand_id:
+            try:
+                brand = Brand.objects.get(id=brand_id, user=request.user)
+            except Brand.DoesNotExist:
+                pass
         
         # Logo settings
         logo_id = request.POST.get('logo_id')
@@ -229,9 +262,11 @@ def generate_video_ajax(request):
             except VideoLogo.DoesNotExist:
                 pass
         
-        # Create generation record
+        # Create generation record (with BrandDNA integration)
         generation = VideoGeneration.objects.create(
             user=request.user,
+            workspace=workspace,  # NEW
+            brand=brand,  # NEW
             title=title,
             prompt=prompt,
             negative_prompt=negative_prompt,
@@ -251,10 +286,16 @@ def generate_video_ajax(request):
             status='processing'
         )
         
-        # Generate video - use centralized key lookup
+        # Generate video with BrandDNA integration
         api_key = get_user_api_key(request.user)
         service = GeminiVideoService(api_key=api_key)
-        
+
+        # Build brand-enhanced prompt for storage
+        if brand or workspace:
+            brand_enhanced = service.build_brand_aware_prompt(prompt, brand=brand, workspace=workspace)
+            generation.brand_enhanced_prompt = brand_enhanced
+            generation.save()
+
         result = service.generate_video(
             prompt=prompt,
             style=style,
@@ -266,7 +307,9 @@ def generate_video_ajax(request):
             camera_motion=camera_motion,
             motion_intensity=motion_intensity,
             enhance=enhance_prompt,
-            seed=seed
+            seed=seed,
+            brand=brand,  # NEW - Pass brand for BrandDNA injection
+            workspace=workspace  # NEW - Pass workspace
         )
         
         if result['success']:

@@ -1,0 +1,168 @@
+# SaleAnto Video Studio Dependencies
+# Google Veo 3.1 AI Video Generation System
+# Install with: pip install -r video_studio_requirements.txt
+
+# ════════════════════════════════════════════════════════════════════════════
+# VIDEO PROCESSING
+# ════════════════════════════════════════════════════════════════════════════
+moviepy==1.0.3                # Video editing and merging
+imageio==2.31.1              # Required by moviepy for video I/O
+imageio-ffmpeg==0.4.8        # FFmpeg bindings for moviepy
+Pillow==10.1.0               # Image processing
+
+# ════════════════════════════════════════════════════════════════════════════
+# AI & MACHINE LEARNING
+# ════════════════════════════════════════════════════════════════════════════
+google-generativeai==0.3.2   # Gemini API (for Veo and prompt optimization)
+scikit-learn==1.3.2          # K-means clustering for color analysis
+numpy==1.24.3                # Array operations
+
+# ════════════════════════════════════════════════════════════════════════════
+# BACKGROUND REMOVAL (OPTIONAL)
+# ════════════════════════════════════════════════════════════════════════════
+rembg==2.0.50                # AI background removal for products
+# Note: rembg has large dependencies. Install separately if needed:
+# pip install rembg[gpu]  # For GPU support
+# pip install rembg[cli]  # For CLI tools
+
+# ════════════════════════════════════════════════════════════════════════════
+# ASYNC TASK PROCESSING
+# ════════════════════════════════════════════════════════════════════════════
+celery==5.3.4                # Async task queue for video generation
+redis==5.0.1                 # Redis client for Celery broker
+# Note: Redis server must be installed separately:
+# Windows: Download from https://github.com/microsoftarchive/redis/releases
+# Linux: sudo apt-get install redis-server
+# macOS: brew install redis
+
+# ════════════════════════════════════════════════════════════════════════════
+# HTTP & API
+# ════════════════════════════════════════════════════════════════════════════
+requests==2.31.0             # HTTP requests for Veo API
+urllib3==2.1.0               # HTTP client
+
+# ════════════════════════════════════════════════════════════════════════════
+# SYSTEM DEPENDENCIES (must be installed separately)
+# ════════════════════════════════════════════════════════════════════════════
+# FFmpeg - Required for video processing
+#   Windows: Download from https://ffmpeg.org/download.html
+#            Add to PATH environment variable
+#   Linux:   sudo apt-get install ffmpeg
+#   macOS:   brew install ffmpeg
+#
+# ImageMagick - Required for text overlays in MoviePy
+#   Windows: Download from https://imagemagick.org/script/download.php
+#            Add to PATH environment variable
+#   Linux:   sudo apt-get install imagemagick
+#   macOS:   brew install imagemagick
+#
+# Redis Server - Required for Celery task queue
+#   Windows: Download from https://github.com/microsoftarchive/redis/releases
+#   Linux:   sudo apt-get install redis-server
+#   macOS:   brew install redis
+
+# ════════════════════════════════════════════════════════════════════════════
+# INSTALLATION INSTRUCTIONS
+# ════════════════════════════════════════════════════════════════════════════
+#
+# 1. Install Python dependencies:
+#    pip install -r video_studio_requirements.txt
+#
+# 2. Install system dependencies (choose your OS):
+#
+#    WINDOWS:
+#    - Download FFmpeg from https://ffmpeg.org/download.html
+#    - Extract and add bin folder to PATH
+#    - Download ImageMagick from https://imagemagick.org
+#    - Install and add to PATH
+#    - Download Redis from https://github.com/microsoftarchive/redis/releases
+#    - Extract and run redis-server.exe
+#
+#    LINUX (Ubuntu/Debian):
+#    sudo apt-get update
+#    sudo apt-get install -y ffmpeg imagemagick redis-server
+#    sudo service redis-server start
+#
+#    MACOS:
+#    brew install ffmpeg imagemagick redis
+#    brew services start redis
+#
+# 3. Verify installations:
+#    ffmpeg -version
+#    convert -version  # ImageMagick
+#    redis-cli ping    # Should return "PONG"
+#
+# 4. Run migrations:
+#    python manage.py makemigrations video_studio
+#    python manage.py migrate
+#
+# 5. Start Celery worker (in separate terminal):
+#    celery -A socialsync worker --loglevel=info
+#
+# 6. Configure Gemini API key:
+#    - Add GEMINI_API_KEY to .env file
+#    - Or set via admin panel > user settings
+#
+# 7. Test video generation:
+#    python manage.py shell
+#    >>> from video_studio.services.veo_service import VeoVideoService
+#    >>> service = VeoVideoService()
+#    >>> result = service.test_api_key()
+#    >>> print(result)
+
+# ════════════════════════════════════════════════════════════════════════════
+# OPTIONAL: GPU ACCELERATION
+# ════════════════════════════════════════════════════════════════════════════
+# For faster background removal with rembg:
+# pip install rembg[gpu]
+# Requires NVIDIA GPU with CUDA installed
+
+# ════════════════════════════════════════════════════════════════════════════
+# TROUBLESHOOTING
+# ════════════════════════════════════════════════════════════════════════════
+#
+# MoviePy errors:
+# - "ImageMagick not found": Install ImageMagick and add to PATH
+# - "FFmpeg not found": Install FFmpeg and add to PATH
+# - Update moviepy config: moviepy.config.change_settings({"IMAGEMAGICK_BINARY": "C:/path/to/convert.exe"})
+#
+# Celery errors:
+# - "Redis connection refused": Start Redis server (redis-server)
+# - On Windows: Run redis-server.exe before starting Celery
+#
+# Veo API errors:
+# - "API key not configured": Set GEMINI_API_KEY in settings or .env
+# - "Model not available": Some models may not be available in all regions
+# - Use fallback models or different tier (fast/standard/premium)
+#
+# Memory errors:
+# - Video processing is memory-intensive
+# - Reduce video resolution or use smaller clips
+# - Close clips after processing to free memory
+
+# ════════════════════════════════════════════════════════════════════════════
+# COST ESTIMATION
+# ════════════════════════════════════════════════════════════════════════════
+# Google Veo API Pricing (as of April 2026):
+# - Veo 3.1 Fast:     $0.15/second = $1.20 per 8s clip
+# - Veo 3.1 Standard: $0.25/second = $2.00 per 8s clip
+# - Veo 3.1 Premium:  $0.40/second = $3.20 per 8s clip
+#
+# Example monthly costs:
+# - 100 clips/month (Fast):     $120
+# - 500 clips/month (Standard): $1,000
+# - 1000 clips/month (Premium): $3,200
+
+# ════════════════════════════════════════════════════════════════════════════
+# PERFORMANCE TIPS
+# ════════════════════════════════════════════════════════════════════════════
+# 1. Use Fast model for testing and prototyping
+# 2. Use Standard model for production content
+# 3. Use Premium model only for high-value campaigns
+# 4. Enable caching for identical prompts (use seed parameter)
+# 5. Batch process multiple clips to reduce overhead
+# 6. Use Celery for async processing to avoid blocking
+# 7. Monitor Redis memory usage (videos are memory-intensive)
+# 8. Clean up temporary files regularly
+# 9. Use lower resolution (720p) for faster processing
+# 10. Enable audio only when needed (saves bandwidth)

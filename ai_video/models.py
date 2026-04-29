@@ -216,11 +216,16 @@ class VideoGeneration(models.Model):
     ]
     
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='video_generations')
-    
+
+    # Brand & Workspace Integration (NEW)
+    workspace = models.ForeignKey('brands.Workspace', on_delete=models.SET_NULL, null=True, blank=True, related_name='video_generations')
+    brand = models.ForeignKey('brands.Brand', on_delete=models.SET_NULL, null=True, blank=True, related_name='video_generations')
+
     # Input
     title = models.CharField(max_length=200, help_text="Title for the video")
     prompt = models.TextField(help_text="Detailed description for video generation")
     negative_prompt = models.TextField(blank=True, null=True, help_text="What to avoid in the video")
+    brand_enhanced_prompt = models.TextField(blank=True, null=True, help_text="Prompt enhanced with BrandDNA context")
     
     # Style Settings
     style = models.CharField(max_length=30, choices=STYLE_CHOICES, default='realistic')

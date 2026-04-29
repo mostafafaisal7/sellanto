@@ -88,12 +88,13 @@ function extractPlatforms(brand: ExistingBrand): string[] {
 
 export function MagicModePage() {
   const store = useMagicModeStore();
-  const { screen, setScreen, setUrl, setLogoFile, setAnswer, setBrandId, setSkipInitialQuestions } = store;
+  const { screen, setScreen, setUrl, setLogoFile, setAnswer, setBrandId, setSkipInitialQuestions, setSkipDNAGeneration } = store;
 
   const [existingBrand, setExistingBrand] = useState<ExistingBrand | null>(null);
   const [showPopup, setShowPopup] = useState(false);
   const [showResumeWarning, setShowResumeWarning] = useState(false);
   const [checked, setChecked] = useState(false);
+  const [brandLoaded, setBrandLoaded] = useState(false);
 
   // ✅ FIX: Check for resume flag on mount (survives page refresh via localStorage)
   // This replaces the old pipelineCompleted check which was lost on page refresh
@@ -156,55 +157,80 @@ export function MagicModePage() {
 
   // On mount, check for existing brand with DNA
   useEffect(() => {
-    if (checked) return;
+    if (brandLoaded) return;
     let cancelled = false;
 
     (async () => {
       try {
         const brands = await onboardingService.getBrands();
+        console.log('[MagicMode] Fetched brands:', brands.length);
         if (cancelled) return;
 
         // Find brands with DNA (preferred for popup flow)
         const withDna = brands.filter(
           (b) => b.brand_dna && typeof b.brand_dna === 'object' && Object.keys(b.brand_dna).length > 0
         );
+        console.log('[MagicMode] Brands with DNA:', withDna.length);
 
         // Fallback: if no DNA brands, use any brand with website (for URL pre-fill)
         const anyBrand = brands.find((b) => b.website_url);
 
         // Priority: Primary with DNA > Any with DNA > Any with website
         const targetBrand = withDna.find((b) => b.is_primary) || withDna[0] || anyBrand;
+        console.log('[MagicMode] Target brand:', targetBrand ? `${targetBrand.brand_name} - ${targetBrand.website_url}` : 'none');
 
         if (targetBrand) {
-          setExistingBrand({
+          const brandData = {
             id: targetBrand.id,
             brand_name: targetBrand.brand_name,
             website_url: targetBrand.website_url || '',
             industry: targetBrand.industry,
             brand_dna: targetBrand.brand_dna || {},
-          });
+          };
+          console.log('[MagicMode] Setting existingBrand:', brandData);
+          setExistingBrand(brandData);
 
-          // Only show popup if brand has DNA data to pre-fill questions
+          // Show popup if brand has DNA data (useEffect below will handle actual display)
           const hasDna = withDna.length > 0;
-          if (hasDna && (store.screen === 'url' || store.screen === 'mode')) {
-            setShowPopup(true);
+          if (hasDna) {
+            console.log('[MagicMode] Brand with DNA found, will show popup');
+            // Popup will be triggered by useEffect watching existingBrand
           }
         }
-      } catch {
+      } catch (error) {
+        console.error('[MagicMode] Error fetching brands:', error);
         // No brands found or API error — proceed with normal flow
       }
-      if (!cancelled) setChecked(true);
+      if (!cancelled) {
+        console.log('[MagicMode] Brand loading complete');
+        setBrandLoaded(true);
+      }
     })();
 
     return () => { cancelled = true; };
-  }, [checked, store.screen]);
+  }, [brandLoaded]);
+
+  // Show popup when brand with DNA is loaded
+  useEffect(() => {
+    if (existingBrand && existingBrand.brand_dna && Object.keys(existingBrand.brand_dna).length > 0 && brandLoaded) {
+      console.log('[MagicMode] Brand with DNA detected, showing popup');
+      setShowPopup(true);
+    }
+  }, [existingBrand, brandLoaded]);
 
   const handleStartFresh = useCallback(() => {
     store.reset(); // Clear all stored data
-    setExistingBrand(null); // Clear existing brand data
+    // Keep website URL for pre-fill, but clear DNA data
+    if (existingBrand) {
+      setExistingBrand({
+        ...existingBrand,
+        brand_dna: {}, // Clear DNA to prevent auto-fill of questions
+      });
+    }
+    setSkipDNAGeneration(false); // Need to generate fresh DNA
     setShowPopup(false);
     setScreen('url');
-  }, [store, setScreen]);
+  }, [store, setScreen, existingBrand, setSkipDNAGeneration]);
 
   const handleUsePrevious = useCallback(() => {
     if (!existingBrand) return;
@@ -248,9 +274,10 @@ export function MagicModePage() {
     setBrandId(existingBrand.id);
 
     setSkipInitialQuestions(false); // Let user see and confirm the questions
+    setSkipDNAGeneration(true); // Brand already has DNA, skip regeneration
     setShowPopup(false);
     setScreen('questions'); // Go to questions screen with pre-filled data
-  }, [existingBrand, setUrl, setAnswer, setSkipInitialQuestions, setBrandId, setScreen, store, handleStartFresh]);
+  }, [existingBrand, setUrl, setAnswer, setSkipInitialQuestions, setBrandId, setScreen, setSkipDNAGeneration, store, handleStartFresh]);
 
   const handleURLSubmit = useCallback((url: string, logoFile?: File) => {
     setUrl(url);
@@ -482,8 +509,8 @@ export function MagicModePage() {
     );
   }
 
-  // Show returning-user popup
-  if (showPopup && existingBrand) {
+  // Show returning-user popup (only after brand is loaded to prevent flickering)
+  if (showPopup && existingBrand && brandLoaded) {
     return (
       <div
         className="min-h-screen flex items-center justify-center px-4"
@@ -566,7 +593,7 @@ export function MagicModePage() {
   }
 
   // Show loading while checking for existing brand (prevents empty URL field flash)
-  if (!checked && screen === 'url') {
+  if (!brandLoaded && (screen === 'url' || screen === 'mode')) {
     return (
       <div
         className="min-h-screen flex items-center justify-center"
