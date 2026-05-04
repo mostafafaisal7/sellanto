@@ -11,6 +11,12 @@ import { postService } from '../../services/postService';
 import ConnectAccountModal from '../../components/ConnectAccountModal';
 import type { CaptionPlatform, CaptionTone, PlatformType } from '../../types';
 
+const isMaybeVideo = (url?: string) => {
+  if (!url) return false;
+  const cleanUrl = url.split('?')[0].split('#')[0];
+  return cleanUrl.toLowerCase().match(/\.(mp4|webm|ogg|mov)$/) || url.includes('video');
+};
+
 const platformEmojiMap: Record<string, string> = {
   LinkedIn: '💼', Instagram: '📸', Facebook: '📘', 'Twitter / X': '🐦', TikTok: '🎵',
 };
@@ -71,10 +77,21 @@ function ApprovedPlatformCard({
         )}
       </div>
 
-      {/* Image thumbnail */}
+      {/* Image/Video thumbnail */}
       <div className="px-3 pt-2">
         {imageUrl ? (
-          <img src={imageUrl} alt={platform} className="w-full h-[120px] object-cover rounded-[8px]" />
+          isMaybeVideo(imageUrl) ? (
+            <video 
+              src={imageUrl} 
+              className="w-full h-[120px] object-cover rounded-[8px]" 
+              muted 
+              playsInline
+              onMouseOver={(e) => (e.target as HTMLVideoElement).play()}
+              onMouseOut={(e) => (e.target as HTMLVideoElement).pause()}
+            />
+          ) : (
+            <img src={imageUrl} alt={platform} className="w-full h-[120px] object-cover rounded-[8px]" />
+          )
         ) : (
           <div
             className="w-full h-[120px] rounded-[8px] flex items-center justify-center"
@@ -512,12 +529,24 @@ function PostCard({
             }}
           >
             {post.imageUrl ? (
-              <img
-                src={post.imageUrl}
-                alt={post.title}
-                className="w-full h-full object-cover rounded-lg"
-                style={{ maxHeight: 300 }}
-              />
+              isMaybeVideo(post.imageUrl) ? (
+                <video
+                  src={post.imageUrl}
+                  className="w-full h-full object-cover rounded-lg"
+                  style={{ maxHeight: 300, background: '#000' }}
+                  controls
+                  loop
+                  muted
+                  playsInline
+                />
+              ) : (
+                <img
+                  src={post.imageUrl}
+                  alt={post.title}
+                  className="w-full h-full object-cover rounded-lg"
+                  style={{ maxHeight: 300 }}
+                />
+              )
             ) : (
               <>
                 {generatingImage ? (
@@ -812,13 +841,16 @@ export function ResultsScreen({ onGenerateMore, onGoBack }: ResultsScreenProps) 
         const userId = useAuthStore.getState().user?.id;
         if (userId) {
           localStorage.setItem(`magic_has_posts_${userId}`, 'true');
-          console.log('[ResultsScreen] ⚠️ User leaving with unfinished posts - setting resume flag');
         }
       }
     };
 
     window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      // Also run when unmounting via client-side navigation
+      handleBeforeUnload();
+    };
   }, [generatedPosts]);
 
   // Load posts from backend if generatedPosts is empty (e.g., page refresh or localStorage cleared)

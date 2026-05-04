@@ -35,6 +35,8 @@ import {
   SetupFlowPage,
   DraftPostsPage,
   OverflowHistoryPage,
+  // Video AI
+  VideoAIPage,
   // Dev / Test
   APITestPage,
 } from './pages';
@@ -195,6 +197,9 @@ function App() {
           <Route path="/setup/*" element={<SetupFlowPage />} />
           <Route path="/magic/history" element={<MagicHistoryPage />} />
           <Route path="/magic/draft" element={<MagicDraftPage />} />
+
+          {/* Video AI */}
+          <Route path="/video-ai" element={<VideoAIPage />} />
 
           {/* Dev / Test */}
           <Route path="/test-api" element={<APITestPage />} />

@@ -2771,6 +2771,7 @@ class MagicHistoryView(APIView):
     def get(self, request):
         from brands.models import Brand, ContentIdea, TrendingCache, BrandDNAHistory, PromptHistory
         from posts.models import Post
+        from ai_video.models import VideoGeneration
 
         user = request.user
 
@@ -2814,6 +2815,12 @@ class MagicHistoryView(APIView):
         prompt_history = list(PromptHistory.objects.filter(brand_id__in=brand_ids).order_by('-created_at').values(
             'id', 'brand_id', 'feature', 'prompt_text', 'created_at',
         )[:100])
+        
+        videos = list(VideoGeneration.objects.filter(user=user).order_by('-created_at').values(
+            'id', 'title', 'prompt', 'style', 'duration', 'aspect_ratio',
+            'generated_video', 'generated_video_with_logo', 'thumbnail',
+            'status', 'error_message', 'created_at',
+        )[:100])
 
         # Build brand name map
         brand_map = {b.id: b.brand_name for b in brands}
@@ -2833,6 +2840,8 @@ class MagicHistoryView(APIView):
             all_events.append(('dna', d['generated_at'], d))
         for p in prompt_history:
             all_events.append(('prompt', p['created_at'], p))
+        for v in videos:
+            all_events.append(('video', v['created_at'], v))
         for post in magic_posts:
             all_events.append(('post', post['created_at'], post))
 
@@ -2842,7 +2851,7 @@ class MagicHistoryView(APIView):
         # Cluster into sessions (15-min gap = new session)
         sessions = []
         current_session = None
-        session_gap = timedelta(minutes=15)
+        session_gap = timedelta(minutes=60)
 
         for event_type, ts, data in all_events:
             if ts is None:
@@ -2853,6 +2862,7 @@ class MagicHistoryView(APIView):
                     'date': ts.isoformat(),
                     'captions': [],
                     'images': [],
+                    'videos': [],
                     'ideas': [],
                     'trending_topics': [],
                     'dna': None,
@@ -2890,6 +2900,17 @@ class MagicHistoryView(APIView):
             elif event_type == 'prompt':
                 data['created_at'] = data['created_at'].isoformat() if data['created_at'] else None
                 current_session['prompts'].append(data)
+            elif event_type == 'video':
+                data['created_at'] = data['created_at'].isoformat() if data['created_at'] else None
+                # Convert video fields to URLs
+                for field in ('generated_video', 'generated_video_with_logo'):
+                    if data.get(field):
+                        data[field] = request.build_absolute_uri('/media/' + str(data[field]))
+                    else:
+                        data[field] = None
+                if data.get('thumbnail'):
+                    data['thumbnail'] = request.build_absolute_uri('/media/' + str(data['thumbnail']))
+                current_session['videos'].append(data)
             elif event_type == 'post':
                 data['created_at'] = data['created_at'].isoformat() if data['created_at'] else None
                 data['posted_at'] = data['posted_at'].isoformat() if data.get('posted_at') else None
@@ -2915,10 +2936,12 @@ class MagicHistoryView(APIView):
             total_time = (
                 sum(c.get('processing_time', 0) or 0 for c in s['captions'])
                 + sum(i.get('processing_time', 0) or 0 for i in s['images'])
+                + sum(v.get('processing_time', 0) or 0 for v in s['videos'])
             )
             s['stats'] = {
                 'total_captions': len(s['captions']),
                 'total_images': len(s['images']),
+                'total_videos': len(s['videos']),
                 'total_ideas': len(s['ideas']),
                 'total_trending': len(s['trending_topics']),
                 'total_posts': len(s['posts']),
@@ -3564,3 +3587,176 @@ class ProductListView(MessengerGateMixin, generics.ListAPIView):
             ecommerce_settings__connection_id=connection_id,
             ecommerce_settings__connection__user=self.request.user,
         )
+
+
+# ── Video AI (JWT-authenticated, callable from React) ────────────────────────
+
+class VideoGenerateAPIView(APIView):
+    """Generate a video via Gemini/Veo from the React frontend."""
+    permission_classes = [IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+
+    def post(self, request):
+        from ai_video.models import VideoGeneration
+        from ai_video.gemini_service import GeminiVideoService
+        from accounts.api_keys import get_gemini_key
+
+        prompt = (request.data.get('prompt') or '').strip()
+        if not prompt:
+            return Response({'error': 'prompt is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+        api_key = get_gemini_key(request.user)
+        if not api_key:
+            return Response(
+                {'error': 'No Gemini API key configured. Ask your admin to add a global key.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        style = request.data.get('style', 'realistic')
+        duration = int(request.data.get('duration', 5))
+        aspect_ratio = request.data.get('aspect_ratio', '16:9')
+        product_position = request.data.get('product_position', 'center')
+        product_scale = int(request.data.get('product_scale', 50))
+
+        brand_id = request.data.get('brand_id')
+        brand = None
+        if brand_id:
+            try:
+                brand = Brand.objects.get(id=brand_id, user=request.user)
+            except Brand.DoesNotExist:
+                pass
+
+        title = prompt[:60] + ('…' if len(prompt) > 60 else '')
+        video_gen = VideoGeneration.objects.create(
+            user=request.user,
+            title=title,
+            prompt=prompt,
+            style=style,
+            duration=duration,
+            aspect_ratio=aspect_ratio,
+            status='processing',
+            brand=brand,
+        )
+
+        try:
+            service = GeminiVideoService(api_key=api_key)
+            # Optional reference image for image-to-video
+            reference_image_bytes = None
+            ref_file = request.FILES.get('reference_image')
+            if ref_file:
+                reference_image_bytes = ref_file.read()
+
+            result = service.generate_video(
+                prompt=prompt,
+                style=style,
+                duration=duration,
+                aspect_ratio=aspect_ratio,
+                resolution='',  # let Veo use its own default; '1080p' is rejected
+                reference_image=reference_image_bytes,
+                brand=brand,
+            )
+
+            if result.get('success'):
+                video_bytes = result.get('video_bytes') or result.get('video_data')
+                if video_bytes:
+                    from django.core.files.base import ContentFile
+                    video_gen.generated_video.save(
+                        f'video_{video_gen.id}.mp4',
+                        ContentFile(video_bytes),
+                        save=True,
+                    )
+                
+                # 🆕 NEW: Composite product if reference image was provided
+                if reference_image_bytes and video_gen.generated_video:
+                    try:
+                        input_path = video_gen.generated_video.path
+                        # Create unique temp output path
+                        import os, tempfile
+                        temp_dir = tempfile.gettempdir()
+                        output_filename = f"comp_{video_gen.id}_{int(time.time())}.mp4"
+                        output_path = os.path.join(temp_dir, output_filename)
+                        
+                        comp_success = service.add_product_to_video(
+                            video_path=input_path,
+                            product_image_data=reference_image_bytes,
+                            output_path=output_path,
+                            position=product_position,
+                            scale=product_scale
+                        )
+                        
+                        if comp_success:
+                            with open(output_path, 'rb') as f:
+                                from django.core.files.base import ContentFile
+                                video_gen.generated_video.save(
+                                    f'video_{video_gen.id}_final.mp4',
+                                    ContentFile(f.read()),
+                                    save=False
+                                )
+                            # Cleanup temp output
+                            if os.path.exists(output_path):
+                                try: os.unlink(output_path)
+                                except: pass
+                    except Exception as e:
+                        print(f"Video product compositing failed: {e}")
+
+                video_gen.brand_enhanced_prompt = result.get('enhanced_prompt', '')
+                video_gen.status = 'completed'
+                video_gen.save()
+
+                video_url = None
+                if video_gen.generated_video:
+                    try:
+                        video_url = request.build_absolute_uri(video_gen.generated_video.url)
+                    except Exception:
+                        video_url = video_gen.generated_video.url
+
+                return Response({
+                    'success': True,
+                    'generation_id': video_gen.id,
+                    'video_url': video_url,
+                    'enhanced_prompt': video_gen.brand_enhanced_prompt,
+                    'model_used': result.get('model_used', ''),
+                })
+            else:
+                video_gen.status = 'failed'
+                video_gen.save()
+                return Response(
+                    {'success': False, 'error': result.get('error', 'Generation failed')},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                )
+
+        except Exception as exc:
+            video_gen.status = 'failed'
+            video_gen.save()
+            return Response(
+                {'success': False, 'error': str(exc)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+
+class VideoHistoryAPIView(APIView):
+    """Return the user's recent video generations."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from ai_video.models import VideoGeneration
+        qs = VideoGeneration.objects.filter(user=request.user).order_by('-created_at')[:20]
+        data = []
+        for v in qs:
+            video_url = None
+            if v.generated_video:
+                try:
+                    video_url = request.build_absolute_uri(v.generated_video.url)
+                except Exception:
+                    video_url = v.generated_video.url
+            data.append({
+                'id': v.id,
+                'title': v.title,
+                'prompt': v.prompt,
+                'style': v.style,
+                'duration': v.duration,
+                'status': v.status,
+                'video_url': video_url,
+                'created_at': v.created_at.isoformat(),
+            })
+        return Response({'results': data})

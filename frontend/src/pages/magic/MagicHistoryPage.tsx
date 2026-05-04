@@ -51,6 +51,21 @@ interface ImageRecord {
   created_at: string;
 }
 
+interface VideoRecord {
+  id: number;
+  title: string;
+  prompt: string;
+  style: string;
+  duration: number;
+  aspect_ratio: string;
+  generated_video: string | null;
+  generated_video_with_logo: string | null;
+  thumbnail: string | null;
+  status: string;
+  error_message: string;
+  created_at: string;
+}
+
 interface IdeaRecord {
   id: number;
   title: string;
@@ -86,6 +101,7 @@ interface PromptRecord {
 interface SessionStats {
   total_captions: number;
   total_images: number;
+  total_videos: number;
   total_ideas: number;
   total_trending: number;
   total_posts: number;
@@ -101,6 +117,7 @@ interface Session {
   dna: Record<string, unknown> | null;
   captions: CaptionRecord[];
   images: ImageRecord[];
+  videos: VideoRecord[];
   ideas: IdeaRecord[];
   trending_topics: TrendingRecord[];
   prompts: PromptRecord[];
@@ -131,6 +148,12 @@ function StatusBadge({ status }: { status: string }) {
     </span>
   );
 }
+
+const isMaybeVideo = (url?: string) => {
+  if (!url) return false;
+  const cleanUrl = url.split('?')[0].split('#')[0];
+  return cleanUrl.toLowerCase().match(/\.(mp4|webm|ogg|mov)$/) || url.includes('video');
+};
 
 function ExpandableText({ label, text }: { label: string; text: string }) {
   const [open, setOpen] = useState(false);
@@ -178,13 +201,13 @@ function HistoryPostCard({ post, onConnectError }: { post: PostRecord; onConnect
     tiktok: '🎵',
   };
 
-  const downloadImageAsFile = async (): Promise<File[]> => {
+  const downloadMediaAsFile = async (): Promise<File[]> => {
     if (!post.media_urls || post.media_urls.length === 0) return [];
     try {
       const res = await fetch(post.media_urls[0]);
       const blob = await res.blob();
-      const ext = post.media_urls[0].split('.').pop()?.split('?')[0] || 'png';
-      return [new File([blob], `image.${ext}`, { type: blob.type || 'image/png' })];
+      const ext = post.media_urls[0].split('.').pop()?.split('?')[0] || (blob.type.startsWith('video') ? 'mp4' : 'png');
+      return [new File([blob], `media.${ext}`, { type: blob.type || (ext === 'mp4' ? 'video/mp4' : 'image/png') })];
     } catch {
       return [];
     }
@@ -194,7 +217,7 @@ function HistoryPostCard({ post, onConnectError }: { post: PostRecord; onConnect
     setPublishing(true);
     setPostError(null);
     try {
-      const mediaFiles = await downloadImageAsFile();
+      const mediaFiles = await downloadMediaAsFile();
       const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
       const now = new Date();
       now.setMinutes(now.getMinutes() + 1);
@@ -229,7 +252,7 @@ function HistoryPostCard({ post, onConnectError }: { post: PostRecord; onConnect
     setScheduling(true);
     setPostError(null);
     try {
-      const mediaFiles = await downloadImageAsFile();
+      const mediaFiles = await downloadMediaAsFile();
       const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
       const scheduledTime = new Date(`${schedDate}T${schedTime}`).toISOString();
 
@@ -279,10 +302,20 @@ function HistoryPostCard({ post, onConnectError }: { post: PostRecord; onConnect
 
       {/* Content */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-0">
-        {/* Image */}
+        {/* Media */}
         {post.media_urls && post.media_urls.length > 0 && (
           <div className="p-4">
-            <img src={post.media_urls[0]} alt="Post" className="w-full h-[200px] object-cover rounded-[10px]" />
+            {isMaybeVideo(post.media_urls[0]) ? (
+              <video
+                src={post.media_urls[0]}
+                className="w-full h-[200px] object-cover rounded-[10px]"
+                controls
+                muted
+                playsInline
+              />
+            ) : (
+              <img src={post.media_urls[0]} alt="Post" className="w-full h-[200px] object-cover rounded-[10px]" />
+            )}
           </div>
         )}
 
@@ -393,10 +426,13 @@ function HistoryPostCard({ post, onConnectError }: { post: PostRecord; onConnect
 
 // Technical details card (existing SessionCard functionality)
 function TechnicalDetailsCard({ session }: { session: Session }) {
-  const [activeTab, setActiveTab] = useState<'ideas' | 'captions' | 'images' | 'trending' | 'dna' | 'prompts'>('captions');
+  const [activeTab, setActiveTab] = useState<'ideas' | 'captions' | 'images' | 'videos' | 'trending' | 'dna' | 'prompts'>(
+    session.stats.total_videos > 0 ? 'videos' : 'captions'
+  );
   const { stats } = session;
 
   const tabs = [
+    { key: 'videos' as const, label: 'Videos', count: stats.total_videos, emoji: '🎬' },
     { key: 'captions' as const, label: 'Captions', count: stats.total_captions, emoji: '✍️' },
     { key: 'ideas' as const, label: 'Ideas', count: stats.total_ideas, emoji: '💡' },
     { key: 'images' as const, label: 'Images', count: stats.total_images, emoji: '🎨' },
@@ -498,6 +534,36 @@ function TechnicalDetailsCard({ session }: { session: Session }) {
           </div>
         )}
 
+        {/* Videos tab */}
+        {activeTab === 'videos' && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {session.videos.map((vid) => {
+              const vidUrl = vid.generated_video_with_logo || vid.generated_video;
+              return (
+                <div key={vid.id} className="rounded-[12px] overflow-hidden" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
+                  {vidUrl ? (
+                    <video src={vidUrl} className="w-full h-[150px] object-cover" muted playsInline onMouseOver={e => e.currentTarget.play()} onMouseOut={e => e.currentTarget.pause()} />
+                  ) : vid.thumbnail ? (
+                    <img src={vid.thumbnail} alt={vid.title} className="w-full h-[150px] object-cover" />
+                  ) : null}
+                  <div className="p-3">
+                    <div className="flex items-start justify-between gap-2 mb-1">
+                      <p className="text-[11px] font-semibold text-text-primary flex-1">{vid.title || 'Video'}</p>
+                      <StatusBadge status={vid.status} />
+                    </div>
+                    <div className="flex flex-wrap gap-2 mb-2">
+                      {vid.style && <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ background: 'rgba(168,85,247,0.1)', color: '#a855f7' }}>{vid.style}</span>}
+                      {vid.duration && <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ background: 'rgba(59,130,246,0.1)', color: '#3b82f6' }}>{vid.duration}s</span>}
+                    </div>
+                    <ExpandableText label="Prompt" text={vid.prompt} />
+                    {vid.error_message && <p className="text-[11px] mt-2" style={{ color: '#ef4444' }}>{vid.error_message}</p>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
         {/* Trending tab */}
         {activeTab === 'trending' && session.trending_topics.map((t) => (
           <div key={t.id} className="flex items-center gap-4 p-3 rounded-[12px]" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
@@ -572,7 +638,7 @@ function SessionCard({ session }: { session: Session }) {
   const [connectModalError, setConnectModalError] = useState<string | null>(null);
   const { stats } = session;
 
-  const hasTechnicalData = stats.total_captions > 0 || stats.total_images > 0 || stats.total_ideas > 0 || stats.total_trending > 0 || session.dna || session.prompts.length > 0;
+  const hasTechnicalData = stats.total_captions > 0 || stats.total_images > 0 || stats.total_videos > 0 || stats.total_ideas > 0 || stats.total_trending > 0 || session.dna || session.prompts.length > 0;
 
   return (
     <div
@@ -597,6 +663,9 @@ function SessionCard({ session }: { session: Session }) {
             )}
             {stats.total_images > 0 && (
               <span className="text-[11px] text-text-muted">🎨 {stats.total_images} images</span>
+            )}
+            {stats.total_videos > 0 && (
+              <span className="text-[11px] text-text-muted">🎬 {stats.total_videos} videos</span>
             )}
             {stats.total_ideas > 0 && (
               <span className="text-[11px] text-text-muted">💡 {stats.total_ideas} ideas</span>
@@ -670,8 +739,8 @@ export function MagicHistoryPage() {
   // Summary stats
   const totalSessions = sessions.length;
   const totalPosts = sessions.reduce((s, sess) => s + sess.stats.total_posts, 0);
-  const totalCaptions = sessions.reduce((s, sess) => s + sess.stats.total_captions, 0);
   const totalImages = sessions.reduce((s, sess) => s + sess.stats.total_images, 0);
+  const totalVideos = sessions.reduce((s, sess) => s + sess.stats.total_videos, 0);
 
   return (
     <div className="max-w-4xl mx-auto py-8 px-4">
@@ -697,8 +766,8 @@ export function MagicHistoryPage() {
           {[
             { label: 'Sessions', value: totalSessions, emoji: '🚀' },
             { label: 'Posts', value: totalPosts, emoji: '📝' },
-            { label: 'Captions', value: totalCaptions, emoji: '✍️' },
             { label: 'Images', value: totalImages, emoji: '🎨' },
+            { label: 'Videos', value: totalVideos, emoji: '🎬' },
           ].map((stat) => (
             <div
               key={stat.label}

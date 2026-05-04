@@ -35,5 +35,8 @@ export { SetupFlowPage } from './SetupFlowPage';
 export { DraftPostsPage } from './DraftPostsPage';
 export { OverflowHistoryPage } from './OverflowHistoryPage';
 
+// Video AI
+export { VideoAIPage } from './VideoAIPage';
+
 // Dev / Test
 export { APITestPage } from './APITestPage';

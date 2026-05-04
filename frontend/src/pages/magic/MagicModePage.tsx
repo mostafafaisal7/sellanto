@@ -4,6 +4,9 @@ import { useAuthStore } from '../../store';
 import { URLInputScreen } from './URLInputScreen';
 import { AIQuestionsScreen } from './AIQuestionsScreen';
 import { ProductUploadScreen } from './ProductUploadScreen';
+import { VideoPromptScreen } from './VideoPromptScreen';
+import { VideoWorkingScreen } from './VideoWorkingScreen';
+import { VideoResultScreen } from './VideoResultScreen';
 import { AIWorkingScreen } from './AIWorkingScreen';
 import { ResultsScreen } from './ResultsScreen';
 import { onboardingService } from '../../services';
@@ -101,8 +104,9 @@ export function MagicModePage() {
   useEffect(() => {
     if (checked) return;
 
-    // Check in-memory store first (for in-session navigation)
-    if (store.pipelineCompleted && store.generatedPosts.length > 0 && store.screen !== 'results') {
+    // Check in-memory store first (for client-side navigation away and back)
+    const unfinished = store.generatedPosts.filter(p => p.status !== 'published' && p.status !== 'scheduled');
+    if (store.pipelineCompleted && unfinished.length > 0) {
       console.log('[MagicMode] ✅ In-session posts found - showing resume warning');
       setShowResumeWarning(true);
       setChecked(true);
@@ -120,13 +124,9 @@ export function MagicModePage() {
       const resumeFlagKey = `magic_has_posts_${userId}`;
       const hasPostsFlag = localStorage.getItem(resumeFlagKey);
 
-      // ✅ Only show resume popup if NOT already on results screen
-      // If user just generated and is on results, don't interrupt with popup
-      if (hasPostsFlag === 'true' && store.screen !== 'results') {
+      if (hasPostsFlag === 'true') {
         console.log('[MagicMode] ✅ Resume flag found - showing resume warning');
         setShowResumeWarning(true);
-      } else if (hasPostsFlag === 'true' && store.screen === 'results') {
-        console.log('[MagicMode] ℹ️ Resume flag exists but already on results screen - skipping popup');
       }
     } catch (error) {
       console.error('[MagicMode] Failed to check localStorage resume flag:', error);
@@ -134,26 +134,6 @@ export function MagicModePage() {
 
     setChecked(true);
   }, []);
-
-  // ✅ WATCH: Update resume warning when posts are generated during session
-  useEffect(() => {
-    if (!checked) return;
-
-    if (store.pipelineCompleted && store.generatedPosts.length > 0 && store.screen !== 'results' && !showResumeWarning) {
-      console.log('[MagicMode] ✅ Posts completed during session - enabling resume warning');
-      setShowResumeWarning(true);
-
-      // Set localStorage flag for next page load
-      try {
-        const userId = useAuthStore.getState().user?.id;
-        if (userId) {
-          localStorage.setItem(`magic_has_posts_${userId}`, 'true');
-        }
-      } catch (error) {
-        console.error('[MagicMode] Failed to set localStorage resume flag:', error);
-      }
-    }
-  }, [store.pipelineCompleted, store.generatedPosts.length, store.screen, checked]);
 
   // On mount, check for existing brand with DNA
   useEffect(() => {
@@ -345,6 +325,56 @@ export function MagicModePage() {
     store.setReturningFromProductUpload(false);
     setScreen('questions');
   }, [setScreen, store]);
+
+  const buildVideoPromptFromAnswers = useCallback((): string => {
+    const a = store.answers;
+    const industry = Array.isArray(a.industry) ? a.industry[0] : (a.industry || '');
+    const goal = Array.isArray(a.goal) ? a.goal[0] : (a.goal || '');
+    const tone = Array.isArray(a.tone) ? a.tone[0] : (a.tone || '');
+    const platforms = Array.isArray(a.platforms) ? a.platforms.join(' and ') : (a.platforms || '');
+
+    // Map goal to video action phrase
+    const goalMap: Record<string, string> = {
+      'Get more customers / leads': 'attract new customers and generate leads',
+      'Build brand awareness': 'build brand awareness and recognition',
+      'Drive website traffic': 'drive traffic to the website',
+      'Establish thought leadership': 'establish expertise and thought leadership',
+      'Showcase products / services': 'showcase products and services',
+    };
+    const goalPhrase = goalMap[goal] || goal || 'promote the brand';
+
+    // Map tone
+    const toneMap: Record<string, string> = {
+      'Professional & Authoritative': 'professional and polished',
+      'Friendly & Approachable': 'warm and friendly',
+      'Bold & Provocative': 'bold and attention-grabbing',
+      'Educational & Helpful': 'informative and helpful',
+      'Fun & Casual': 'fun and energetic',
+    };
+    const tonePhrase = toneMap[tone] || tone || 'engaging';
+
+    const industryPhrase = industry ? `for a ${industry.toLowerCase()} business` : '';
+    const platformPhrase = platforms ? `for ${platforms}` : '';
+
+    return `A ${tonePhrase} video ${industryPhrase} that helps ${goalPhrase}${platformPhrase ? ', optimized ' + platformPhrase : ''}. Show real value, make it visually compelling, and leave a strong impression.`.trim();
+  }, [store.answers]);
+
+  const handleVideoFlow = useCallback(() => {
+    setScreen('video_prompt');
+  }, [setScreen]);
+
+  const handleVideoGenerate = useCallback((prompt: string, style: string, duration: number, referenceImage?: File) => {
+    store.setVideoPending({ prompt, style, duration, referenceImage });
+    setScreen('video_working');
+  }, [store, setScreen]);
+
+  const handleVideoPromptBack = useCallback(() => {
+    setScreen('questions');
+  }, [setScreen]);
+
+  const handleVideoResultBack = useCallback(() => {
+    setScreen('video_prompt');
+  }, [setScreen]);
 
   const handleQuestionsBack = useCallback(() => {
     if (store.skipInitialQuestions && existingBrand) {
@@ -623,12 +653,35 @@ export function MagicModePage() {
           onNext={handleQuestionsNext}
           onBack={handleQuestionsBack}
           onProductUpload={handleProductUpload}
+          onVideoFlow={handleVideoFlow}
           skipIndustry={store.skipInitialQuestions}
-          startAtQuestion={store.returningFromProductUpload ? 4 : undefined}
+          startAtQuestion={store.returningFromProductUpload ? (store.skipInitialQuestions ? 4 : 5) : undefined}
         />
       );
     case 'product_upload':
       return <ProductUploadScreen onNext={handleProductUploadNext} onBack={handleProductUploadBack} />;
+    case 'video_prompt':
+      return (
+        <VideoPromptScreen
+          onGenerate={handleVideoGenerate}
+          onBack={handleVideoPromptBack}
+          initialPrompt={buildVideoPromptFromAnswers()}
+        />
+      );
+    case 'video_working':
+      return (
+        <VideoWorkingScreen
+          onComplete={() => setScreen('video_result')}
+          onStop={() => { store.setVideoPending(null); setScreen('video_prompt'); }}
+        />
+      );
+    case 'video_result':
+      return (
+        <VideoResultScreen
+          onBack={handleVideoResultBack}
+          onGenerateAnother={() => { store.setVideoResult(null); setScreen('video_prompt'); }}
+        />
+      );
     case 'working':
       return <AIWorkingScreen onComplete={handleWorkingComplete} onStop={handleWorkingStop} />;
     case 'results':

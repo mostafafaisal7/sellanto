@@ -244,7 +244,6 @@ Additional guidance: Ensure smooth transitions, consistent lighting throughout t
 
             params = {
                 'aspectRatio': aspect_ratio,
-                'personGeneration': 'allow_adult',
                 'sampleCount': 1,
             }
             if resolution in ('720p', '1080p', '4k'):
@@ -276,6 +275,11 @@ Additional guidance: Ensure smooth transitions, consistent lighting throughout t
                     error_data = response.json()
                     if 'error' in error_data:
                         error_msg = error_data['error'].get('message', error_msg)
+                        
+                        # Fallback: if model rejects inlineData, retry as text-to-video
+                        if 'inlineData' in error_msg and reference_image:
+                            print(f"Model {model} rejected inlineData. Retrying as text-to-video.")
+                            return self._generate_with_veo(prompt, duration, resolution, aspect_ratio, None, model)
                 except Exception:
                     pass
                 return {'success': False, 'error': error_msg}
@@ -443,6 +447,84 @@ Additional guidance: Ensure smooth transitions, consistent lighting throughout t
             return False
         except Exception as e:
             print(f"Error adding logo to video: {e}")
+            return False
+
+    def add_product_to_video(self, video_path, product_image_data, output_path, position='center', scale=50):
+        """
+        Remove background from product image and overlay it on the video.
+        """
+        try:
+            from moviepy.editor import VideoFileClip, ImageClip, CompositeVideoClip
+            import rembg
+            
+            # Remove background from product (using rembg AI)
+            product_no_bg = rembg.remove(product_image_data)
+            product_img = Image.open(io.BytesIO(product_no_bg)).convert('RGBA')
+            
+            # Load video
+            video = VideoFileClip(video_path)
+            video_width, video_height = video.size
+            
+            # Scale product
+            scale = max(20, min(90, scale))
+            target_w = int(video_width * scale / 100)
+            product_ratio = product_img.height / product_img.width
+            target_h = int(target_w * product_ratio)
+            
+            # Ensure product doesn't exceed video height
+            if target_h > int(video_height * 0.85):
+                target_h = int(video_height * 0.85)
+                target_w = int(target_h / product_ratio)
+            
+            product_img = product_img.resize((target_w, target_h), Image.LANCZOS)
+            
+            # Save product temporarily
+            temp_product = tempfile.NamedTemporaryFile(suffix='.png', delete=False)
+            product_img.save(temp_product.name)
+            
+            # Calculate position
+            x = (video_width - target_w) // 2
+            y = (video_height - target_h) // 2
+            
+            if position == 'center_bottom':
+                y = int(video_height * 0.85) - target_h
+            elif position == 'left':
+                x = int(video_width * 0.1)
+            elif position == 'right':
+                x = video_width - target_w - int(video_width * 0.1)
+            elif position == 'center_top':
+                y = int(video_height * 0.15)
+            
+            # Create product clip
+            product_clip = (ImageClip(temp_product.name)
+                          .set_duration(video.duration)
+                          .set_position((x, y)))
+            
+            # Composite video with product
+            final_video = CompositeVideoClip([video, product_clip])
+            
+            # Write output
+            final_video.write_videofile(
+                output_path,
+                codec='libx264',
+                audio_codec='aac',
+                temp_audiofile=os.path.join(tempfile.gettempdir(), f'temp-audio-{time.time()}.m4a'),
+                remove_temp=True,
+                verbose=False,
+                logger=None
+            )
+            
+            # Cleanup
+            video.close()
+            final_video.close()
+            os.unlink(temp_product.name)
+            
+            return True
+        except ImportError:
+            print("moviepy or rembg not installed.")
+            return False
+        except Exception as e:
+            print(f"Error adding product to video: {e}")
             return False
     
     def generate_thumbnail(self, video_path, output_path, time_offset=0):

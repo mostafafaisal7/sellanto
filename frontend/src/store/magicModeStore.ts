@@ -60,7 +60,7 @@ export interface MagicCaptionData {
 }
 
 interface MagicModeState {
-  screen: 'mode' | 'url' | 'questions' | 'product_upload' | 'working' | 'results';
+  screen: 'mode' | 'url' | 'questions' | 'product_upload' | 'video_prompt' | 'video_working' | 'video_result' | 'working' | 'results';
   websiteUrl: string;
   answers: Record<string, string | string[]>;
   customAnswers: Record<string, string>; // NEW: Store custom "Other" text values
@@ -100,7 +100,13 @@ interface MagicModeState {
   returningFromProductUpload: boolean;
 
   // DNA generation control
-  skipDNAGeneration: boolean; // Skip DNA generation when using existing brand data
+  skipDNAGeneration: boolean;
+
+  // Video pending generation (set by VideoPromptScreen, consumed by VideoWorkingScreen)
+  videoPending: { prompt: string; style: string; duration: number; referenceImage?: File } | null;
+
+  // Video result (kept separate from generatedPosts — video is a single file, not a list of image posts)
+  videoResult: { videoUrl: string; generationId: number; prompt: string; style: string } | null;
 
   setScreen: (screen: MagicModeState['screen']) => void;
   setUrl: (url: string) => void;
@@ -146,6 +152,8 @@ interface MagicModeState {
   removeCustomQA: (qaId: string) => void;
   updateCustomQA: (qaId: string, updates: Partial<CustomQA>) => void;
   setSkipDNAGeneration: (skip: boolean) => void;
+  setVideoPending: (pending: MagicModeState['videoPending']) => void;
+  setVideoResult: (result: MagicModeState['videoResult']) => void;
 
   reset: () => void;
 }
@@ -178,6 +186,8 @@ export const useMagicModeStore = create<MagicModeState>()((set) => ({
       answersChanged: false,
       returningFromProductUpload: false,
       skipDNAGeneration: false,
+      videoPending: null,
+      videoResult: null,
 
       setScreen: (screen) => set({ screen }),
       setUrl: (websiteUrl) => set({ websiteUrl }),
@@ -311,6 +321,8 @@ export const useMagicModeStore = create<MagicModeState>()((set) => ({
         })),
 
       setSkipDNAGeneration: (skipDNAGeneration) => set({ skipDNAGeneration }),
+      setVideoPending: (videoPending) => set({ videoPending }),
+      setVideoResult: (videoResult) => set({ videoResult }),
 
       reset: () => {
         // No localStorage cleanup needed - database is source of truth
@@ -342,6 +354,8 @@ export const useMagicModeStore = create<MagicModeState>()((set) => ({
           answersChanged: false,
           returningFromProductUpload: false,
           skipDNAGeneration: false,
+          videoPending: null,
+          videoResult: null,
         });
       },
     }));

@@ -25,9 +25,10 @@ urlpatterns = [
     path('platforms/', include('platforms.urls')),
     path('ai-caption/', include('ai_caption.urls')),
     path('ai-image/', include('ai_image.urls')),
+    path('ai-video/', include('ai_video.urls')),  # AI Video Generation (Veo)
     path('messenger/', include('messenger_bot.urls')),
     path('business-profile/', include('brands.urls')),
-    path('video-studio/', include('video_studio.urls')),  # AI Video Generation
+    path('video-studio/', include('video_studio.urls')),  # NEW: Advanced Video Studio
 
     # API Documentation (Swagger UI)
     path('doc/api/schema/', SpectacularAPIView.as_view(), name='schema'),

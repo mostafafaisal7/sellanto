@@ -121,17 +121,26 @@ export function AIWorkingScreen({ onComplete, onStop }: AIWorkingScreenProps) {
       }
       if (cancelledRef.current) return;
 
-      // Step 1: Generate DNA (if URL provided and not skipped)
+      // Step 1: Generate DNA (if URL provided, not skipped, and brand has no existing DNA)
       setStep(1);
       if (store.websiteUrl && !store.skipDNAGeneration) {
         try {
-          console.log('[AIWorkingScreen] Generating DNA for brand:', brandId);
-          await strategyService.generateDNA(brandId, store.websiteUrl);
+          // Check if brand already has DNA before generating to avoid duplicate work
+          const brandDetail = await api.get(`/brands/${brandId}/`);
+          const existingDNA = brandDetail.data?.brand_dna;
+          const hasDNA = existingDNA && typeof existingDNA === 'object' && Object.keys(existingDNA).length > 0;
+
+          if (hasDNA) {
+            console.log('[AIWorkingScreen] Brand already has DNA - skipping regeneration');
+          } else {
+            console.log('[AIWorkingScreen] Generating DNA for brand:', brandId);
+            await strategyService.generateDNA(brandId, store.websiteUrl);
+          }
         } catch {
           // Non-fatal — continue without DNA
         }
       } else if (store.skipDNAGeneration) {
-        console.log('[AIWorkingScreen] Skipping DNA generation - using existing brand DNA');
+        console.log('[AIWorkingScreen] Skipping DNA generation - skipDNAGeneration flag set');
       }
       if (cancelledRef.current) return;
 
@@ -253,23 +262,60 @@ export function AIWorkingScreen({ onComplete, onStop }: AIWorkingScreenProps) {
         ? productMode[0] === 'Yes - I have product images'
         : productMode === 'Yes - I have product images';
 
-      if (useProductImages && store.productImages.length > 0) {
+      // 🆕 Get product images from the new multi-product store structure
+      const selectedProducts = store.products.filter(p => store.selectedProductIds.includes(p.id) && p.images.length > 0);
+      
+      const hasLegacyImages = store.productImages.length > 0;
+      const hasNewProducts = selectedProducts.length > 0;
+
+      if (useProductImages && (hasLegacyImages || hasNewProducts)) {
         // PRODUCT-BASED IMAGE GENERATION
-        console.log('[AIWorkingScreen] Using product-based image generation with', store.productImages.length, 'product images');
+        
+        // Flatten all available images into a unified array with metadata
+        const availableProductData: Array<{ file: File, type: string, features: string, background: string }> = [];
+        
+        // Add new products
+        if (hasNewProducts) {
+          selectedProducts.forEach(p => {
+            p.images.forEach(img => {
+              availableProductData.push({
+                file: img,
+                type: p.title || store.productAnswers.type || 'product',
+                features: p.description || store.productAnswers.features || '',
+                background: store.productAnswers.customBackground || store.productAnswers.background || 'clean'
+              });
+            });
+          });
+        }
+        
+        // Add legacy images if present
+        if (hasLegacyImages) {
+          store.productImages.forEach(img => {
+            availableProductData.push({
+              file: img,
+              type: store.productAnswers.type || 'product',
+              features: store.productAnswers.features || '',
+              background: store.productAnswers.customBackground || store.productAnswers.background || 'clean'
+            });
+          });
+        }
+
+        console.log('[AIWorkingScreen] Using product-based image generation with', availableProductData.length, 'product images');
 
         for (let i = 0; i < posts.length; i++) {
           if (cancelledRef.current) return;
           try {
             const post = posts[i];
             // Use product images in round-robin fashion
-            const productImage = store.productImages[i % store.productImages.length];
+            const productData = availableProductData[i % availableProductData.length];
+            const productImage = productData.file;
 
             // Build prompt incorporating product details
-            const productType = store.productAnswers.type || 'product';
-            const productFeatures = store.productAnswers.features || '';
-            const backgroundStyle = store.productAnswers.background || 'clean';
+            const productType = productData.type;
+            const productFeatures = productData.features;
+            const backgroundStyle = productData.background;
 
-            const productPrompt = `Professional ${backgroundStyle} background showcasing ${productType} for social media post about "${post.title}". ${productFeatures}. ${post.imageStyle}. Ensure product is prominent and well-lit.`;
+            const productPrompt = `Professional empty ${backgroundStyle} photography studio background for a social media post about "${post.title}". The background setting should complement a ${productType} with features: ${productFeatures}. The visual style is ${post.imageStyle}. IMPORTANT: The center of the image must be completely empty as a product will be placed there. Do NOT generate the product itself.`;
 
             const imgReq: Parameters<typeof imageService.generate>[0] = {
               prompt: productPrompt,
@@ -278,8 +324,8 @@ export function AIWorkingScreen({ onComplete, onStop }: AIWorkingScreenProps) {
               style: 'modern',
               enhance_prompt: true,
               product_image: productImage,
-              product_type: store.productAnswers.type || 'product',
-              background_style: store.productAnswers.background || 'clean',
+              product_type: productType,
+              background_style: backgroundStyle,
               analyze_product_style: true,
               match_product_style: true,
               product_position: 'center_bottom',  // ✅ FIX: Place product on table/surface instead of floating
@@ -292,7 +338,7 @@ export function AIWorkingScreen({ onComplete, onStop }: AIWorkingScreenProps) {
             }
 
             const imgResult = await imageService.generate(imgReq);
-            const imgUrl = imgResult.generated_image_with_logo || imgResult.generated_image || imgResult.composited_image;
+            const imgUrl = imgResult.image_url || imgResult.generated_image_with_logo || imgResult.generated_image || imgResult.composited_image;
             if (imgUrl) {
               posts[i] = { ...post, imageUrl: imgUrl };
             }

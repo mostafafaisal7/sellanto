@@ -512,6 +512,7 @@ export interface ImageGeneration {
   generated_image_with_logo?: string;
   enhanced_prompt?: string;
   revised_prompt?: string;
+  image_url?: string;
   status: GenerationStatus;
   error_message?: string;
   processing_time: number;

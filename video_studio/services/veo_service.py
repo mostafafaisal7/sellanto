@@ -206,7 +206,6 @@ class VeoVideoService:
         parameters = {
             'aspectRatio': aspect_ratio,
             'resolution': resolution,
-            'personGeneration': 'allow_adult',
             'sampleCount': 1,
             'generateAudio': generate_audio
         }

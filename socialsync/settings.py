@@ -67,6 +67,7 @@ INSTALLED_APPS = [
     'posts',
     'ai_caption',
     'ai_image',
+    'ai_video',
     'upcoming_features',
     'messenger_bot',
     'api',

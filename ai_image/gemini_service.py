@@ -274,7 +274,6 @@ Ensure professional quality with clear composition, consistent lighting, and a c
                         'sampleCount': 1,
                         'aspectRatio': aspect,
                         'safetyFilterLevel': 'block_only_high',
-                        'personGeneration': 'allow_adult',
                     }
                 }
                 

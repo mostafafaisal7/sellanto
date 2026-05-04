@@ -30,6 +30,12 @@ const QUESTIONS: Question[] = [
     options: ['Professional & Authoritative', 'Friendly & Approachable', 'Bold & Provocative', 'Educational & Helpful', 'Fun & Casual'],
   },
   {
+    id: 'post_type', emoji: '✨',
+    question: 'What do you want to create?',
+    subtext: 'Choose the content type for your posts',
+    options: ['📷 Image posts', '🎬 Video content'],
+  },
+  {
     id: 'product_mode', emoji: '📦',
     question: 'Do you want to feature your real products in posts?',
     subtext: "Upload product images and we'll create posts featuring them",
@@ -59,18 +65,29 @@ interface AIQuestionsScreenProps {
   onComplete: (answers: Record<string, string | string[]>) => void;
   onNext?: () => void;
   onBack: () => void;
-  onProductUpload?: () => void; // NEW: Navigate to product upload screen
+  onProductUpload?: () => void;
+  onVideoFlow?: () => void;
   skipIndustry?: boolean;
-  startAtQuestion?: number; // NEW: Start from specific question index (for product upload flow)
+  startAtQuestion?: number;
 }
 
-export function AIQuestionsScreen({ onComplete, onNext, onBack, onProductUpload, skipIndustry, startAtQuestion }: AIQuestionsScreenProps) {
-  const filteredQuestions = skipIndustry
-    ? QUESTIONS.filter((q) => q.id !== 'industry')
-    : QUESTIONS;
+/** Build filtered question list based on current answers + skipIndustry flag */
+function buildFilteredQuestions(
+  answers: Record<string, string | string[]>,
+  skipIndustry?: boolean
+) {
+  const pt = answers.post_type;
+  const isVideo = Array.isArray(pt) ? pt.includes('🎬 Video content') : pt === '🎬 Video content';
+  return QUESTIONS.filter((q) => {
+    if (skipIndustry && q.id === 'industry') return false;
+    if (isVideo && q.id === 'product_mode') return false;
+    return true;
+  });
+}
 
+export function AIQuestionsScreen({ onComplete, onNext, onBack, onProductUpload, onVideoFlow, skipIndustry, startAtQuestion }: AIQuestionsScreenProps) {
   const storeAnswers = useMagicModeStore((s) => s.answers);
-  const setAnswer = useMagicModeStore((s) => s.setAnswer); // NEW: Access setAnswer from store
+  const setAnswer = useMagicModeStore((s) => s.setAnswer);
   const hasPreviousGeneration = useMagicModeStore((s) => s.hasPreviousGeneration);
   const setHasPreviousGeneration = useMagicModeStore((s) => s.setHasPreviousGeneration);
   const originalAnswers = useMagicModeStore((s) => s.originalAnswers);
@@ -80,13 +97,22 @@ export function AIQuestionsScreen({ onComplete, onNext, onBack, onProductUpload,
   const setCustomAnswer = useMagicModeStore((s) => s.setCustomAnswer);
   const storeCustomAnswers = useMagicModeStore((s) => s.customAnswers);
 
-  // Start from specified question or default to 0
-  const [currentQ, setCurrentQ] = useState(startAtQuestion || 0);
   const [answers, setAnswers] = useState<Record<string, string | string[]>>(storeAnswers);
-  // Initialize multiSel from the starting question's answer
-  const [multiSel, setMultiSel] = useState<Set<string>>(() =>
-    answerToSet(storeAnswers[filteredQuestions[startAtQuestion || 0]?.id])
-  );
+
+  // filteredQuestions is DERIVED from local answers so it updates when post_type is selected
+  const filteredQuestions = buildFilteredQuestions(answers, skipIndustry);
+
+  // Derive video flow flag so button labels can reflect the next action
+  const isVideoFlow = (() => {
+    const pt = answers.post_type;
+    return Array.isArray(pt) ? pt.includes('🎬 Video content') : pt === '🎬 Video content';
+  })();
+
+  const [currentQ, setCurrentQ] = useState(startAtQuestion || 0);
+  const [multiSel, setMultiSel] = useState<Set<string>>(() => {
+    const initFiltered = buildFilteredQuestions(storeAnswers, skipIndustry);
+    return answerToSet(storeAnswers[initFiltered[startAtQuestion || 0]?.id]);
+  });
   const [animating, setAnimating] = useState(false);
 
   // 🔧 FIX: Initialize otherInputs from store's customAnswers
@@ -110,18 +136,15 @@ export function AIQuestionsScreen({ onComplete, onNext, onBack, onProductUpload,
     if (animating) return;
     setAnimating(true);
 
-    // Check if current question is product_mode and user selected "Yes"
     const currentQuestion = filteredQuestions[currentQ];
+
+    // product_mode: product upload path (only reached in image flow)
     if (currentQuestion.id === 'product_mode' && onProductUpload) {
-      const selectedProductMode = Array.from(multiSel)[0]; // Get first selection
+      const selectedProductMode = Array.from(multiSel)[0];
       if (selectedProductMode === 'Yes - I have product images') {
-        // ✅ FIX: Save answer to GLOBAL store (not just local state)
         const updatedAnswers = { ...answers, [currentQuestion.id]: Array.from(multiSel) };
         setAnswers(updatedAnswers);
-
-        // Save ALL current answers to store before navigation
         Object.entries(updatedAnswers).forEach(([key, val]) => setAnswer(key, val));
-
         onProductUpload();
         setAnimating(false);
         return;
@@ -130,7 +153,20 @@ export function AIQuestionsScreen({ onComplete, onNext, onBack, onProductUpload,
 
     const nextQ = currentQ + 1;
     if (nextQ >= filteredQuestions.length) {
-      onComplete(answers);
+      // Merge current question's selection into answers before saving
+      const finalAnswers = multiSel.size > 0
+        ? { ...answers, [currentQuestion.id]: Array.from(multiSel) }
+        : answers;
+      setAnswers(finalAnswers);
+      Object.entries(finalAnswers).forEach(([key, val]) => setAnswer(key, val));
+      // Branch: video flow vs image flow
+      const pt = finalAnswers.post_type;
+      const isVideo = Array.isArray(pt) ? pt.includes('🎬 Video content') : pt === '🎬 Video content';
+      if (isVideo && onVideoFlow) {
+        onVideoFlow();
+      } else {
+        onComplete(finalAnswers);
+      }
     } else {
       setTimeout(() => {
         setCurrentQ(nextQ);
@@ -140,7 +176,7 @@ export function AIQuestionsScreen({ onComplete, onNext, onBack, onProductUpload,
         setAnimating(false);
       }, 300);
     }
-  }, [currentQ, answers, animating, onComplete, filteredQuestions, multiSel, onProductUpload, setAnswer]);
+  }, [currentQ, answers, animating, onComplete, filteredQuestions, multiSel, onProductUpload, setAnswer, onVideoFlow]);
 
   const handleSelect = (option: string) => {
     if (animating) return;
@@ -320,7 +356,7 @@ export function AIQuestionsScreen({ onComplete, onNext, onBack, onProductUpload,
             {/* Last question - show different buttons based on whether answers changed */}
             {currentQ === filteredQuestions.length - 1 ? (
               answersChanged ? (
-                /* User CHANGED answers → Show only "Generate Posts" button */
+                /* User CHANGED answers → Show only primary action button */
                 <button
                   onClick={goNext}
                   className="px-6 py-3 rounded-[14px] text-[15px] font-bold text-white"
@@ -329,10 +365,10 @@ export function AIQuestionsScreen({ onComplete, onNext, onBack, onProductUpload,
                     boxShadow: 'var(--shadow-glow-coral)',
                   }}
                 >
-                  Generate Posts →
+                  {isVideoFlow ? '🎬 Create My Video →' : 'Generate Posts →'}
                 </button>
-              ) : hasPreviousGeneration && onNext ? (
-                /* User DID NOT change answers → Show "Previous Posts" and "Regenerate" buttons */
+              ) : hasPreviousGeneration && onNext && !isVideoFlow ? (
+                /* Image flow: User DID NOT change answers → Show "Previous Posts" and "Regenerate" buttons */
                 <div className="flex gap-3">
                   <button
                     onClick={onNext}
@@ -360,7 +396,7 @@ export function AIQuestionsScreen({ onComplete, onNext, onBack, onProductUpload,
                   </button>
                 </div>
               ) : (
-                /* Default for new users (no previous generation) */
+                /* Default: new users or video flow */
                 <button
                   onClick={goNext}
                   className="px-6 py-3 rounded-[14px] text-[15px] font-bold text-white"
@@ -369,7 +405,7 @@ export function AIQuestionsScreen({ onComplete, onNext, onBack, onProductUpload,
                     boxShadow: 'var(--shadow-glow-coral)',
                   }}
                 >
-                  Generate Posts →
+                  {isVideoFlow ? '🎬 Create My Video →' : 'Generate Posts →'}
                 </button>
               )
             ) : (

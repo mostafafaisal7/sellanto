@@ -273,6 +273,10 @@ urlpatterns = [
     path('admin/test-api-key/', diamond_views.AdminTestAPIKeyView.as_view(), name='api-admin-test-api-key'),
     path('admin/diamond-overview/', diamond_views.AdminDiamondOverviewView.as_view(), name='api-admin-diamond-overview'),
 
+    # Video AI (React-accessible JWT endpoints)
+    path('video/generate/', views.VideoGenerateAPIView.as_view(), name='api-video-generate'),
+    path('video/history/', views.VideoHistoryAPIView.as_view(), name='api-video-history'),
+
     # Magic Mode History
     path('magic/history/', views.MagicHistoryView.as_view(), name='api-magic-history'),
 
