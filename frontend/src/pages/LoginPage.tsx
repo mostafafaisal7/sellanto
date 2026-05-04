@@ -66,7 +66,7 @@ export function LoginPage() {
       if (currentUser?.is_staff) {
         navigate('/admin-panel');
       } else {
-        navigate('/');
+        navigate('/dashboard');
       }
     } catch {
       // Error handled by store
@@ -91,7 +91,7 @@ export function LoginPage() {
         localStorage.setItem('access_token', result.tokens.access);
         localStorage.setItem('refresh_token', result.tokens.refresh);
         await useAuthStore.getState().fetchUser();
-        navigate('/');
+        navigate('/dashboard');
       } else {
         setRegisterSuccess(true);
       }

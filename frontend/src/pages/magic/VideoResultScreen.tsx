@@ -142,7 +142,7 @@ export function VideoResultScreen({ onBack, onGenerateAnother }: VideoResultScre
               🎬 Generate another video
             </button>
             <button
-              onClick={() => navigate('/')}
+              onClick={() => navigate('/dashboard')}
               className="w-full py-3.5 rounded-[14px] text-[15px] font-semibold"
               style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border-color)', color: 'rgb(var(--c-text-secondary))' }}
             >

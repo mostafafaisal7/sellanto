@@ -189,7 +189,7 @@ export function OverflowPage() {
 
   const handleSkip = async () => {
     await overflow.skip();
-    navigate('/');
+    navigate('/dashboard');
   };
 
   const goNext = () => {
@@ -373,7 +373,7 @@ export function OverflowPage() {
           </button>
         ) : (
           <button
-            onClick={() => { overflow.complete(); navigate('/'); }}
+            onClick={() => { overflow.complete(); navigate('/dashboard'); }}
             className="btn-primary flex items-center gap-2"
           >
             <CheckCircleIcon className="w-4 h-4" /> Complete Setup
@@ -3884,7 +3884,7 @@ function CalendarStep() {
         <button onClick={() => navigate('/calendar')} className="btn-secondary">
           View Full Calendar
         </button>
-        <button onClick={() => { overflow.complete(); navigate('/'); }} className="btn-primary flex items-center gap-2">
+        <button onClick={() => { overflow.complete(); navigate('/dashboard'); }} className="btn-primary flex items-center gap-2">
           <CheckCircleIcon className="w-4 h-4" /> Complete & Go to Dashboard
         </button>
       </div>

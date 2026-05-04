@@ -14,7 +14,7 @@ const footerSections: FooterSection[] = [
   {
     title: 'Product',
     links: [
-      { label: 'Dashboard', href: '/' },
+      { label: 'Dashboard', href: '/dashboard' },
       { label: 'Create Post', href: '/posts/create' },
       { label: 'Connect Accounts', href: '/platforms' },
       { label: 'Magic Mode', href: '/magic' },

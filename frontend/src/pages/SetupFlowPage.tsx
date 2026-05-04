@@ -99,7 +99,7 @@ export function SetupFlowPage() {
           </p>
         </div>
         <button
-          onClick={() => navigate('/')}
+          onClick={() => navigate('/dashboard')}
           className="btn-ghost text-[13px] text-text-muted"
         >
           Skip & Go to Dashboard

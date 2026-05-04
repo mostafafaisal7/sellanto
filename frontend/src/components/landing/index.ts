@@ -1,0 +1,10 @@
+export { LandingNavbar } from './LandingNavbar';
+export { HeroSection } from './HeroSection';
+export { PlatformStrip } from './PlatformStrip';
+export { MagicModeSection } from './MagicModeSection';
+export { AIVideoSection } from './AIVideoSection';
+export { AIImageSection } from './AIImageSection';
+export { MultiPlatformSection } from './MultiPlatformSection';
+export { PricingSection } from './PricingSection';
+export { FinalCTASection } from './FinalCTASection';
+export { LandingFooter } from './LandingFooter';

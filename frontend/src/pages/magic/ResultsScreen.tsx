@@ -1386,7 +1386,7 @@ export function ResultsScreen({ onGenerateMore, onGoBack }: ResultsScreenProps) 
             <button
               onClick={() => {
                 magicStore.reset();
-                navigate('/');
+                navigate('/dashboard');
               }}
               className="px-6 py-3 rounded-[14px] text-[15px] font-bold text-white"
               style={{

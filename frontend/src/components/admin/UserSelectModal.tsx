@@ -32,9 +32,9 @@ export function UserSelectModal({ isOpen, onClose }: UserSelectModalProps) {
   const handleSelectUser = (user: { id: number; username: string; email: string }) => {
     startImpersonation(user.id, user);
     onClose();
-    navigate('/');
+    navigate('/dashboard');
     // Force page reload to refetch all data as impersonated user
-    window.location.href = '/';
+    window.location.href = '/dashboard';
   };
 
   return (

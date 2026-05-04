@@ -4,6 +4,7 @@ import { Layout } from './components/layout';
 import { AdminLayout } from './components/admin/AdminLayout';
 import {
   DashboardPage,
+  LandingPage,
   LoginPage,
   MyPostsPage,
   CreatePostPage,
@@ -90,10 +91,32 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
       return <Navigate to="/admin-panel" replace />;
     }
     // Regular users land on dashboard
-    return <Navigate to="/" replace />;
+    return <Navigate to="/dashboard" replace />;
   }
 
   return <>{children}</>;
+}
+
+// Root route — public landing for logged-out, redirect to dashboard for logged-in
+function RootRoute() {
+  const { isAuthenticated, isLoading, fetchUser, user } = useAuthStore();
+
+  useEffect(() => {
+    fetchUser();
+  }, [fetchUser]);
+
+  if (isLoading) {
+    return <LoadingScreen />;
+  }
+
+  if (isAuthenticated) {
+    if (user?.is_staff) {
+      return <Navigate to="/admin-panel" replace />;
+    }
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return <LandingPage />;
 }
 
 // Admin route wrapper - only allows staff users
@@ -101,7 +124,7 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
   const { user } = useAuthStore();
 
   if (!user?.is_staff) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/dashboard" replace />;
   }
 
   return <>{children}</>;
@@ -111,6 +134,9 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* Root — public landing page (or redirect to dashboard if logged in) */}
+        <Route path="/" element={<RootRoute />} />
+
         {/* Public routes */}
         <Route
           path="/login"
@@ -168,7 +194,7 @@ function App() {
             </ProtectedRoute>
           }
         >
-          <Route path="/" element={<DashboardPage />} />
+          <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/posts" element={<MyPostsPage />} />
           <Route path="/posts/drafts" element={<DraftPostsPage />} />
           <Route path="/posts/create" element={<CreatePostPage />} />
@@ -228,7 +254,7 @@ function App() {
           <Route path="/admin-panel/facebook-settings" element={<AdminFacebookSettingsPage />} />
         </Route>
 
-        {/* Catch all - redirect to dashboard */}
+        {/* Catch all - redirect to root (which routes to landing or dashboard) */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
