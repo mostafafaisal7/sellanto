@@ -20,6 +20,7 @@ import logging
 from accounts.models import UserProfile, SiteConfiguration, UserRole
 from accounts.api_keys import get_openai_key
 from accounts.services.llm_service import get_llm_service, UnifiedLLMService
+from accounts.services.prompt_resolver import resolve_prompt
 from posts.models import Post
 from platforms.models import SocialAccount
 from ai_caption.models import CaptionGeneration, CaptionTemplate, SavedCaption, UserAPISettings
@@ -178,6 +179,7 @@ class RegisterWithBrandView(APIView):
                     if page_data.get('success'):
                         service = UnifiedLLMService(openai_key=server_key, claude_key=get_claude_key())
                         existing_dna = json.dumps(brand.brand_dna, indent=2)
+                        website_content = page_data.get('content', '')
                         prompt = f"""<task>
 Enhance the existing Brand DNA using website content. Keep ALL existing values but fill gaps and enrich thin descriptions with evidence from the website.
 </task>
@@ -188,7 +190,7 @@ Enhance the existing Brand DNA using website content. Keep ALL existing values b
 
 <website_data>
 URL: {brand.website_url}
-Content: {page_data.get('content', '')}
+Content: {website_content}
 </website_data>
 
 <instructions>
@@ -202,6 +204,16 @@ For each of the 15 fields:
 <output_format>
 Return ONLY a single JSON object with all 15 Brand DNA fields.
 </output_format>"""
+
+                        # Per-user admin override of the brand-DNA prompt
+                        prompt = resolve_prompt(
+                            request.user, 'brand_dna', prompt,
+                            {
+                                'existing_dna': existing_dna,
+                                'website_url': brand.website_url,
+                                'website_content': website_content,
+                            },
+                        )
 
                         result = service.chat_completion(
                             messages=[
@@ -1254,10 +1266,17 @@ def refine_image_prompt(request):
         if style:
             context_parts.append(f"Preferred visual style: {style}")
 
+        context_block = "\n".join(context_parts)
         user_message = (
-            f"Brand context:\n" + "\n".join(context_parts) + "\n\n"
+            f"Brand context:\n{context_block}\n\n"
             f"User's image direction: {user_prompt}\n\n"
             "Generate a clean, focused image prompt that matches this brand's industry and the user's direction."
+        )
+
+        # Per-user admin override of the image-refiner system prompt
+        system_message = resolve_prompt(
+            request.user, 'image_refiner', system_message,
+            {'context_block': context_block, 'user_prompt': user_prompt},
         )
 
         if override_prompt:

@@ -20,6 +20,7 @@ import {
   DocumentDuplicateIcon,
   ArrowPathIcon,
   ChatBubbleBottomCenterTextIcon,
+  ArrowUpCircleIcon,
 } from '@heroicons/react/24/outline';
 import { useAuthStore } from '../../store';
 
@@ -80,6 +81,7 @@ const mainNavItems: NavItem[] = [
 ];
 
 const settingsNavItems: NavItem[] = [
+  { name: 'Upgrade Plan', href: '/upgrade', icon: ArrowUpCircleIcon, badge: 'Pro' },
   { name: 'Profile', href: '/profile', icon: UserIcon },
   { name: 'Business Profile', href: '/business-profile', icon: BuildingOfficeIcon },
   { name: 'Settings', href: '/settings', icon: Cog6ToothIcon },

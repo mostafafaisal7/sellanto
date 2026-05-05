@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -52,6 +53,7 @@ const planFeatures: Record<string, string[]> = {
 };
 
 export function ProfilePage() {
+  const navigate = useNavigate();
   const { user } = useAuthStore();
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
@@ -382,7 +384,7 @@ export function ProfilePage() {
               </div>
 
               {subscription !== 'enterprise' && (
-                <Button fullWidth variant="secondary">
+                <Button fullWidth variant="secondary" onClick={() => navigate('/upgrade')}>
                   Upgrade Plan
                 </Button>
               )}

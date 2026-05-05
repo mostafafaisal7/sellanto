@@ -6,6 +6,7 @@ import {
   DashboardPage,
   LandingPage,
   LoginPage,
+  UpgradePage,
   MyPostsPage,
   CreatePostPage,
   ConnectAccountsPage,
@@ -195,6 +196,7 @@ function App() {
           }
         >
           <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/upgrade" element={<UpgradePage />} />
           <Route path="/posts" element={<MyPostsPage />} />
           <Route path="/posts/drafts" element={<DraftPostsPage />} />
           <Route path="/posts/create" element={<CreatePostPage />} />

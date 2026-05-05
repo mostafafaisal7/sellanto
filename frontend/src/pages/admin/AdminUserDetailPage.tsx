@@ -14,11 +14,25 @@ import {
   VideoCameraIcon,
   ChatBubbleBottomCenterTextIcon,
   Cog6ToothIcon,
+  CommandLineIcon,
 } from '@heroicons/react/24/outline';
 import { useAdminStore } from '../../store';
 import { DiamondRechargeForm } from '../../components/admin/DiamondRechargeForm';
+import { PromptOverrideEditor } from '../../components/admin/PromptOverrideEditor';
+import { PromptAuditTimeline } from '../../components/admin/PromptAuditTimeline';
+import { adminPromptService } from '../../services';
+import type { PromptDescriptor, PromptType } from '../../services/adminPromptService';
 
-type TabType = 'overview' | 'posts' | 'accounts' | 'captions' | 'images' | 'videos' | 'messenger' | 'api';
+type TabType =
+  | 'overview'
+  | 'posts'
+  | 'accounts'
+  | 'captions'
+  | 'images'
+  | 'videos'
+  | 'messenger'
+  | 'api'
+  | 'prompts';
 
 export function AdminUserDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -34,6 +48,12 @@ export function AdminUserDetailPage() {
   const [planForm, setPlanForm] = useState({ plan: 'free', max_posts: 30, max_accounts: 3 });
   const [savingAPI, setSavingAPI] = useState(false);
   const [savingPlan, setSavingPlan] = useState(false);
+
+  // Magic Prompts tab state
+  const [prompts, setPrompts] = useState<PromptDescriptor[] | null>(null);
+  const [promptsLoading, setPromptsLoading] = useState(false);
+  const [promptsError, setPromptsError] = useState<string | null>(null);
+  const [auditPrompt, setAuditPrompt] = useState<{ type: PromptType; name: string } | null>(null);
 
   const {
     userDetail, userDetailLoading, fetchUserDetail,
@@ -89,6 +109,28 @@ export function AdminUserDetailPage() {
 
   useEffect(() => {
     loadTabData(activeTab);
+  }, [activeTab, userId]);
+
+  useEffect(() => {
+    if (activeTab !== 'prompts' || !userId) return;
+    let cancelled = false;
+    setPromptsLoading(true);
+    setPromptsError(null);
+    adminPromptService
+      .list(userId)
+      .then((res) => {
+        if (!cancelled) setPrompts(res.prompts);
+      })
+      .catch((err) => {
+        if (!cancelled)
+          setPromptsError(err instanceof Error ? err.message : 'Failed to load prompts');
+      })
+      .finally(() => {
+        if (!cancelled) setPromptsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [activeTab, userId]);
 
   const handleApprove = async () => {
@@ -152,6 +194,7 @@ export function AdminUserDetailPage() {
     { id: 'videos', label: 'Videos', icon: VideoCameraIcon },
     { id: 'messenger', label: 'Messenger', icon: ChatBubbleBottomCenterTextIcon },
     { id: 'api', label: 'API Settings', icon: KeyIcon },
+    { id: 'prompts', label: 'Magic Prompts', icon: CommandLineIcon },
   ];
 
   return (
@@ -398,6 +441,67 @@ export function AdminUserDetailPage() {
                 </button>
               </>
             )}
+          </div>
+        )}
+
+        {/* Magic Prompts Tab */}
+        {activeTab === 'prompts' && (
+          <div className="p-6 space-y-5">
+            <div>
+              <h3 className="text-sm font-semibold text-white">Magic Mode prompt overrides</h3>
+              <p className="text-xs text-slate-400 mt-1">
+                Edit the prompts powering Magic Mode for this user. Each override is
+                logged. Leave a card untouched to keep the system default. If a runtime
+                error occurs (missing variable, malformed template), the resolver falls
+                back to the default automatically.
+              </p>
+            </div>
+
+            {promptsLoading && (
+              <div className="flex justify-center py-8">
+                <div className="w-6 h-6 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin" />
+              </div>
+            )}
+
+            {promptsError && (
+              <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+                {promptsError}
+              </div>
+            )}
+
+            {prompts && (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {prompts.map((p) => (
+                  <PromptOverrideEditor
+                    key={p.type}
+                    userId={userId}
+                    prompt={p}
+                    onSaved={(updated) =>
+                      setPrompts((prev) =>
+                        prev
+                          ? prev.map((x) => (x.type === updated.type ? updated : x))
+                          : prev,
+                      )
+                    }
+                    onOpenAudit={(promptType) => {
+                      const found = prompts.find((x) => x.type === promptType);
+                      setAuditPrompt({
+                        type: promptType,
+                        name: found?.display_name || promptType,
+                      });
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+
+            <PromptAuditTimeline
+              open={auditPrompt !== null}
+              userId={userId}
+              promptType={auditPrompt?.type ?? null}
+              promptDisplayName={auditPrompt?.name ?? ''}
+              onClose={() => setAuditPrompt(null)}
+            />
           </div>
         )}
 

@@ -25,6 +25,7 @@ class CaptionGeneratorService:
     """
 
     def __init__(self, api_key=None, llm_service=None, user=None):
+        self.user = user
         self.llm_service = llm_service
         if not self.llm_service and user:
             # Best path: build service from user with all keys (Claude primary)
@@ -161,6 +162,22 @@ professional | casual | friendly | enthusiastic | humorous | inspirational | for
 <supported_platforms>
 general | facebook | instagram | twitter | linkedin | tiktok | youtube | pinterest
 </supported_platforms>"""
+
+        # Per-user admin override (no-op if no override is configured)
+        try:
+            from accounts.services.prompt_resolver import resolve_prompt
+            caption_vars = {
+                'tone_description': tone_descriptions.get(tone, 'Professional and engaging'),
+                'platform_guidelines': self._get_platform_guidelines(platform),
+                'emoji_setting': emoji_setting,
+                'cta_setting': cta_setting,
+                'hashtag_setting': hashtag_setting,
+            }
+            system_prompt = resolve_prompt(
+                self.user, 'caption_system', system_prompt, caption_vars,
+            )
+        except Exception:
+            pass
 
         return system_prompt
     

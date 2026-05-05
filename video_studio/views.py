@@ -193,7 +193,8 @@ def generate_single_clip(request):
             user_prompt=data.get('prompt'),
             brand=project.brand,
             product_image=None,  # TODO: Handle image upload
-            workspace=project.workspace
+            workspace=project.workspace,
+            user=request.user,
         )
 
         # Optionally optimize with Gemini

@@ -9,6 +9,7 @@ from django.db.models import Count, Q
 from django.utils import timezone
 
 from accounts.services.diamond_service import pre_check, deduct_diamonds
+from accounts.services.prompt_resolver import resolve_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -765,13 +766,14 @@ Incorporate these trends where appropriate.
 
         # Build prompt
         platform_text = platform if platform != 'all' else 'all platforms (Twitter, LinkedIn, Facebook, Instagram)'
+        specific_pillar_line = f'Focus pillar: {specific_pillar.name}' if specific_pillar else ''
         prompt = f"""<context>
 Brand: "{brand.brand_name}"
 Industry: {brand.industry}
 Region: {brand.target_region}
 Platform(s): {platform_text}
 Content pillars: {pillar_context}
-{f'Focus pillar: {specific_pillar.name}' if specific_pillar else ''}
+{specific_pillar_line}
 </context>
 
 <data_signals>
@@ -831,6 +833,22 @@ Return ONLY a JSON array of exactly {count} objects:
 - Return valid JSON array only.
 </constraints>"""
 
+        # Allow per-user admin override of the user-context prompt
+        idea_user_vars = {
+            'brand_name': brand.brand_name,
+            'industry': brand.industry,
+            'target_region': brand.target_region,
+            'platform_text': platform_text,
+            'pillar_context': pillar_context,
+            'specific_pillar_line': specific_pillar_line,
+            'dna_context': dna_context,
+            'competitor_context': competitor_context,
+            'trending_context': trending_context,
+            'learning_context': learning_context,
+            'count': count,
+        }
+        prompt = resolve_prompt(request.user, 'idea_user', prompt, idea_user_vars)
+
         override_prompt = request.data.get('override_prompt', '')
         think_harder = request.data.get('think_harder', False)
         if override_prompt:
@@ -850,9 +868,11 @@ Return ONLY a JSON array of exactly {count} objects:
             from accounts.services.llm_service import get_llm_service
 
             service = get_llm_service(request.user)
+            default_idea_system = 'You are a senior social media strategist and creative director who generates content ideas that are specific, actionable, and strategically grounded.\n\nYour ideas are NOT generic "post about X" suggestions. Each idea is detailed enough that a content creator could execute it without additional briefing.\n\nYour approach combines:\n- Data signals (trending topics, competitor gaps, past performance)\n- Audience psychology (what makes people stop, save, share, and comment)\n- Content strategy (pillar balance, funnel alignment, platform optimization)\n- Creative frameworks (storytelling, contrarian takes, data-driven hooks, behind-the-scenes, social proof, UGC-inspired, educational series)\n\nYou understand that the best content ideas are at the intersection of:\n1. What the brand wants to say\n2. What the audience wants to hear\n3. What the platform rewards\n\nCRITICAL OUTPUT RULES:\n- Return ONLY a valid JSON array — no markdown, no commentary\n- Each idea must be specific enough to execute immediately\n- No duplicate angles or overlapping ideas'
+            idea_system_prompt = resolve_prompt(request.user, 'idea_system', default_idea_system, {})
             result = service.chat_completion(
                 messages=[
-                    {'role': 'system', 'content': 'You are a senior social media strategist and creative director who generates content ideas that are specific, actionable, and strategically grounded.\n\nYour ideas are NOT generic "post about X" suggestions. Each idea is detailed enough that a content creator could execute it without additional briefing.\n\nYour approach combines:\n- Data signals (trending topics, competitor gaps, past performance)\n- Audience psychology (what makes people stop, save, share, and comment)\n- Content strategy (pillar balance, funnel alignment, platform optimization)\n- Creative frameworks (storytelling, contrarian takes, data-driven hooks, behind-the-scenes, social proof, UGC-inspired, educational series)\n\nYou understand that the best content ideas are at the intersection of:\n1. What the brand wants to say\n2. What the audience wants to hear\n3. What the platform rewards\n\nCRITICAL OUTPUT RULES:\n- Return ONLY a valid JSON array — no markdown, no commentary\n- Each idea must be specific enough to execute immediately\n- No duplicate angles or overlapping ideas'},
+                    {'role': 'system', 'content': idea_system_prompt},
                     {'role': 'user', 'content': prompt},
                 ],
                 temperature=0.85,

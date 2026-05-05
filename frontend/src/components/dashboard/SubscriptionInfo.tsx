@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { clsx } from 'clsx';
 import { SparklesIcon, ArrowUpCircleIcon } from '@heroicons/react/24/solid';
 import type { SubscriptionPlan } from '../../types';
@@ -32,6 +33,7 @@ export function SubscriptionInfo({
   maxPostsPerMonth,
   postsThisMonth,
 }: SubscriptionInfoProps) {
+  const navigate = useNavigate();
   const remainingPosts = Math.max(0, maxPostsPerMonth - postsThisMonth);
   const usagePercentage = Math.min(100, (postsThisMonth / maxPostsPerMonth) * 100);
 
@@ -97,6 +99,7 @@ export function SubscriptionInfo({
           <motion.button
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
+            onClick={() => navigate('/upgrade')}
             className="mt-8 w-full p-4 rounded-2xl bg-gradient-to-tr from-primary to-secondary text-white font-black text-sm shadow-lg shadow-primary/20 flex items-center justify-center gap-2"
           >
             <ArrowUpCircleIcon className="w-5 h-5" />

@@ -16,7 +16,7 @@ class BrandDNAPromptBuilder:
     Inject BrandDNA context into Veo prompts for brand-consistent videos
     """
 
-    def build_enhanced_prompt(self, user_prompt, brand, product_image=None, workspace=None):
+    def build_enhanced_prompt(self, user_prompt, brand, product_image=None, workspace=None, user=None):
         """
         Main method: User prompt + BrandDNA → Enhanced Veo prompt
 
@@ -25,6 +25,7 @@ class BrandDNAPromptBuilder:
             brand (Brand): Brand model instance
             product_image (str or bytes): Product image path or bytes
             workspace (Workspace): Workspace instance
+            user (User): Optional Django user for admin prompt overrides
 
         Returns:
             str: Enhanced prompt with brand context
@@ -47,6 +48,26 @@ class BrandDNAPromptBuilder:
             product_analysis=product_analysis,
             workspace_prefs=workspace_prefs
         )
+
+        # 5. Apply per-user admin override (if any)
+        if user is not None:
+            try:
+                from accounts.services.prompt_resolver import resolve_prompt
+                video_vars = {
+                    'user_prompt': user_prompt,
+                    'brand_name': brand_context.get('name', ''),
+                    'industry': brand_context.get('industry', ''),
+                    'voice_tone': brand_context.get('voice_tone', ''),
+                    'visual_style': brand_context.get('visual_style', ''),
+                    'mood': brand_context.get('mood', ''),
+                    'primary_color': brand_context.get('primary_color', ''),
+                    'color_palette': ', '.join(brand_context.get('color_palette') or []),
+                    'lighting': (product_analysis or {}).get('lighting', ''),
+                    'temperature': (product_analysis or {}).get('temperature', ''),
+                }
+                enhanced = resolve_prompt(user, 'video_prompt', enhanced, video_vars)
+            except Exception:
+                pass
 
         return enhanced
 

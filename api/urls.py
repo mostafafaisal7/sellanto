@@ -12,6 +12,7 @@ from . import admin_views
 from . import strategy_views
 from . import caption_views
 from . import hashtag_views
+from . import subscription_views
 from . import approval_views
 from . import scheduling_views
 from . import notification_views
@@ -63,6 +64,11 @@ urlpatterns = [
     # User Profile endpoints
     path('profile/', views.UserProfileView.as_view(), name='api-profile'),
     path('profile/api-keys/', views.GlobalAPIKeysView.as_view(), name='api-global-keys'),
+
+    # Subscription / Upgrade Plan endpoints
+    path('subscription/', subscription_views.SubscriptionStatusView.as_view(), name='api-subscription-status'),
+    path('subscription/plans/', subscription_views.SubscriptionPlansView.as_view(), name='api-subscription-plans'),
+    path('subscription/upgrade/', subscription_views.SubscriptionUpgradeView.as_view(), name='api-subscription-upgrade'),
 
     # Dashboard endpoints
     path('dashboard/stats/', views.DashboardStatsView.as_view(), name='api-dashboard-stats'),
@@ -257,6 +263,17 @@ urlpatterns = [
     path('admin/users/<int:user_id>/captions/', admin_views.AdminUserCaptionsView.as_view(), name='api-admin-user-captions'),
     path('admin/users/<int:user_id>/images/', admin_views.AdminUserImagesView.as_view(), name='api-admin-user-images'),
     path('admin/users/<int:user_id>/messenger/', admin_views.AdminUserMessengerView.as_view(), name='api-admin-user-messenger'),
+
+    # Per-user Magic Mode prompt overrides (admin-only)
+    path('admin/users/<int:user_id>/prompt-overrides/',
+         admin_views.AdminPromptOverridesListView.as_view(),
+         name='api-admin-prompt-overrides'),
+    path('admin/users/<int:user_id>/prompt-overrides/<str:prompt_type>/',
+         admin_views.AdminPromptOverrideDetailView.as_view(),
+         name='api-admin-prompt-override-detail'),
+    path('admin/users/<int:user_id>/prompt-overrides/<str:prompt_type>/audit/',
+         admin_views.AdminPromptOverrideAuditView.as_view(),
+         name='api-admin-prompt-override-audit'),
     path('admin/conversations/<int:conv_id>/messages/', admin_views.AdminConversationMessagesView.as_view(), name='api-admin-conv-messages'),
     path('admin/bulk-approve/', admin_views.AdminBulkApproveView.as_view(), name='api-admin-bulk-approve'),
 

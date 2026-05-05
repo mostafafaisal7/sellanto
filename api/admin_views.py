@@ -1254,3 +1254,240 @@ class AdminTestWebhookView(APIView):
         })
 
 
+# ==================== Per-User Magic Mode Prompt Overrides ====================
+
+PROMPT_TYPE_META = [
+    {
+        'type': 'idea_system',
+        'display_name': 'Idea Generator — System',
+        'stage': 'Magic Mode · Idea generation (system role)',
+    },
+    {
+        'type': 'idea_user',
+        'display_name': 'Idea Generator — User Context',
+        'stage': 'Magic Mode · Idea generation (user message)',
+    },
+    {
+        'type': 'caption_system',
+        'display_name': 'Caption Generator — System',
+        'stage': 'Magic Mode · Caption generation',
+    },
+    {
+        'type': 'image_refiner',
+        'display_name': 'Image Prompt Refiner',
+        'stage': 'Magic Mode · Image prompt refinement',
+    },
+    {
+        'type': 'brand_dna',
+        'display_name': 'Brand DNA Enhancer',
+        'stage': 'Brand profile · DNA enrichment',
+    },
+    {
+        'type': 'video_prompt',
+        'display_name': 'Video Prompt Builder',
+        'stage': 'Magic Mode · Video generation (Veo)',
+    },
+]
+_VALID_PROMPT_TYPES = {p['type'] for p in PROMPT_TYPE_META}
+
+
+def _serialize_override(o):
+    return {
+        'id': o.id,
+        'prompt_type': o.prompt_type,
+        'prompt_text': o.prompt_text,
+        'is_active': o.is_active,
+        'updated_at': o.updated_at.isoformat() if o.updated_at else None,
+        'updated_by': o.updated_by.username if o.updated_by else None,
+        'created_at': o.created_at.isoformat() if o.created_at else None,
+        'created_by': o.created_by.username if o.created_by else None,
+    }
+
+
+class AdminPromptOverridesListView(APIView):
+    """GET /api/v1/admin/users/<user_id>/prompt-overrides/
+
+    Returns metadata for all 6 prompt types, the user's existing overrides
+    (if any), the variable schema, and a default-preview snippet for each
+    type — everything the admin UI needs to render the editor.
+    """
+    permission_classes = [IsOriginalAdmin]
+
+    def get(self, request, user_id):
+        from accounts.models import UserPromptOverride
+        from accounts.services.prompt_resolver import PROMPT_SCHEMA, get_default_preview
+
+        try:
+            target_user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        existing = {
+            o.prompt_type: o
+            for o in UserPromptOverride.objects.filter(user=target_user)
+        }
+        prompts = []
+        for meta in PROMPT_TYPE_META:
+            t = meta['type']
+            o = existing.get(t)
+            prompts.append({
+                **meta,
+                'variables': PROMPT_SCHEMA.get(t, []),
+                'default_preview': get_default_preview(t),
+                'override': _serialize_override(o) if o else None,
+            })
+
+        return Response({
+            'target_user': {
+                'id': target_user.id,
+                'username': target_user.username,
+                'email': target_user.email,
+            },
+            'prompts': prompts,
+        })
+
+
+class AdminPromptOverrideDetailView(APIView):
+    """PUT/DELETE /api/v1/admin/users/<user_id>/prompt-overrides/<prompt_type>/
+
+    PUT body: { prompt_text: str, is_active?: bool }
+    Creates or updates the override and writes an audit row.
+    DELETE removes the override (hard delete) and writes an audit row.
+    """
+    permission_classes = [IsOriginalAdmin]
+
+    def put(self, request, user_id, prompt_type):
+        from accounts.models import UserPromptOverride, PromptOverrideAuditLog
+
+        if prompt_type not in _VALID_PROMPT_TYPES:
+            return Response(
+                {'error': f'Unknown prompt_type: {prompt_type!r}'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        prompt_text = request.data.get('prompt_text', '')
+        is_active = request.data.get('is_active', True)
+        if not isinstance(prompt_text, str) or not prompt_text.strip():
+            return Response(
+                {'error': 'prompt_text is required and must be a non-empty string.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            target_user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        admin_user = getattr(request, '_original_user', request.user)
+
+        existing = UserPromptOverride.objects.filter(
+            user=target_user, prompt_type=prompt_type,
+        ).first()
+        previous_text = existing.prompt_text if existing else ''
+        action = 'update' if existing else 'create'
+
+        if existing:
+            existing.prompt_text = prompt_text
+            existing.is_active = bool(is_active)
+            existing.updated_by = admin_user
+            existing.save()
+            override = existing
+        else:
+            override = UserPromptOverride.objects.create(
+                user=target_user,
+                prompt_type=prompt_type,
+                prompt_text=prompt_text,
+                is_active=bool(is_active),
+                created_by=admin_user,
+                updated_by=admin_user,
+            )
+
+        PromptOverrideAuditLog.objects.create(
+            override=override,
+            target_user=target_user,
+            prompt_type=prompt_type,
+            action=action,
+            admin=admin_user,
+            previous_text=previous_text,
+            new_text=prompt_text,
+        )
+
+        return Response({'ok': True, 'override': _serialize_override(override)})
+
+    def delete(self, request, user_id, prompt_type):
+        from accounts.models import UserPromptOverride, PromptOverrideAuditLog
+
+        if prompt_type not in _VALID_PROMPT_TYPES:
+            return Response(
+                {'error': f'Unknown prompt_type: {prompt_type!r}'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            target_user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        admin_user = getattr(request, '_original_user', request.user)
+        existing = UserPromptOverride.objects.filter(
+            user=target_user, prompt_type=prompt_type,
+        ).first()
+        if not existing:
+            return Response({'ok': True, 'message': 'No override to delete.'})
+
+        previous_text = existing.prompt_text
+        existing.delete()
+
+        PromptOverrideAuditLog.objects.create(
+            override=None,
+            target_user=target_user,
+            prompt_type=prompt_type,
+            action='delete',
+            admin=admin_user,
+            previous_text=previous_text,
+            new_text='',
+        )
+
+        return Response({'ok': True})
+
+
+class AdminPromptOverrideAuditView(APIView):
+    """GET /api/v1/admin/users/<user_id>/prompt-overrides/<prompt_type>/audit/
+
+    Returns the last 50 audit entries for a (user, prompt_type) pair.
+    """
+    permission_classes = [IsOriginalAdmin]
+
+    def get(self, request, user_id, prompt_type):
+        from accounts.models import PromptOverrideAuditLog
+
+        if prompt_type not in _VALID_PROMPT_TYPES:
+            return Response(
+                {'error': f'Unknown prompt_type: {prompt_type!r}'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            target_user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        rows = PromptOverrideAuditLog.objects.filter(
+            target_user=target_user, prompt_type=prompt_type,
+        ).order_by('-created_at')[:50]
+
+        return Response({
+            'audit': [
+                {
+                    'id': r.id,
+                    'action': r.action,
+                    'admin': r.admin.username if r.admin else None,
+                    'admin_id': r.admin.id if r.admin else None,
+                    'previous_text': r.previous_text,
+                    'new_text': r.new_text,
+                    'created_at': r.created_at.isoformat(),
+                }
+                for r in rows
+            ],
+        })
+

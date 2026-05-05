@@ -204,11 +204,13 @@ class UserProfile(models.Model):
         self.plan_start_date = start_date or timezone.now().date()
         self.plan_end_date = self.plan_start_date + timedelta(days=30*duration_months)
         
+        # Limits aligned with public pricing (see api/subscription_views.PLAN_CATALOG
+        # and tokenCostEstimations.md). 99999 represents "unlimited" in the UI.
         plan_limits = {
-            'free': {'posts': 10, 'captions': 20, 'videos': 5, 'images': 10, 'messenger': 100, 'accounts': 1},
-            'starter': {'posts': 50, 'captions': 100, 'videos': 20, 'images': 50, 'messenger': 500, 'accounts': 3},
-            'pro': {'posts': 200, 'captions': 500, 'videos': 50, 'images': 200, 'messenger': 2000, 'accounts': 5},
-            'business': {'posts': 500, 'captions': 1000, 'videos': 100, 'images': 500, 'messenger': 5000, 'accounts': 10},
+            'free':       {'posts': 3,     'captions': 10,    'videos': 0,     'images': 5,     'messenger': 0,     'accounts': 1},
+            'starter':    {'posts': 15,    'captions': 100,   'videos': 1,     'images': 50,    'messenger': 100,   'accounts': 3},
+            'pro':        {'posts': 30,    'captions': 99999, 'videos': 2,     'images': 100,   'messenger': 200,   'accounts': 8},
+            'business':   {'posts': 99999, 'captions': 99999, 'videos': 8,     'images': 500,   'messenger': 1000,  'accounts': 10},
             'enterprise': {'posts': 99999, 'captions': 99999, 'videos': 99999, 'images': 99999, 'messenger': 99999, 'accounts': 50},
         }
         
@@ -598,3 +600,93 @@ def create_user_profile(sender, instance, created, **kwargs):
             # Create OnboardingProgress for new users
             from onboarding.models import OnboardingProgress
             OnboardingProgress.objects.create(user=instance)
+
+
+# ============================================================
+# MAGIC MODE PROMPT OVERRIDES (admin-only feature)
+# ============================================================
+
+class UserPromptOverride(models.Model):
+    """Per-user overrides for Magic Mode prompt templates.
+
+    Active overrides shadow the hardcoded default at runtime. Admins manage
+    these from the admin panel; users never see them. See
+    `accounts.services.prompt_resolver.resolve_prompt` for the lookup helper.
+    """
+
+    PROMPT_TYPE_CHOICES = [
+        ('idea_system', 'Idea Generator — System'),
+        ('idea_user', 'Idea Generator — User Context'),
+        ('caption_system', 'Caption Generator — System'),
+        ('image_refiner', 'Image Prompt Refiner'),
+        ('brand_dna', 'Brand DNA Enhancer'),
+        ('video_prompt', 'Video Prompt Builder'),
+    ]
+
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='prompt_overrides'
+    )
+    prompt_type = models.CharField(max_length=30, choices=PROMPT_TYPE_CHOICES)
+    prompt_text = models.TextField()
+    is_active = models.BooleanField(default=True)
+
+    # Audit metadata (full history lives in PromptOverrideAuditLog)
+    created_by = models.ForeignKey(
+        User, related_name='prompt_overrides_authored',
+        null=True, blank=True, on_delete=models.SET_NULL,
+    )
+    updated_by = models.ForeignKey(
+        User, related_name='prompt_overrides_modified',
+        null=True, blank=True, on_delete=models.SET_NULL,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'user_prompt_overrides'
+        unique_together = [('user', 'prompt_type')]
+        verbose_name = 'User Prompt Override'
+        verbose_name_plural = 'User Prompt Overrides'
+
+    def __str__(self):
+        return f'{self.user.username} · {self.prompt_type} · {"active" if self.is_active else "inactive"}'
+
+
+class PromptOverrideAuditLog(models.Model):
+    """Append-only audit trail for every admin edit to a UserPromptOverride."""
+
+    ACTION_CHOICES = [
+        ('create', 'Create'),
+        ('update', 'Update'),
+        ('delete', 'Delete'),
+        ('activate', 'Activate'),
+        ('deactivate', 'Deactivate'),
+    ]
+
+    override = models.ForeignKey(
+        UserPromptOverride, on_delete=models.CASCADE,
+        related_name='audit_log', null=True, blank=True,
+    )
+    target_user = models.ForeignKey(
+        User, on_delete=models.CASCADE,
+        related_name='prompt_audit_targets',
+    )
+    prompt_type = models.CharField(max_length=30)
+    action = models.CharField(max_length=20, choices=ACTION_CHOICES)
+    admin = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True,
+        related_name='prompt_audit_actions',
+    )
+    previous_text = models.TextField(blank=True)
+    new_text = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'prompt_override_audit_log'
+        ordering = ['-created_at']
+        verbose_name = 'Prompt Override Audit Log'
+        verbose_name_plural = 'Prompt Override Audit Log'
+
+    def __str__(self):
+        admin_name = self.admin.username if self.admin else 'system'
+        return f'{admin_name} · {self.action} · {self.prompt_type} · {self.target_user.username}'
