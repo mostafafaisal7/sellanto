@@ -408,6 +408,11 @@ class UpdatePostSerializer(serializers.Serializer):
     caption = serializers.CharField(max_length=5000, required=False)
     platforms = serializers.ListField(child=serializers.CharField(), required=False)
     scheduled_time = serializers.DateTimeField(required=False)
+    status = serializers.ChoiceField(
+        choices=[('draft', 'Draft'), ('scheduled', 'Scheduled')],
+        required=False,
+    )
+    timezone = serializers.CharField(required=False)
 
 
 class DashboardStatsSerializer(serializers.Serializer):

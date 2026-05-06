@@ -280,6 +280,7 @@ export interface UpdatePostData {
   pillar?: number;
   goal?: string;
   media_files?: File[];
+  status?: PostStatus;
 }
 
 // ============================================

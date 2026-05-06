@@ -20,6 +20,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from accounts.services.diamond_service import grant_plan_diamonds_on_upgrade
+
 
 # ---------------------------------------------------------------------------
 # Plan catalog — single source of truth for the upgrade UI.
@@ -193,15 +195,31 @@ class SubscriptionUpgradeView(APIView):
         # while downgrade-to-free can still apply directly.
         profile.set_plan(plan_id, duration_months=duration_months)
 
+        # Grant plan diamonds on upgrade (rank-up only, idempotent per cycle).
+        # Downgrades and same-plan re-selections are no-ops; the user keeps
+        # the diamonds they already have.
+        diamond_grant = grant_plan_diamonds_on_upgrade(
+            user=request.user,
+            previous_plan=previous_plan,
+            new_plan=plan_id,
+            cycle_start_date=profile.plan_start_date,
+        )
+
         return Response(
             {
                 "ok": True,
                 "previous_plan": previous_plan,
                 "billing_cycle": billing_cycle,
                 "subscription": _serialize_subscription(profile),
+                "diamond_grant": diamond_grant,
                 "message": (
                     f"Plan changed from {previous_plan} to {plan_id} "
                     f"({billing_cycle})."
+                    + (
+                        f" Granted {diamond_grant['amount']} diamonds."
+                        if diamond_grant['granted']
+                        else ""
+                    )
                 ),
             },
             status=status.HTTP_200_OK,

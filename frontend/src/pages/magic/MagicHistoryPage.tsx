@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import api from '../../services/api';
 import { postService } from '../../services/postService';
+import { captionService } from '../../services/captionService';
 import ConnectAccountModal from '../../components/ConnectAccountModal';
+import type { CaptionPlatform, CaptionTone } from '../../types';
 
 interface PostRecord {
   id: number;
@@ -180,18 +182,49 @@ function ExpandableText({ label, text }: { label: string; text: string }) {
 }
 
 // Post card for history (simpler than ResultsScreen version)
-function HistoryPostCard({ post, onConnectError }: { post: PostRecord; onConnectError: (msg: string) => void }) {
+function HistoryPostCard({
+  post,
+  session,
+  onConnectError,
+}: {
+  post: PostRecord;
+  session: Session;
+  onConnectError: (msg: string) => void;
+}) {
   const [publishing, setPublishing] = useState(false);
   const [showScheduler, setShowScheduler] = useState(false);
-  const [schedDate, setSchedDate] = useState('');
-  const [schedTime, setSchedTime] = useState('');
+  const [schedDate, setSchedDate] = useState(() => {
+    if (post.scheduled_time) {
+      const d = new Date(post.scheduled_time);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+    return '';
+  });
+  const [schedTime, setSchedTime] = useState(() => {
+    if (post.scheduled_time) {
+      const d = new Date(post.scheduled_time);
+      return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    }
+    return '';
+  });
   const [scheduling, setScheduling] = useState(false);
   const [postError, setPostError] = useState<string | null>(null);
+  const [editingCaption, setEditingCaption] = useState(false);
+  const [draftCaption, setDraftCaption] = useState(post.caption);
+  const [captionLive, setCaptionLive] = useState(post.caption);
+  const [savingCaption, setSavingCaption] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
 
   const isDraft = post.status === 'draft';
   const isScheduled = post.status === 'scheduled';
   const isPosted = post.status === 'posted';
   const isFinal = isPosted || isScheduled;
+  const canEditCaption = isDraft || (isScheduled && !!post.scheduled_time && new Date(post.scheduled_time).getTime() > Date.now());
+
+  // A scheduled post whose time has already passed is locked (in queue / being processed)
+  const scheduledTimePassed =
+    isScheduled && !!post.scheduled_time && new Date(post.scheduled_time).getTime() <= Date.now();
+  const canEditSchedule = isScheduled && !scheduledTimePassed;
 
   const platformEmoji: Record<string, string> = {
     linkedin: '💼',
@@ -201,41 +234,22 @@ function HistoryPostCard({ post, onConnectError }: { post: PostRecord; onConnect
     tiktok: '🎵',
   };
 
-  const downloadMediaAsFile = async (): Promise<File[]> => {
-    if (!post.media_urls || post.media_urls.length === 0) return [];
-    try {
-      const res = await fetch(post.media_urls[0]);
-      const blob = await res.blob();
-      const ext = post.media_urls[0].split('.').pop()?.split('?')[0] || (blob.type.startsWith('video') ? 'mp4' : 'png');
-      return [new File([blob], `media.${ext}`, { type: blob.type || (ext === 'mp4' ? 'video/mp4' : 'image/png') })];
-    } catch {
-      return [];
-    }
-  };
-
   const handlePublish = async () => {
     setPublishing(true);
     setPostError(null);
     try {
-      const mediaFiles = await downloadMediaAsFile();
       const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
       const now = new Date();
       now.setMinutes(now.getMinutes() + 1);
       const scheduledTime = now.toISOString();
 
-      await postService.create({
-        caption: post.caption,
-        media_files: mediaFiles,
-        platforms: post.platforms_list as import('../../types').PlatformType[],
-        source: 'magic',
-        hook: post.hook,
+      await postService.update(post.id, {
+        status: 'scheduled',
         scheduled_time: scheduledTime,
         timezone,
       });
 
-      // Delete the draft
-      await postService.delete(post.id);
-      window.location.reload(); // Reload to refresh the list
+      window.location.reload();
     } catch (err: any) {
       const msg = err?.response?.data?.error || err?.message || 'Failed to publish post.';
       if (msg.toLowerCase().includes('no connected account')) {
@@ -247,28 +261,108 @@ function HistoryPostCard({ post, onConnectError }: { post: PostRecord; onConnect
     setPublishing(false);
   };
 
+  const handleSaveCaption = async () => {
+    if (!draftCaption.trim() || draftCaption === captionLive) {
+      setEditingCaption(false);
+      return;
+    }
+    setSavingCaption(true);
+    setPostError(null);
+    try {
+      await postService.update(post.id, { caption: draftCaption });
+      setCaptionLive(draftCaption);
+      setEditingCaption(false);
+    } catch (err: any) {
+      setPostError(err?.response?.data?.error || err?.message || 'Failed to save caption.');
+    }
+    setSavingCaption(false);
+  };
+
+  const handleRegenerateAI = async () => {
+    setRegenerating(true);
+    setPostError(null);
+    try {
+      // Build rich context from session: brand DNA, hook, prompts, related ideas
+      const dnaData = (session.dna as any)?.dna_data;
+      const dnaEntries = dnaData && typeof dnaData === 'object'
+        ? Object.entries(dnaData as Record<string, unknown>)
+            .filter(([, v]) => v && (typeof v === 'string' || Array.isArray(v)))
+            .map(([k, v]) => `${k}: ${Array.isArray(v) ? (v as unknown[]).join(', ') : v}`)
+            .join('\n')
+        : '';
+
+      const ideaContext = session.ideas
+        .filter((i) => i.hook || i.angle)
+        .slice(0, 3)
+        .map((i) => `- ${i.title || ''}: ${i.hook || ''} (${i.angle || ''})`)
+        .join('\n');
+
+      const videoContext = session.videos
+        .slice(0, 2)
+        .map((v) => `- ${v.title || ''}: ${v.prompt || ''}`)
+        .join('\n');
+
+      const platformMap: Record<string, CaptionPlatform> = {
+        linkedin: 'linkedin', instagram: 'instagram', facebook: 'facebook',
+        twitter: 'twitter', tiktok: 'tiktok', youtube: 'youtube', pinterest: 'pinterest',
+      };
+      const firstPlat = (post.platforms_list[0] || 'general').toLowerCase();
+      const captionPlatform: CaptionPlatform = platformMap[firstPlat] || 'general';
+
+      const customParts: string[] = [];
+      if (session.brand_name) customParts.push(`Brand: ${session.brand_name}`);
+      if (session.website_url) customParts.push(`Website: ${session.website_url}`);
+      if (dnaEntries) customParts.push(`Brand DNA:\n${dnaEntries}`);
+      if (post.hook) customParts.push(`Original hook: ${post.hook}`);
+      if (videoContext) customParts.push(`Related videos:\n${videoContext}`);
+      if (ideaContext) customParts.push(`Related ideas:\n${ideaContext}`);
+      customParts.push(
+        `Write a fresh, on-brand social caption for ${captionPlatform}. Strong hook, scannable, native to the platform. Do NOT describe the video — write a real social post.`,
+      );
+
+      const tone: CaptionTone = 'enthusiastic';
+      const topic = post.hook || captionLive.slice(0, 200) || session.brand_name || 'social media post';
+
+      const result = await captionService.generate({
+        topic,
+        tone,
+        length: 'medium',
+        platform: captionPlatform,
+        include_hashtags: true,
+        include_emojis: true,
+        include_cta: true,
+        custom_instructions: customParts.join('\n\n'),
+      });
+
+      const generated = (result.generated_caption || '').trim();
+      const hashtags = (result.generated_hashtags || '').trim();
+      const newCaption = generated && hashtags && !generated.includes('#')
+        ? `${generated}\n\n${hashtags}`
+        : generated || captionLive;
+
+      setDraftCaption(newCaption);
+      setEditingCaption(true);
+    } catch (err: any) {
+      setPostError(err?.response?.data?.error || err?.message || 'Failed to regenerate caption.');
+    }
+    setRegenerating(false);
+  };
+
   const handleScheduleConfirm = async () => {
     if (!schedDate || !schedTime) return;
     setScheduling(true);
     setPostError(null);
     try {
-      const mediaFiles = await downloadMediaAsFile();
       const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
       const scheduledTime = new Date(`${schedDate}T${schedTime}`).toISOString();
 
-      await postService.create({
-        caption: post.caption,
-        media_files: mediaFiles,
-        platforms: post.platforms_list as import('../../types').PlatformType[],
-        source: 'magic',
-        hook: post.hook,
+      await postService.update(post.id, {
+        status: 'scheduled',
         scheduled_time: scheduledTime,
         timezone,
       });
 
-      // Delete the draft
-      await postService.delete(post.id);
-      window.location.reload(); // Reload to refresh the list
+      window.location.reload();
     } catch (err: any) {
       const msg = err?.response?.data?.error || err?.message || 'Failed to schedule post.';
       if (msg.toLowerCase().includes('no connected account')) {
@@ -324,9 +418,96 @@ function HistoryPostCard({ post, onConnectError }: { post: PostRecord; onConnect
           {post.hook && (
             <h4 className="text-[14px] font-bold text-text-primary mb-2">{post.hook}</h4>
           )}
-          <p className="text-[12px] text-text-secondary leading-relaxed whitespace-pre-line line-clamp-6">
-            {post.caption}
-          </p>
+
+          {editingCaption ? (
+            <>
+              <textarea
+                value={draftCaption}
+                onChange={(e) => setDraftCaption(e.target.value)}
+                rows={8}
+                className="w-full text-[12px] leading-relaxed p-3 rounded-[10px] focus:outline-none resize-y"
+                style={{
+                  background: 'rgba(0,0,0,0.3)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  color: 'rgb(var(--c-text-primary))',
+                }}
+              />
+              <div className="flex items-center gap-2 mt-2 flex-wrap">
+                <button
+                  onClick={handleSaveCaption}
+                  disabled={savingCaption || regenerating}
+                  className="px-3 py-1.5 rounded-[8px] text-[11px] font-bold text-white"
+                  style={{
+                    background: 'linear-gradient(135deg, rgb(var(--c-coral)), rgb(var(--c-coral-hover)))',
+                    opacity: savingCaption || regenerating ? 0.6 : 1,
+                  }}
+                >
+                  {savingCaption ? 'Saving...' : '💾 Save'}
+                </button>
+                <button
+                  onClick={handleRegenerateAI}
+                  disabled={regenerating || savingCaption}
+                  className="px-3 py-1.5 rounded-[8px] text-[11px] font-bold"
+                  style={{
+                    background: 'rgba(168,85,247,0.15)',
+                    border: '1px solid rgba(168,85,247,0.35)',
+                    color: '#a855f7',
+                    opacity: regenerating || savingCaption ? 0.6 : 1,
+                  }}
+                >
+                  {regenerating ? '✨ Generating...' : '✨ Regenerate with AI'}
+                </button>
+                <button
+                  onClick={() => {
+                    setDraftCaption(captionLive);
+                    setEditingCaption(false);
+                  }}
+                  disabled={savingCaption || regenerating}
+                  className="px-3 py-1.5 rounded-[8px] text-[11px] font-semibold"
+                  style={{ color: 'rgb(var(--c-text-muted))' }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="text-[12px] text-text-secondary leading-relaxed whitespace-pre-line line-clamp-6">
+                {captionLive}
+              </p>
+              {canEditCaption && (
+                <div className="flex items-center gap-2 mt-2">
+                  <button
+                    onClick={() => {
+                      setDraftCaption(captionLive);
+                      setEditingCaption(true);
+                    }}
+                    className="px-2.5 py-1 rounded-[8px] text-[11px] font-semibold"
+                    style={{
+                      background: 'rgba(255,255,255,0.06)',
+                      border: '1px solid var(--border-color)',
+                      color: 'rgb(var(--c-text-secondary))',
+                    }}
+                  >
+                    ✏️ Edit
+                  </button>
+                  <button
+                    onClick={handleRegenerateAI}
+                    disabled={regenerating}
+                    className="px-2.5 py-1 rounded-[8px] text-[11px] font-semibold"
+                    style={{
+                      background: 'rgba(168,85,247,0.12)',
+                      border: '1px solid rgba(168,85,247,0.3)',
+                      color: '#a855f7',
+                      opacity: regenerating ? 0.6 : 1,
+                    }}
+                  >
+                    {regenerating ? '✨ Generating...' : '✨ AI Caption'}
+                  </button>
+                </div>
+              )}
+            </>
+          )}
         </div>
       </div>
 
@@ -384,42 +565,89 @@ function HistoryPostCard({ post, onConnectError }: { post: PostRecord; onConnect
       )}
 
       {/* Actions */}
-      {isDraft && (
-        <div
-          className="flex items-center justify-end gap-2 px-4 py-3"
-          style={{ borderTop: '1px solid var(--border-color)' }}
-        >
-          <button
-            onClick={() => setShowScheduler(!showScheduler)}
-            className="px-3 py-2 rounded-[10px] text-[12px] font-semibold"
-            style={{
-              background: 'rgba(255,255,255,0.06)',
-              border: '1px solid var(--border-color)',
-              color: 'rgb(var(--c-text-secondary))',
-            }}
-          >
-            📅 Schedule
-          </button>
-          <button
-            onClick={handlePublish}
-            disabled={publishing}
-            className="px-4 py-2 rounded-[10px] text-[12px] font-bold text-white"
-            style={{
-              background: 'linear-gradient(135deg, rgb(var(--c-coral)), rgb(var(--c-coral-hover)))',
-              opacity: publishing ? 0.6 : 1,
-            }}
-          >
-            {publishing ? 'Posting...' : '🚀 Post Now'}
-          </button>
+      <div
+        className="flex items-center justify-between gap-2 px-4 py-3 flex-wrap"
+        style={{ borderTop: '1px solid var(--border-color)' }}
+      >
+        <div className="text-[11px] text-text-muted">
+          {isScheduled && post.scheduled_time && (
+            <>📅 Scheduled for {new Date(post.scheduled_time).toLocaleString()}</>
+          )}
+          {isPosted && post.posted_at && (
+            <>✅ Posted on {new Date(post.posted_at).toLocaleString()}</>
+          )}
+          {!isScheduled && !isPosted && <>📝 Draft</>}
         </div>
-      )}
 
-      {isFinal && post.scheduled_time && (
-        <div className="px-4 py-3 text-[11px] text-text-muted" style={{ borderTop: '1px solid var(--border-color)' }}>
-          {isScheduled && `Scheduled for ${new Date(post.scheduled_time).toLocaleString()}`}
-          {isPosted && post.posted_at && `Posted on ${new Date(post.posted_at).toLocaleString()}`}
+        <div className="flex items-center gap-2">
+          {isDraft && (
+            <>
+              <button
+                onClick={() => setShowScheduler(!showScheduler)}
+                className="px-3 py-2 rounded-[10px] text-[12px] font-semibold"
+                style={{
+                  background: 'rgba(255,255,255,0.06)',
+                  border: '1px solid var(--border-color)',
+                  color: 'rgb(var(--c-text-secondary))',
+                }}
+              >
+                📅 Schedule
+              </button>
+              <button
+                onClick={handlePublish}
+                disabled={publishing}
+                className="px-4 py-2 rounded-[10px] text-[12px] font-bold text-white"
+                style={{
+                  background: 'linear-gradient(135deg, rgb(var(--c-coral)), rgb(var(--c-coral-hover)))',
+                  opacity: publishing ? 0.6 : 1,
+                }}
+              >
+                {publishing ? 'Posting...' : '🚀 Post Now'}
+              </button>
+            </>
+          )}
+
+          {canEditSchedule && (
+            <button
+              onClick={() => setShowScheduler(!showScheduler)}
+              className="px-4 py-2 rounded-[10px] text-[12px] font-bold"
+              style={{
+                background: 'rgba(59,130,246,0.15)',
+                border: '1px solid rgba(59,130,246,0.35)',
+                color: '#3b82f6',
+              }}
+            >
+              ✏️ Edit Scheduling
+            </button>
+          )}
+
+          {scheduledTimePassed && (
+            <button
+              disabled
+              className="px-4 py-2 rounded-[10px] text-[12px] font-bold cursor-not-allowed"
+              style={{
+                background: 'rgba(59,130,246,0.15)',
+                border: '1px solid rgba(59,130,246,0.35)',
+                color: '#3b82f6',
+              }}
+            >
+              ⏳ Scheduled
+            </button>
+          )}
+
+          {isPosted && (
+            <button
+              disabled
+              className="px-4 py-2 rounded-[10px] text-[12px] font-bold text-white cursor-not-allowed"
+              style={{
+                background: 'linear-gradient(135deg, rgb(16,185,129), rgb(5,150,105))',
+              }}
+            >
+              ✅ Already Posted
+            </button>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -691,7 +919,7 @@ function SessionCard({ session }: { session: Session }) {
       {session.posts.length > 0 && (
         <div className="px-6 py-4">
           {session.posts.map((post) => (
-            <HistoryPostCard key={post.id} post={post} onConnectError={setConnectModalError} />
+            <HistoryPostCard key={post.id} post={post} session={session} onConnectError={setConnectModalError} />
           ))}
         </div>
       )}

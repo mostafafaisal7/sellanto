@@ -3,7 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   EyeIcon,
   EyeSlashIcon,
@@ -11,6 +11,8 @@ import {
   ShieldCheckIcon,
   BoltIcon,
   GlobeAltIcon,
+  ExclamationTriangleIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/outline';
 import { Button, Input } from '../components/ui';
 import { useAuthStore } from '../store';
@@ -33,6 +35,65 @@ const registerSchema = z.object({
 
 type LoginFormData = z.infer<typeof loginSchema>;
 type RegisterFormData = z.infer<typeof registerSchema>;
+
+function getAuthErrorTitle(message: string): string {
+  const m = message.toLowerCase();
+  if (m.includes('invalid') && (m.includes('password') || m.includes('username') || m.includes('credential'))) {
+    return 'Wrong credentials';
+  }
+  if (m.includes('approval') || m.includes('approved')) return 'Awaiting approval';
+  if (m.includes('network') || m.includes('fetch')) return 'Connection issue';
+  if (m.includes('exists') || m.includes('already')) return 'Account already exists';
+  return 'Something went wrong';
+}
+
+function AuthAlert({ message, onDismiss }: { message: string; onDismiss?: () => void }) {
+  return (
+    <motion.div
+      key={message}
+      initial={{ opacity: 0, y: -10, scale: 0.96 }}
+      animate={{
+        opacity: 1,
+        y: 0,
+        scale: 1,
+        x: [0, -8, 8, -5, 5, 0],
+      }}
+      exit={{ opacity: 0, y: -10, scale: 0.96 }}
+      transition={{
+        opacity: { duration: 0.25 },
+        y: { duration: 0.25 },
+        scale: { duration: 0.25 },
+        x: { duration: 0.45, ease: 'easeOut' },
+      }}
+      className="mb-6 relative overflow-hidden rounded-2xl border border-danger/30 bg-gradient-to-r from-danger/15 via-danger/10 to-danger/5 p-4 shadow-xl shadow-danger/10"
+      role="alert"
+    >
+      <div className="flex items-start gap-3">
+        <div className="flex-shrink-0 w-9 h-9 rounded-xl bg-danger/20 flex items-center justify-center">
+          <ExclamationTriangleIcon className="w-5 h-5 text-danger" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-danger leading-tight">
+            {getAuthErrorTitle(message)}
+          </p>
+          <p className="text-xs text-text-secondary mt-1 leading-relaxed">
+            {message}
+          </p>
+        </div>
+        {onDismiss && (
+          <button
+            type="button"
+            onClick={onDismiss}
+            className="flex-shrink-0 p-1 -m-1 rounded-md text-text-muted hover:text-text-primary hover:bg-white/5 transition-colors"
+            aria-label="Dismiss"
+          >
+            <XMarkIcon className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+    </motion.div>
+  );
+}
 
 const features = [
   { icon: SparklesIcon, text: 'AI-Powered Captions' },
@@ -245,17 +306,17 @@ export function LoginPage() {
             )}
 
             {/* Error Message */}
-            {(error || registerForm.formState.errors.root) && (
-              <motion.div
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="mb-6 p-4 bg-danger/10 border border-danger/20 rounded-xl"
-              >
-                <p className="text-sm text-danger text-center">
-                  {error || registerForm.formState.errors.root?.message}
-                </p>
-              </motion.div>
-            )}
+            <AnimatePresence>
+              {(error || registerForm.formState.errors.root?.message) && (
+                <AuthAlert
+                  message={error || registerForm.formState.errors.root?.message || ''}
+                  onDismiss={() => {
+                    if (error) clearError();
+                    if (registerForm.formState.errors.root) registerForm.clearErrors('root');
+                  }}
+                />
+              )}
+            </AnimatePresence>
 
             {/* Login Form */}
             {!isRegister ? (

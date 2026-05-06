@@ -69,6 +69,16 @@ PLAN_DIAMONDS = {
     'enterprise': 50000,
 }
 
+# Plan ranking — used to detect upgrades vs downgrades.
+# Higher rank = higher tier.
+PLAN_RANK = {
+    'free': 0,
+    'starter': 1,
+    'pro': 2,
+    'business': 3,
+    'enterprise': 4,
+}
+
 
 class InsufficientDiamondsError(Exception):
     """Raised when user doesn't have enough diamonds for an operation."""
@@ -261,6 +271,99 @@ def grant_plan_diamonds(user, plan):
         )
 
     return wallet.balance
+
+
+def grant_plan_diamonds_on_upgrade(user, previous_plan, new_plan, cycle_start_date):
+    """Grant plan diamonds when a user changes plan via self-service upgrade.
+
+    Rules:
+      - Grant only when the new plan ranks STRICTLY HIGHER than the previous plan
+        (i.e. real upgrade — no grant on downgrade or same-plan re-selection).
+      - Idempotent per billing cycle: keyed on (user, new_plan, cycle_start_date).
+        Re-running for the same cycle is a no-op.
+      - Free plan grants nothing (PLAN_DIAMONDS['free'] is intentional baseline).
+
+    Returns dict:
+      {
+        'granted': bool,
+        'amount': int,           # diamonds granted (0 if not granted)
+        'balance': int,          # current wallet balance
+        'reason': str,           # 'granted' | 'not_an_upgrade' | 'already_granted_this_cycle' | 'no_diamonds_for_plan'
+      }
+    """
+    from accounts.models import DiamondWallet, DiamondTransaction
+    from django.db import transaction
+
+    # Resolve current balance up front so we can return it in skip cases.
+    def _current_balance():
+        try:
+            return DiamondWallet.objects.get(user=user).balance
+        except DiamondWallet.DoesNotExist:
+            return 0
+
+    # Rule 1: only on rank-up
+    prev_rank = PLAN_RANK.get(previous_plan, 0)
+    new_rank = PLAN_RANK.get(new_plan, 0)
+    if new_rank <= prev_rank:
+        return {
+            'granted': False,
+            'amount': 0,
+            'balance': _current_balance(),
+            'reason': 'not_an_upgrade',
+        }
+
+    amount = PLAN_DIAMONDS.get(new_plan, 0)
+    if amount <= 0:
+        return {
+            'granted': False,
+            'amount': 0,
+            'balance': _current_balance(),
+            'reason': 'no_diamonds_for_plan',
+        }
+
+    cycle_marker = cycle_start_date.isoformat() if cycle_start_date else 'no-cycle'
+    cycle_note = f'Plan upgrade grant: {new_plan} cycle={cycle_marker} (+{amount} diamonds)'
+
+    with transaction.atomic():
+        try:
+            wallet = DiamondWallet.objects.select_for_update().get(user=user)
+        except DiamondWallet.DoesNotExist:
+            wallet = DiamondWallet.objects.create(user=user, balance=0, total_recharged=0)
+
+        # Idempotency: same plan + same cycle start = already granted.
+        already_granted = DiamondTransaction.objects.filter(
+            user=user,
+            transaction_type='plan_grant',
+            note=cycle_note,
+        ).exists()
+
+        if already_granted:
+            return {
+                'granted': False,
+                'amount': 0,
+                'balance': wallet.balance,
+                'reason': 'already_granted_this_cycle',
+            }
+
+        wallet.balance += amount
+        wallet.total_recharged += amount
+        wallet.last_recharge_at = timezone.now()
+        wallet.save()
+
+        DiamondTransaction.objects.create(
+            user=user,
+            amount=amount,
+            transaction_type='plan_grant',
+            balance_after=wallet.balance,
+            note=cycle_note,
+        )
+
+        return {
+            'granted': True,
+            'amount': amount,
+            'balance': wallet.balance,
+            'reason': 'granted',
+        }
 
 
 def get_usage_summary(user, days=30):

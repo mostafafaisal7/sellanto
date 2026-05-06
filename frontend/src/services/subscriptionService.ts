@@ -44,11 +44,23 @@ export interface SubscriptionStatus {
   usage: PlanUsage;
 }
 
+export interface DiamondGrantResult {
+  granted: boolean;
+  amount: number;
+  balance: number;
+  reason:
+    | 'granted'
+    | 'not_an_upgrade'
+    | 'already_granted_this_cycle'
+    | 'no_diamonds_for_plan';
+}
+
 export interface UpgradeResponse {
   ok: boolean;
   previous_plan: PlanId;
   billing_cycle: BillingCycle;
   subscription: SubscriptionStatus;
+  diamond_grant: DiamondGrantResult;
   message: string;
 }
 

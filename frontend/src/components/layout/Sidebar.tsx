@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { NavLink, Link, useLocation } from 'react-router-dom';
+import { NavLink, Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   HomeIcon,
@@ -21,6 +21,7 @@ import {
   ArrowPathIcon,
   ChatBubbleBottomCenterTextIcon,
   ArrowUpCircleIcon,
+  ChartBarSquareIcon,
 } from '@heroicons/react/24/outline';
 import { useAuthStore } from '../../store';
 
@@ -82,6 +83,7 @@ const mainNavItems: NavItem[] = [
 
 const settingsNavItems: NavItem[] = [
   { name: 'Upgrade Plan', href: '/upgrade', icon: ArrowUpCircleIcon, badge: 'Pro' },
+  { name: 'Diamond Analytics', href: '/analytics/diamond', icon: ChartBarSquareIcon },
   { name: 'Profile', href: '/profile', icon: UserIcon },
   { name: 'Business Profile', href: '/business-profile', icon: BuildingOfficeIcon },
   { name: 'Settings', href: '/settings', icon: Cog6ToothIcon },
@@ -161,6 +163,7 @@ function NavItemWithChildren({ item, onClose }: { item: NavItem; onClose: () => 
 
 export function Sidebar({ isOpen, onClose, isImpersonating }: SidebarProps) {
   const { user } = useAuthStore();
+  const navigate = useNavigate();
   const [messengerEnabled, setMessengerEnabled] = useState(true);
 
   useEffect(() => {
@@ -273,7 +276,14 @@ export function Sidebar({ isOpen, onClose, isImpersonating }: SidebarProps) {
               <span className="text-sm font-bold text-text-primary">Upgrade to Pro</span>
             </div>
             <p className="text-xs text-text-secondary mb-3">Unlock all AI features</p>
-            <button className="btn-primary w-full py-2 text-xs">
+            <button
+              type="button"
+              onClick={() => {
+                navigate('/upgrade');
+                onClose();
+              }}
+              className="btn-primary w-full py-2 text-xs"
+            >
               Upgrade Now
             </button>
           </div>

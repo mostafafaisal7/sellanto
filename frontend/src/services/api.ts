@@ -54,14 +54,26 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+// Auth endpoints should never trigger the refresh-token dance.
+// A 401 from /auth/login/ means "wrong password" — the user must see that error,
+// not get hard-redirected to /login because a stale refresh token failed to refresh.
+const AUTH_ENDPOINTS = ['/auth/login/', '/auth/register/', '/auth/refresh/'];
+const isAuthEndpoint = (url?: string): boolean =>
+  !!url && AUTH_ENDPOINTS.some((path) => url.includes(path));
+
 // Response interceptor - handle token refresh
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
 
-    // If 401 and we haven't tried to refresh yet
-    if (error.response?.status === 401 && originalRequest && !originalRequest._retry) {
+    // If 401 and we haven't tried to refresh yet (and it's not an auth endpoint)
+    if (
+      error.response?.status === 401 &&
+      originalRequest &&
+      !originalRequest._retry &&
+      !isAuthEndpoint(originalRequest.url)
+    ) {
       originalRequest._retry = true;
 
       const refreshToken = getRefreshToken();

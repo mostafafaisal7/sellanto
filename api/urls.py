@@ -19,6 +19,8 @@ from . import notification_views
 from . import creative_views
 from . import rbac_views
 from . import diamond_views
+from . import payment_views
+from . import finance_views
 
 # Create router for viewsets
 router = DefaultRouter()
@@ -283,6 +285,29 @@ urlpatterns = [
     path('diamond/transactions/', diamond_views.DiamondTransactionsView.as_view(), name='api-diamond-transactions'),
     path('diamond/cost-preview/', diamond_views.DiamondCostPreviewView.as_view(), name='api-diamond-cost-preview'),
     path('diamond/costs/', diamond_views.DiamondCostTableView.as_view(), name='api-diamond-costs'),
+    path('diamond/usage-timeseries/', diamond_views.DiamondUsageTimeseriesView.as_view(), name='api-diamond-usage-timeseries'),
+    path('diamond/plan-history/', diamond_views.DiamondPlanHistoryView.as_view(), name='api-diamond-plan-history'),
+    path('diamond/forecast/', diamond_views.DiamondForecastView.as_view(), name='api-diamond-forecast'),
+
+    # Payment / Billing — user
+    path('payments/methods/', payment_views.PayoutMethodsView.as_view(), name='api-payment-methods'),
+    path('payments/submit/', payment_views.SubmitPaymentView.as_view(), name='api-payment-submit'),
+    path('payments/my-requests/', payment_views.MyPaymentRequestsView.as_view(), name='api-payment-my-requests'),
+    # One-click approve/reject from admin email — no auth, token signs the action.
+    path('payments/action/<str:token>/', payment_views.payment_action_by_token, name='api-payment-action-by-token'),
+
+    # Payment / Billing — admin
+    path('admin/payments/', payment_views.AdminPaymentRequestListView.as_view(), name='api-admin-payments-list'),
+    path('admin/payments/<int:payment_id>/approve/', payment_views.AdminPaymentApproveView.as_view(), name='api-admin-payments-approve'),
+    path('admin/payments/<int:payment_id>/reject/', payment_views.AdminPaymentRejectView.as_view(), name='api-admin-payments-reject'),
+    path('admin/payout-accounts/', payment_views.AdminPayoutAccountListView.as_view(), name='api-admin-payout-accounts'),
+    path('admin/payout-accounts/<int:account_id>/', payment_views.AdminPayoutAccountDetailView.as_view(), name='api-admin-payout-account-detail'),
+
+    # Admin Finance / Accounting
+    path('admin/finance/summary/', finance_views.FinanceSummaryView.as_view(), name='api-admin-finance-summary'),
+    path('admin/finance/revenue/', finance_views.RevenueListView.as_view(), name='api-admin-finance-revenue'),
+    path('admin/finance/expenses/', finance_views.ExpenseListView.as_view(), name='api-admin-finance-expenses'),
+    path('admin/finance/expenses/<int:expense_id>/', finance_views.ExpenseDetailView.as_view(), name='api-admin-finance-expense-detail'),
 
     # Diamond Admin endpoints
     path('admin/users/<int:user_id>/recharge/', diamond_views.AdminRechargeView.as_view(), name='api-admin-recharge'),

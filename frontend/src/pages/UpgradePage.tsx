@@ -15,6 +15,10 @@ import {
 } from '@heroicons/react/24/outline';
 import { Button, Modal, LoadingScreen } from '../components/ui';
 import { subscriptionService } from '../services';
+import { useAuthStore } from '../store';
+import { useDiamondStore } from '../store/diamondStore';
+import type { DiamondGrantResult } from '../services/subscriptionService';
+import { PaymentModal } from '../components/billing/PaymentModal';
 import type {
   BillingCycle,
   PlanCatalogEntry,
@@ -78,12 +82,15 @@ const planRank = (id: PlanId) => PLAN_ORDER.indexOf(id);
 
 export function UpgradePage() {
   const navigate = useNavigate();
+  const fetchUser = useAuthStore((s) => s.fetchUser);
+  const fetchWallet = useDiamondStore((s) => s.fetchWallet);
   const [state, setState] = useState<PageState>({ kind: 'loading' });
   const [billing, setBilling] = useState<BillingCycle>('monthly');
   const [confirmPlan, setConfirmPlan] = useState<PlanCatalogEntry | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [successPlan, setSuccessPlan] = useState<string | null>(null);
+  const [successGrant, setSuccessGrant] = useState<DiamondGrantResult | null>(null);
 
   const load = async () => {
     setState({ kind: 'loading' });
@@ -96,7 +103,18 @@ export function UpgradePage() {
       const publicPlans = plans.filter((p) => PLAN_ORDER.includes(p.id));
       setState({ kind: 'ready', plans: publicPlans, status });
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load plans';
+      const e = err as {
+        userMessage?: string;
+        response?: { data?: { error?: string; detail?: string; message?: string } };
+        message?: string;
+      };
+      const message =
+        e?.response?.data?.error ||
+        e?.response?.data?.detail ||
+        e?.response?.data?.message ||
+        e?.userMessage ||
+        e?.message ||
+        'Failed to load plans';
       setState({ kind: 'error', message });
     }
   };
@@ -114,10 +132,25 @@ export function UpgradePage() {
       setState((prev) =>
         prev.kind === 'ready' ? { ...prev, status: res.subscription } : prev
       );
+      // Refresh the auth store + diamond wallet so the sidebar card,
+      // plan badges, and the navbar diamond counter all update immediately.
+      await Promise.all([fetchUser(), fetchWallet()]);
+      setSuccessGrant(res.diamond_grant);
       setSuccessPlan(confirmPlan.display_name);
       setConfirmPlan(null);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Could not change plan';
+      const e = err as {
+        userMessage?: string;
+        response?: { data?: { error?: string; detail?: string; message?: string } };
+        message?: string;
+      };
+      const message =
+        e?.response?.data?.error ||
+        e?.response?.data?.detail ||
+        e?.response?.data?.message ||
+        e?.userMessage ||
+        e?.message ||
+        'Could not change plan';
       setSubmitError(message);
     } finally {
       setSubmitting(false);
@@ -450,7 +483,7 @@ export function UpgradePage() {
           },
           {
             q: 'How is billing handled?',
-            a: 'Right now plan changes are applied directly while we finish payment integration. You won\'t be charged until checkout is enabled.',
+            a: 'Pay via bKash, Nagad, bank transfer, or card. Submit your transaction reference and our billing team verifies within an hour during business hours — your plan and diamonds activate the moment it\'s approved.',
           },
         ].map((item) => (
           <div
@@ -463,9 +496,12 @@ export function UpgradePage() {
         ))}
       </section>
 
-      {/* Confirm modal */}
+      {/*
+        Confirm modal — only used for the FREE plan (downgrade-to-free path).
+        Paid plans route through PaymentModal below.
+      */}
       <Modal
-        isOpen={confirmPlan !== null}
+        isOpen={confirmPlan !== null && confirmPlan.id === 'free'}
         onClose={() => {
           if (!submitting) {
             setConfirmPlan(null);
@@ -475,7 +511,7 @@ export function UpgradePage() {
         size="md"
         showCloseButton={!submitting}
       >
-        {confirmPlan && (
+        {confirmPlan && confirmPlan.id === 'free' && (
           <div>
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-xl bg-gradient-primary shadow-glow-coral flex items-center justify-center">
@@ -483,43 +519,17 @@ export function UpgradePage() {
               </div>
               <div>
                 <h3 className="text-lg font-bold text-text-primary">
-                  Confirm: switch to {confirmPlan.display_name}
+                  Switch to {confirmPlan.display_name}
                 </h3>
                 <p className="text-xs text-text-muted">
-                  Billed {billing} · ${
-                    billing === 'monthly'
-                      ? confirmPlan.price_monthly_usd
-                      : confirmPlan.price_yearly_usd
-                  }/mo
+                  Free plan · no payment needed
                 </p>
               </div>
             </div>
 
-            <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-4 space-y-2 mb-5 text-sm text-text-secondary">
-              <div className="flex justify-between">
-                <span>Magic Mode runs</span>
-                <span className="text-text-primary font-mono">
-                  {fmtLimit(confirmPlan.limits.posts)} / mo
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span>AI videos (Veo)</span>
-                <span className="text-text-primary font-mono">
-                  {fmtLimit(confirmPlan.limits.videos)} / mo
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span>AI images</span>
-                <span className="text-text-primary font-mono">
-                  {fmtLimit(confirmPlan.limits.images)} / mo
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span>Connected accounts</span>
-                <span className="text-text-primary font-mono">
-                  {fmtLimit(confirmPlan.limits.accounts)}
-                </span>
-              </div>
+            <div className="rounded-xl bg-amber/10 border border-amber/20 p-3 text-xs text-text-secondary mb-5">
+              <strong className="text-amber">Heads up:</strong> downgrading drops your monthly
+              quotas. Your existing diamond balance is preserved.
             </div>
 
             {submitError && (
@@ -527,11 +537,6 @@ export function UpgradePage() {
                 {submitError}
               </div>
             )}
-
-            <p className="text-xs text-text-muted mb-5">
-              Payment processing isn't enabled yet — your plan will switch instantly for
-              demo &amp; testing. You can revert at any time.
-            </p>
 
             <div className="flex gap-3">
               <Button
@@ -548,17 +553,43 @@ export function UpgradePage() {
                 isLoading={submitting}
                 rightIcon={<ArrowRightIcon className="w-4 h-4" />}
               >
-                Confirm switch
+                Confirm downgrade
               </Button>
             </div>
           </div>
         )}
       </Modal>
 
+      {/*
+        Payment modal — opens for any paid plan. On submit, request goes
+        to admin queue; the user's plan only flips after admin approves.
+      */}
+      <PaymentModal
+        isOpen={confirmPlan !== null && confirmPlan.id !== 'free'}
+        onClose={() => setConfirmPlan(null)}
+        plan={
+          confirmPlan && confirmPlan.id !== 'free'
+            ? { id: confirmPlan.id, display_name: confirmPlan.display_name }
+            : { id: '', display_name: '' }
+        }
+        billingCycle={billing}
+        amountUsd={
+          confirmPlan
+            ? billing === 'monthly'
+              ? confirmPlan.price_monthly_usd
+              : confirmPlan.price_yearly_usd
+            : 0
+        }
+        defaultPayerEmail={state.kind === 'ready' ? undefined : undefined}
+      />
+
       {/* Success modal */}
       <Modal
         isOpen={successPlan !== null}
-        onClose={() => setSuccessPlan(null)}
+        onClose={() => {
+          setSuccessPlan(null);
+          setSuccessGrant(null);
+        }}
         size="sm"
       >
         <div className="text-center py-2">
@@ -568,14 +599,36 @@ export function UpgradePage() {
           <h3 className="text-lg font-bold text-text-primary mb-1">
             You're on {successPlan} 🎉
           </h3>
-          <p className="text-sm text-text-secondary mb-5">
+          <p className="text-sm text-text-secondary mb-4">
             Your new quotas are live. Head back to the dashboard to start creating.
           </p>
+
+          {/* Diamond grant — only shown when actually granted on this upgrade */}
+          {successGrant?.granted && successGrant.amount > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 6, scale: 0.96 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ delay: 0.15, duration: 0.3 }}
+              className="mb-5 rounded-xl border border-coral/25 bg-gradient-to-r from-coral/10 via-purple/10 to-amber/10 px-4 py-3"
+            >
+              <div className="flex items-center justify-center gap-2 text-sm font-bold text-text-primary">
+                <span className="text-lg">💎</span>
+                <span>+{successGrant.amount.toLocaleString()} Diamond Tokens</span>
+              </div>
+              <div className="text-[11px] text-text-muted mt-0.5">
+                New balance: {successGrant.balance.toLocaleString()}
+              </div>
+            </motion.div>
+          )}
+
           <div className="flex gap-3">
             <Button
               variant="secondary"
               fullWidth
-              onClick={() => setSuccessPlan(null)}
+              onClick={() => {
+                setSuccessPlan(null);
+                setSuccessGrant(null);
+              }}
             >
               Stay here
             </Button>
@@ -583,6 +636,7 @@ export function UpgradePage() {
               fullWidth
               onClick={() => {
                 setSuccessPlan(null);
+                setSuccessGrant(null);
                 navigate('/dashboard');
               }}
               rightIcon={<ArrowRightIcon className="w-4 h-4" />}

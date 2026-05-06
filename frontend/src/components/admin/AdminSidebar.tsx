@@ -8,6 +8,8 @@ import {
   ArrowTopRightOnSquareIcon,
   UserGroupIcon,
   KeyIcon,
+  CreditCardIcon,
+  ScaleIcon,
 } from '@heroicons/react/24/outline';
 
 interface AdminSidebarProps {
@@ -33,6 +35,8 @@ const FacebookIcon = ({ className }: { className?: string }) => (
 const mainNavItems: NavItem[] = [
   { name: 'Dashboard',          href: '/admin-panel',                  icon: HomeIcon },
   { name: 'Users',              href: '/admin-panel/users',            icon: UsersIcon },
+  { name: 'Payments',           href: '/admin-panel/payments',         icon: CreditCardIcon },
+  { name: 'Finance',            href: '/admin-panel/finance',          icon: ScaleIcon },
   { name: 'Global API Keys',    href: '/admin-panel/api-keys',         icon: KeyIcon },
   { name: 'Facebook Settings',  href: '/admin-panel/facebook-settings', icon: FacebookIcon },
 ];

@@ -129,6 +129,196 @@ class DiamondCostTableView(APIView):
         })
 
 
+class DiamondUsageTimeseriesView(APIView):
+    """GET /api/v1/diamond/usage-timeseries/?period=daily|weekly|monthly&days=30
+
+    Returns time-grouped diamond consumption for charts.
+    Each bucket has: { date: ISO string, diamonds_spent: int, transaction_count: int }.
+
+    Optional `from`/`to` (YYYY-MM-DD) override the rolling-window `days` param.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from datetime import datetime, timedelta
+        from django.db.models import Sum, Count
+        from django.db.models.functions import TruncDay, TruncWeek, TruncMonth
+        from django.utils import timezone
+
+        period = request.query_params.get('period', 'daily')
+        if period not in ('daily', 'weekly', 'monthly'):
+            return Response(
+                {'error': "period must be one of 'daily', 'weekly', 'monthly'"},
+                status=400,
+            )
+
+        # Window resolution: explicit from/to wins over rolling `days`.
+        from_str = request.query_params.get('from')
+        to_str = request.query_params.get('to')
+        if from_str and to_str:
+            try:
+                start = timezone.make_aware(
+                    datetime.strptime(from_str, '%Y-%m-%d')
+                )
+                end = timezone.make_aware(
+                    datetime.strptime(to_str, '%Y-%m-%d')
+                ) + timedelta(days=1)
+            except ValueError:
+                return Response(
+                    {'error': "from/to must be YYYY-MM-DD"},
+                    status=400,
+                )
+        else:
+            try:
+                days = int(request.query_params.get('days', 30))
+            except (TypeError, ValueError):
+                days = 30
+            days = max(1, min(days, 365))
+            end = timezone.now()
+            start = end - timedelta(days=days)
+
+        trunc = {
+            'daily': TruncDay,
+            'weekly': TruncWeek,
+            'monthly': TruncMonth,
+        }[period]
+
+        rows = (
+            DiamondTransaction.objects
+            .filter(
+                user=request.user,
+                transaction_type='deduction',
+                created_at__gte=start,
+                created_at__lt=end,
+            )
+            .annotate(bucket=trunc('created_at'))
+            .values('bucket')
+            .annotate(
+                diamonds_spent=Sum('amount'),
+                transaction_count=Count('id'),
+            )
+            .order_by('bucket')
+        )
+
+        series = [
+            {
+                'date': r['bucket'].date().isoformat(),
+                # amount is negative for deductions — flip sign for display.
+                'diamonds_spent': abs(r['diamonds_spent'] or 0),
+                'transaction_count': r['transaction_count'],
+            }
+            for r in rows
+        ]
+
+        # Totals across the window.
+        total_spent = sum(p['diamonds_spent'] for p in series)
+        total_txn = sum(p['transaction_count'] for p in series)
+
+        return Response({
+            'period': period,
+            'from': start.date().isoformat(),
+            'to': (end - timedelta(days=1)).date().isoformat(),
+            'series': series,
+            'total_spent': total_spent,
+            'total_transactions': total_txn,
+        })
+
+
+class DiamondPlanHistoryView(APIView):
+    """GET /api/v1/diamond/plan-history/ — Past plan grants for this user.
+
+    Derived from DiamondTransaction rows of type 'plan_grant'. Each entry shows
+    when a plan was activated and how many diamonds were granted. Useful as a
+    lightweight stand-in for a real billing-history table.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        grants = (
+            DiamondTransaction.objects
+            .filter(user=request.user, transaction_type='plan_grant')
+            .order_by('-created_at')[:50]
+        )
+
+        results = []
+        for g in grants:
+            # Try to extract plan name from the note. Notes look like:
+            #   "Plan grant: pro (+2500 diamonds)"
+            #   "Plan upgrade grant: pro cycle=2026-05-07 (+2500 diamonds)"
+            plan_name = ''
+            if g.note:
+                lower = g.note.lower()
+                for plan in ('enterprise', 'business', 'pro', 'starter', 'free'):
+                    # check word boundary-ish — plan name appears after a colon or space.
+                    if f' {plan} ' in lower or f' {plan}\n' in lower or lower.endswith(plan) or f': {plan}' in lower:
+                        plan_name = plan
+                        break
+
+            results.append({
+                'id': g.id,
+                'plan': plan_name,
+                'amount': g.amount,
+                'balance_after': g.balance_after,
+                'note': g.note,
+                'created_at': g.created_at,
+            })
+
+        return Response({'history': results})
+
+
+class DiamondForecastView(APIView):
+    """GET /api/v1/diamond/forecast/?lookback=14
+
+    Estimates how many days of runway the user has based on their average
+    daily spend over the last `lookback` days (default 14, max 90).
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from datetime import timedelta
+        from django.db.models import Sum
+        from django.utils import timezone
+
+        try:
+            lookback = int(request.query_params.get('lookback', 14))
+        except (TypeError, ValueError):
+            lookback = 14
+        lookback = max(1, min(lookback, 90))
+
+        cutoff = timezone.now() - timedelta(days=lookback)
+
+        wallet, _ = DiamondWallet.objects.get_or_create(user=request.user)
+
+        # Sum negative deduction amounts → positive number for display.
+        spent_window = abs(
+            DiamondTransaction.objects.filter(
+                user=request.user,
+                transaction_type='deduction',
+                created_at__gte=cutoff,
+            ).aggregate(total=Sum('amount'))['total'] or 0
+        )
+
+        avg_daily = spent_window / lookback if lookback > 0 else 0
+
+        if avg_daily <= 0:
+            days_remaining = None  # null = infinite / no usage
+            depletion_date = None
+        else:
+            days_remaining = round(wallet.balance / avg_daily, 1)
+            depletion_date = (
+                timezone.now() + timedelta(days=days_remaining)
+            ).date().isoformat()
+
+        return Response({
+            'balance': wallet.balance,
+            'lookback_days': lookback,
+            'spent_in_window': spent_window,
+            'avg_daily_spend': round(avg_daily, 2),
+            'days_remaining': days_remaining,
+            'depletion_date': depletion_date,
+        })
+
+
 # ══════════════════════════════════════════════════════════════════════════
 # ADMIN ENDPOINTS
 # ══════════════════════════════════════════════════════════════════════════

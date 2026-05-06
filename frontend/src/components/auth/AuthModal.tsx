@@ -13,6 +13,8 @@ import {
   PhoneIcon,
   ArrowRightIcon,
   SparklesIcon,
+  ExclamationTriangleIcon,
+  XMarkIcon,
 } from '@heroicons/react/24/outline';
 import { Modal, Button, Input } from '../ui';
 import { useAuthStore } from '../../store';
@@ -47,6 +49,65 @@ const signupSchema = z
 
 type LoginFormData = z.infer<typeof loginSchema>;
 type SignupFormData = z.infer<typeof signupSchema>;
+
+function getErrorTitle(message: string): string {
+  const m = message.toLowerCase();
+  if (m.includes('invalid') && (m.includes('password') || m.includes('username') || m.includes('credential'))) {
+    return 'Wrong credentials';
+  }
+  if (m.includes('approval') || m.includes('approved')) return 'Awaiting approval';
+  if (m.includes('network') || m.includes('fetch')) return 'Connection issue';
+  if (m.includes('exists') || m.includes('already')) return 'Account already exists';
+  return 'Something went wrong';
+}
+
+function AuthAlert({ message, onDismiss }: { message: string; onDismiss?: () => void }) {
+  return (
+    <motion.div
+      key={message}
+      initial={{ opacity: 0, y: -8, scale: 0.97 }}
+      animate={{
+        opacity: 1,
+        y: 0,
+        scale: 1,
+        x: [0, -6, 6, -4, 4, 0],
+      }}
+      exit={{ opacity: 0, y: -8, scale: 0.97 }}
+      transition={{
+        opacity: { duration: 0.2 },
+        y: { duration: 0.2 },
+        scale: { duration: 0.2 },
+        x: { duration: 0.4, ease: 'easeOut' },
+      }}
+      className="relative overflow-hidden rounded-xl border border-coral/30 bg-gradient-to-r from-coral/15 via-coral/10 to-coral/5 p-3.5 shadow-lg shadow-coral/10"
+      role="alert"
+    >
+      <div className="flex items-start gap-3">
+        <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-coral/20 flex items-center justify-center">
+          <ExclamationTriangleIcon className="w-4 h-4 text-coral" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-coral leading-tight">
+            {getErrorTitle(message)}
+          </p>
+          <p className="text-xs text-text-secondary mt-1 leading-relaxed">
+            {message}
+          </p>
+        </div>
+        {onDismiss && (
+          <button
+            type="button"
+            onClick={onDismiss}
+            className="flex-shrink-0 p-1 -m-1 rounded-md text-text-muted hover:text-text-primary hover:bg-white/5 transition-colors"
+            aria-label="Dismiss"
+          >
+            <XMarkIcon className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+    </motion.div>
+  );
+}
 
 export function AuthModal({
   isOpen,
@@ -215,11 +276,9 @@ export function AuthModal({
                 {...loginForm.register('password')}
               />
 
-              {error && (
-                <div className="text-xs text-coral bg-coral/10 border border-coral/20 rounded-lg px-3 py-2">
-                  {error}
-                </div>
-              )}
+              <AnimatePresence>
+                {error && <AuthAlert message={error} onDismiss={clearError} />}
+              </AnimatePresence>
 
               <Button
                 type="submit"
@@ -352,11 +411,14 @@ export function AuthModal({
                 />
               </div>
 
-              {signupForm.formState.errors.root?.message && (
-                <div className="text-xs text-coral bg-coral/10 border border-coral/20 rounded-lg px-3 py-2">
-                  {signupForm.formState.errors.root.message}
-                </div>
-              )}
+              <AnimatePresence>
+                {signupForm.formState.errors.root?.message && (
+                  <AuthAlert
+                    message={signupForm.formState.errors.root.message}
+                    onDismiss={() => signupForm.clearErrors('root')}
+                  />
+                )}
+              </AnimatePresence>
 
               <Button
                 type="submit"

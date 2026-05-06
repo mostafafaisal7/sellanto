@@ -690,3 +690,220 @@ class PromptOverrideAuditLog(models.Model):
     def __str__(self):
         admin_name = self.admin.username if self.admin else 'system'
         return f'{admin_name} · {self.action} · {self.prompt_type} · {self.target_user.username}'
+
+
+# ============================================================
+# BILLING / PAYMENT MVP
+# ============================================================
+# No real payment gateway is wired yet. Users submit payment proof
+# (bKash/Nagad txn ID, card last-4, bank ref) and the request is
+# queued for admin review. On approval, the plan is activated and
+# diamonds granted via the existing helpers.
+
+class AdminPayoutAccount(models.Model):
+    """An account where users send money to upgrade.
+
+    Admin manages these in the admin dashboard. Users see active rows
+    on the payment modal so they know where to send their bKash/Nagad/
+    bank transfer. Card and Stripe-style methods can also be modeled
+    here as merchant-id placeholders until a real gateway is wired.
+    """
+
+    METHOD_CHOICES = [
+        ('bkash', 'bKash'),
+        ('nagad', 'Nagad'),
+        ('rocket', 'Rocket'),
+        ('bank', 'Bank Transfer'),
+        ('card', 'Card (Stripe / 2C2P)'),
+        ('paypal', 'PayPal'),
+        ('crypto', 'Crypto'),
+        ('other', 'Other'),
+    ]
+
+    method = models.CharField(max_length=20, choices=METHOD_CHOICES)
+    display_name = models.CharField(max_length=100,
+                                    help_text='e.g. "Personal bKash" or "Sellanto Bank — DBBL"')
+    account_number = models.CharField(max_length=120, blank=True, default='',
+                                      help_text='Phone, IBAN, merchant ID, etc.')
+    account_holder_name = models.CharField(max_length=120, blank=True, default='')
+    instructions = models.TextField(blank=True, default='',
+                                    help_text='Free-form instructions shown to the user.')
+    currency = models.CharField(max_length=10, default='BDT',
+                                help_text='ISO code: BDT, USD, EUR, INR, …')
+    is_active = models.BooleanField(default=True)
+    sort_order = models.IntegerField(default=0)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'admin_payout_accounts'
+        ordering = ['sort_order', 'method']
+        verbose_name = 'Admin Payout Account'
+        verbose_name_plural = 'Admin Payout Accounts'
+
+    def __str__(self):
+        return f'{self.get_method_display()} — {self.display_name}'
+
+
+class PaymentRequest(models.Model):
+    """A user's claim that they sent money to upgrade their plan.
+
+    Status flow:
+        pending  → user just submitted (admin email fired)
+        approved → admin verified payout; plan applied + diamonds granted
+        rejected → admin couldn't verify; nothing applied
+        cancelled → user withdrew the request before review
+    """
+
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('approved', 'Approved'),
+        ('rejected', 'Rejected'),
+        ('cancelled', 'Cancelled'),
+    ]
+
+    BILLING_CYCLE_CHOICES = [
+        ('monthly', 'Monthly'),
+        ('yearly', 'Yearly'),
+    ]
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='payment_requests')
+
+    # What the user is buying
+    plan = models.CharField(max_length=20, help_text='Target plan id (free/pro/business/...)')
+    billing_cycle = models.CharField(max_length=10, choices=BILLING_CYCLE_CHOICES, default='monthly')
+    amount_usd = models.DecimalField(max_digits=10, decimal_places=2, default=0,
+                                     help_text='Plan list price in USD')
+    amount_local = models.DecimalField(max_digits=12, decimal_places=2, default=0,
+                                       help_text='Amount the user actually paid in their currency')
+    local_currency = models.CharField(max_length=10, default='BDT')
+
+    # How they paid
+    payment_method = models.CharField(max_length=20, choices=AdminPayoutAccount.METHOD_CHOICES)
+    payout_account = models.ForeignKey(
+        AdminPayoutAccount, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='payment_requests',
+    )
+    transaction_reference = models.CharField(
+        max_length=120, blank=True, default='',
+        help_text='bKash trxID, bank ref, card last-4, or a screenshot URL.'
+    )
+    payer_name = models.CharField(max_length=120, blank=True, default='')
+    payer_phone = models.CharField(max_length=40, blank=True, default='')
+    payer_email = models.EmailField(blank=True, default='')
+    payer_notes = models.TextField(blank=True, default='',
+                                   help_text='Optional message from the user.')
+
+    # Review
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    admin_notes = models.TextField(blank=True, default='')
+    reviewed_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='payments_reviewed',
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+
+    # Side-effects of approval (filled in when approved so we can audit later)
+    diamonds_granted = models.IntegerField(default=0)
+    plan_applied_at = models.DateTimeField(null=True, blank=True)
+
+    # Revenue snapshot — what we *actually* received in USD, after FX conversion.
+    # `amount_usd` is the plan list price; `revenue_usd` is `amount_local`
+    # converted to USD at the rate held in `fx_rate_used` on approval day.
+    revenue_usd = models.DecimalField(max_digits=12, decimal_places=2, default=0,
+                                      help_text='amount_local converted to USD at approval time')
+    fx_rate_used = models.DecimalField(max_digits=20, decimal_places=8, default=0,
+                                       help_text='1 local_currency = X USD, captured at approval')
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'payment_requests'
+        ordering = ['-created_at']
+        verbose_name = 'Payment Request'
+        verbose_name_plural = 'Payment Requests'
+        indexes = [
+            models.Index(fields=['user', 'created_at']),
+            models.Index(fields=['status', 'created_at']),
+        ]
+
+    def __str__(self):
+        return f'{self.user.username} · {self.plan} · ${self.amount_usd} · {self.status}'
+
+
+class FxRate(models.Model):
+    """Cached exchange rate. Refreshed once per ~24h via the FX service.
+
+    Stored as: 1 unit of `from_currency` = `rate` units of `to_currency`.
+    For payment accounting we always normalize to USD.
+    """
+
+    from_currency = models.CharField(max_length=10)
+    to_currency = models.CharField(max_length=10, default='USD')
+    rate = models.DecimalField(max_digits=20, decimal_places=8)
+    source = models.CharField(max_length=40, default='frankfurter',
+                              help_text='Provider that returned this rate')
+    fetched_at = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'fx_rates'
+        unique_together = [('from_currency', 'to_currency')]
+        verbose_name = 'FX Rate'
+        verbose_name_plural = 'FX Rates'
+
+    def __str__(self):
+        return f'{self.from_currency}->{self.to_currency} @ {self.rate}'
+
+
+class ExpenseEntry(models.Model):
+    """A manual cost entry for the finance page (debit side of the ledger).
+
+    Revenue (credit side) is computed automatically from approved
+    PaymentRequest rows — no manual entry needed.
+    """
+
+    CATEGORY_CHOICES = [
+        ('server', 'Server / Hosting'),
+        ('domain', 'Domain & SSL'),
+        ('storage', 'Storage / CDN'),
+        ('database', 'Database hosting'),
+        ('email', 'Email service'),
+        ('openai', 'OpenAI API'),
+        ('gemini', 'Gemini API'),
+        ('claude', 'Claude API'),
+        ('other_api', 'Other API / SaaS'),
+        ('marketing', 'Marketing / Ads'),
+        ('payroll', 'Payroll / Contractors'),
+        ('legal', 'Legal / Accounting'),
+        ('other', 'Other'),
+    ]
+
+    category = models.CharField(max_length=20, choices=CATEGORY_CHOICES)
+    amount_usd = models.DecimalField(max_digits=12, decimal_places=2,
+                                     help_text='Cost in USD')
+    description = models.CharField(max_length=255, blank=True, default='')
+    incurred_on = models.DateField(help_text='Date the cost was incurred')
+
+    # Audit
+    created_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='expense_entries_created',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'expense_entries'
+        ordering = ['-incurred_on', '-id']
+        verbose_name = 'Expense Entry'
+        verbose_name_plural = 'Expense Entries'
+        indexes = [
+            models.Index(fields=['category', 'incurred_on']),
+            models.Index(fields=['incurred_on']),
+        ]
+
+    def __str__(self):
+        return f'{self.get_category_display()} · ${self.amount_usd} · {self.incurred_on}'

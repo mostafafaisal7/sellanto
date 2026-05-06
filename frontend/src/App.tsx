@@ -7,6 +7,7 @@ import {
   LandingPage,
   LoginPage,
   UpgradePage,
+  DiamondAnalyticsPage,
   MyPostsPage,
   CreatePostPage,
   ConnectAccountsPage,
@@ -48,6 +49,8 @@ import {
   AdminUserDetailPage,
   AdminAPIKeysPage,
   AdminFacebookSettingsPage,
+  AdminPaymentsPage,
+  AdminFinancePage,
 } from './pages/admin';
 import { LoadingScreen } from './components/ui';
 import { useAuthStore } from './store';
@@ -197,6 +200,7 @@ function App() {
         >
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/upgrade" element={<UpgradePage />} />
+          <Route path="/analytics/diamond" element={<DiamondAnalyticsPage />} />
           <Route path="/posts" element={<MyPostsPage />} />
           <Route path="/posts/drafts" element={<DraftPostsPage />} />
           <Route path="/posts/create" element={<CreatePostPage />} />
@@ -254,6 +258,8 @@ function App() {
           <Route path="/admin-panel/users/:id" element={<AdminUserDetailPage />} />
           <Route path="/admin-panel/api-keys" element={<AdminAPIKeysPage />} />
           <Route path="/admin-panel/facebook-settings" element={<AdminFacebookSettingsPage />} />
+          <Route path="/admin-panel/payments" element={<AdminPaymentsPage />} />
+          <Route path="/admin-panel/finance" element={<AdminFinancePage />} />
         </Route>
 
         {/* Catch all - redirect to root (which routes to landing or dashboard) */}

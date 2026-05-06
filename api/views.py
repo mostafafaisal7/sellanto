@@ -550,8 +550,31 @@ class PostViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        serializer = UpdatePostSerializer(data=request.data)
+        serializer = UpdatePostSerializer(data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
+
+        new_status = serializer.validated_data.get('status')
+        target_status = new_status if new_status else post.status
+
+        # Validate connected accounts when transitioning to scheduled
+        if target_status == 'scheduled' and post.status == 'draft':
+            from platforms.models import SocialAccount
+            connected = set(
+                SocialAccount.objects.filter(
+                    user=request.user, is_active=True
+                ).values_list('platform', flat=True)
+            )
+            try:
+                current_platforms = json.loads(post.platforms) if isinstance(post.platforms, str) else (post.platforms or [])
+            except (json.JSONDecodeError, TypeError):
+                current_platforms = []
+            platforms_to_check = serializer.validated_data.get('platforms', current_platforms)
+            missing = [p for p in platforms_to_check if p not in connected]
+            if missing:
+                return Response(
+                    {'error': f'No connected account for: {", ".join(missing)}. Please connect your accounts first.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
 
         if 'caption' in serializer.validated_data:
             post.caption = serializer.validated_data['caption']
@@ -559,6 +582,10 @@ class PostViewSet(viewsets.ModelViewSet):
             post.platforms = json.dumps(serializer.validated_data['platforms'])
         if 'scheduled_time' in serializer.validated_data:
             post.scheduled_time = serializer.validated_data['scheduled_time']
+        if 'timezone' in serializer.validated_data:
+            post.timezone = serializer.validated_data['timezone']
+        if new_status:
+            post.status = new_status
 
         post.save()
         return Response(PostSerializer(post, context={'request': request}).data)

@@ -2,6 +2,7 @@ export { DashboardPage } from './DashboardPage';
 export { LandingPage } from './LandingPage';
 export { LoginPage } from './LoginPage';
 export { UpgradePage } from './UpgradePage';
+export { DiamondAnalyticsPage } from './DiamondAnalyticsPage';
 export { MyPostsPage } from './MyPostsPage';
 export { CreatePostPage } from './CreatePostPage';
 export { default as ConnectAccountsPage } from './ConnectAccountsPage';

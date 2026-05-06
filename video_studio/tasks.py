@@ -20,6 +20,23 @@ from .services.optimizer import GeminiPromptOptimizer
 from accounts.api_keys import get_gemini_key
 
 
+# Map subscription plan -> Veo model tier (cost per 8s clip)
+# free/starter -> fast ($1.20), pro -> standard ($2.00), business/enterprise -> premium ($3.20)
+PLAN_TO_VEO_TIER = {
+    'free': 'fast',
+    'starter': 'fast',
+    'pro': 'standard',
+    'business': 'premium',
+    'enterprise': 'premium',
+}
+
+
+def get_veo_tier_for_user(user):
+    """Return the Veo model tier ('fast'|'standard'|'premium') for a user's plan."""
+    plan = getattr(getattr(user, 'profile', None), 'subscription_plan', 'free')
+    return PLAN_TO_VEO_TIER.get(plan, 'fast')
+
+
 @shared_task(bind=True)
 def generate_video_clip_task(self, clip_id):
     """
@@ -56,6 +73,9 @@ def generate_video_clip_task(self, clip_id):
                 remove_background=False
             )
 
+        # Pick Veo tier based on user's subscription plan
+        model_tier = get_veo_tier_for_user(clip.project.user)
+
         # Generate video
         result = veo_service.generate_video(
             prompt=clip.optimized_prompt or clip.enhanced_prompt or clip.prompt,
@@ -63,7 +83,7 @@ def generate_video_clip_task(self, clip_id):
             duration=clip.duration,
             aspect_ratio=clip.aspect_ratio,
             resolution=clip.resolution,
-            model_tier='standard',  # Default to standard
+            model_tier=model_tier,
             seed=clip.veo_seed,
             camera_movement=clip.camera_movement,
             lighting_style=clip.lighting_style

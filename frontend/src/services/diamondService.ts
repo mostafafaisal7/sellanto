@@ -15,6 +15,41 @@ interface PaginatedTransactions {
   results: DiamondTransaction[];
 }
 
+export type TimeseriesPeriod = 'daily' | 'weekly' | 'monthly';
+
+export interface DiamondUsagePoint {
+  date: string;
+  diamonds_spent: number;
+  transaction_count: number;
+}
+
+export interface DiamondUsageTimeseries {
+  period: TimeseriesPeriod;
+  from: string;
+  to: string;
+  series: DiamondUsagePoint[];
+  total_spent: number;
+  total_transactions: number;
+}
+
+export interface PlanHistoryEntry {
+  id: number;
+  plan: string;
+  amount: number;
+  balance_after: number;
+  note: string;
+  created_at: string;
+}
+
+export interface DiamondForecast {
+  balance: number;
+  lookback_days: number;
+  spent_in_window: number;
+  avg_daily_spend: number;
+  days_remaining: number | null;
+  depletion_date: string | null;
+}
+
 export const diamondService = {
   // ── User endpoints ──────────────────────────────────────────────
   async getBalance(): Promise<DiamondWallet> {
@@ -53,6 +88,38 @@ export const diamondService = {
   async getCosts(): Promise<DiamondCosts> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data } = await api.get<DiamondCosts>('/diamond/costs/', { _silentError: true } as any);
+    return data;
+  },
+
+  async getUsageTimeseries(params: {
+    period: TimeseriesPeriod;
+    days?: number;
+    from?: string;
+    to?: string;
+  }): Promise<DiamondUsageTimeseries> {
+    const { data } = await api.get<DiamondUsageTimeseries>(
+      '/diamond/usage-timeseries/',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      { params, _silentError: true } as any
+    );
+    return data;
+  },
+
+  async getPlanHistory(): Promise<{ history: PlanHistoryEntry[] }> {
+    const { data } = await api.get<{ history: PlanHistoryEntry[] }>(
+      '/diamond/plan-history/',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      { _silentError: true } as any
+    );
+    return data;
+  },
+
+  async getForecast(lookback = 14): Promise<DiamondForecast> {
+    const { data } = await api.get<DiamondForecast>(
+      '/diamond/forecast/',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      { params: { lookback }, _silentError: true } as any
+    );
     return data;
   },
 

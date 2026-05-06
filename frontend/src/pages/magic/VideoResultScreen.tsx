@@ -1,14 +1,160 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 import { useMagicModeStore } from '../../store/magicModeStore';
 import { postService } from '../../services/postService';
+import { captionService } from '../../services/captionService';
 import ConnectAccountModal from '../../components/ConnectAccountModal';
-import type { PlatformType } from '../../types';
+import type { PlatformType, CaptionPlatform, CaptionTone } from '../../types';
 
 const platformEmojiMap: Record<string, string> = {
   LinkedIn: '💼', Instagram: '📸', Facebook: '📘', 'Twitter / X': '🐦', TikTok: '🎵',
 };
+
+// ---------- Local caption builder (post-ready fallback) ----------
+const STOP_WORDS = new Set([
+  'a','an','the','and','or','but','for','of','to','in','on','at','by','with','from','as',
+  'is','are','was','were','be','been','being','that','this','these','those','it','its','our','your',
+  'professional','polished','video','clip','reel','create','make','generate','generated','produce','produced',
+  'short','quick','simple','nice','good','great','beautiful','amazing','perfect',
+  'helps','help','that','which','who','where','when','why','how','about',
+  'will','can','should','would','could','may','might','must','shall','also',
+  'business','company','brand','agency','service','services','product','products',
+]);
+
+const NICHE_PATTERNS: Array<[RegExp, string]> = [
+  [/digital marketing|marketing agency|seo|social media manag|ads? campaign|ppc/i, 'digital marketing'],
+  [/real estate|realtor|property|properties/i, 'real estate'],
+  [/restaurant|cafe|food|chef|kitchen|menu|catering/i, 'food & beverage'],
+  [/fitness|gym|trainer|workout|yoga|coach/i, 'fitness'],
+  [/fashion|clothing|apparel|outfit|style/i, 'fashion'],
+  [/beauty|skincare|salon|makeup|cosmetic/i, 'beauty'],
+  [/saas|software|app|platform|tech|startup/i, 'tech'],
+  [/ecommerce|e-commerce|store|shop|retail/i, 'ecommerce'],
+  [/education|school|course|tutor|learning/i, 'education'],
+  [/health|clinic|doctor|medical|wellness/i, 'health'],
+  [/travel|tour|trip|vacation|destination/i, 'travel'],
+  [/finance|banking|invest|crypto|trading/i, 'finance'],
+];
+
+function detectNiche(prompt: string): string {
+  for (const [re, label] of NICHE_PATTERNS) {
+    if (re.test(prompt)) return label;
+  }
+  return 'business';
+}
+
+function extractKeywords(prompt: string, max = 6): string[] {
+  const words = prompt
+    .toLowerCase()
+    .replace(/[^\w\s]/g, ' ')
+    .split(/\s+/)
+    .filter((w) => w.length > 3 && !STOP_WORDS.has(w));
+  return Array.from(new Set(words)).slice(0, max);
+}
+
+function extractBenefit(prompt: string): string {
+  // Try to capture "...that helps X..." / "...to X..."
+  const m =
+    prompt.match(/(?:helps?|enables?|allows?)\s+(?:you\s+|them\s+|customers?\s+to\s+)?([^.,;]+)/i) ||
+    prompt.match(/\bto\s+([a-z][^.,;]{8,80})/i) ||
+    prompt.match(/\bfor\s+([a-z][^.,;]{8,80})/i);
+  if (m && m[1]) {
+    return m[1]
+      .trim()
+      .replace(/\s+and\s+/gi, ' & ')
+      .replace(/^(your|their|the|a|an)\s+/i, '')
+      .toLowerCase();
+  }
+  return 'grow your brand and stand out';
+}
+
+function buildHashtags(prompt: string, niche: string, platform: string): string {
+  const kw = extractKeywords(prompt, 5);
+  const nicheTag = niche.replace(/[^a-z]/gi, '');
+  const camelTags = kw.map(
+    (w) => '#' + w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()
+  );
+  const generic: Record<string, string[]> = {
+    instagram: ['#Reels', '#SmallBusiness', '#Entrepreneur', '#ContentCreator'],
+    linkedin: ['#Business', '#Growth', '#Leadership', '#Strategy'],
+    facebook: ['#Community', '#GrowYourBusiness', '#SmallBusiness'],
+    twitter: ['#GrowthHacking', '#Marketing'],
+    tiktok: ['#fyp', '#foryou', '#smallbusiness', '#viral'],
+    general: ['#Business', '#Growth', '#Marketing'],
+  };
+  const extras = generic[platform] || generic.general;
+  const nicheTagFormatted = nicheTag ? '#' + nicheTag.charAt(0).toUpperCase() + nicheTag.slice(1) : '';
+  const all = [nicheTagFormatted, ...camelTags, ...extras].filter(Boolean);
+  return Array.from(new Set(all)).slice(0, 8).join(' ');
+}
+
+function buildLocalCaption(prompt: string, platform: string): string {
+  if (!prompt) return '';
+  const niche = detectNiche(prompt);
+  const benefit = extractBenefit(prompt);
+  const tags = buildHashtags(prompt, niche, platform);
+
+  if (platform === 'twitter') {
+    return `🚀 Want to ${benefit}?\n\nStop guessing. Start growing.\nWe help ${niche} brands turn attention into action.\n\n${tags}`;
+  }
+
+  if (platform === 'linkedin') {
+    return [
+      `Most ${niche} brands focus on the wrong thing.`,
+      ``,
+      `They chase tactics. They miss the system.`,
+      ``,
+      `The real lever for growth → consistently helping the right people ${benefit}.`,
+      `That's what separates brands that scale from brands that stall.`,
+      ``,
+      `If that's the kind of growth you're after, let's talk. 💬`,
+      ``,
+      tags,
+    ].join('\n');
+  }
+
+  if (platform === 'tiktok') {
+    return [
+      `POV: you finally found the team that helps you ${benefit} 🤝`,
+      ``,
+      `No more guessing. No more wasted budget.`,
+      `Just real growth, on repeat. 📈`,
+      ``,
+      `💬 Comment "READY" and we'll DM you the details!`,
+      ``,
+      tags,
+    ].join('\n');
+  }
+
+  if (platform === 'facebook') {
+    return [
+      `✨ Looking to ${benefit}?`,
+      ``,
+      `We work with ambitious ${niche} brands every day — turning attention into action through strategy, story, and content that actually converts.`,
+      ``,
+      `No fluff. No vanity metrics. Just results that move the needle. 📈`,
+      ``,
+      `👉 Send us a message to get started — we'd love to hear about your goals.`,
+      ``,
+      tags,
+    ].join('\n');
+  }
+
+  // Instagram / general default
+  return [
+    `✨ Ready to ${benefit}?`,
+    ``,
+    `We help ambitious ${niche} brands turn attention into action — through strategy, story, and content that actually converts.`,
+    ``,
+    `No fluff. No vanity metrics. Just results that move the needle. 📈`,
+    ``,
+    `👉 DM us "READY" or tap the link in bio to get started.`,
+    ``,
+    tags,
+  ].join('\n');
+}
+// ---------- end caption builder ----------
 
 interface VideoResultScreenProps {
   onBack: () => void;
@@ -26,11 +172,83 @@ export function VideoResultScreen({ onBack, onGenerateAnother }: VideoResultScre
     ? (answers.platforms as string[])
     : answers.platforms ? [answers.platforms as string] : ['LinkedIn'];
 
-  const [caption, setCaption] = useState(
-    `🎬 ${prompt.slice(0, 120)}${prompt.length > 120 ? '...' : ''}`
-  );
+  const [caption, setCaption] = useState('');
+  const [captionGenerating, setCaptionGenerating] = useState(true);
   const [editingCaption, setEditingCaption] = useState(false);
-  const [draftCaption, setDraftCaption] = useState(caption);
+  const [draftCaption, setDraftCaption] = useState('');
+  const captionGeneratedRef = useRef(false);
+
+  // Auto-generate a proper social-media caption based on the video prompt
+  useEffect(() => {
+    if (captionGeneratedRef.current || !prompt) return;
+    captionGeneratedRef.current = true;
+
+    const toneMap: Record<string, CaptionTone> = {
+      'professional & authoritative': 'professional',
+      'friendly & approachable': 'friendly',
+      'bold & provocative': 'enthusiastic',
+      'educational & helpful': 'formal',
+      'fun & casual': 'casual',
+    };
+    const toneAnswer = answers.tone ? String(answers.tone).toLowerCase() : '';
+    const captionTone: CaptionTone = toneMap[toneAnswer] || 'enthusiastic';
+
+    const platformHints: Record<string, string> = {
+      linkedin: 'Write for LinkedIn professionals. Industry insight + thought leadership tone. Longer, detailed format focused on business value.',
+      instagram: 'Write for Instagram. Short, punchy, visual-first. Use line breaks, natural emojis, storytelling. End with an engagement question.',
+      facebook: 'Write for Facebook. Conversational, community-driven, medium length. Encourage comments and shares.',
+      twitter: 'Write for Twitter/X. Ultra-concise (under 280 chars), punchy, quotable. Minimal hashtags.',
+      tiktok: 'Write for TikTok. Gen-Z friendly, trendy, casual. Viral hooks, short and snappy.',
+    };
+
+    const firstPlat = (selectedPlatforms[0] || 'general')
+      .toLowerCase()
+      .replace(' / x', '') as CaptionPlatform;
+
+    const customInstructions = `This caption is for a short video. ${platformHints[firstPlat] || ''} Open with a strong hook, keep it scannable, and write it as a real social post (not a description of the video). Do not start with phrases like "A professional video..." or "This video shows...".`;
+
+    const localCaption = buildLocalCaption(prompt, firstPlat);
+
+    (async () => {
+      try {
+        const result = await captionService.generate({
+          topic: prompt,
+          tone: captionTone,
+          length: 'medium',
+          platform: firstPlat,
+          include_hashtags: true,
+          include_emojis: true,
+          include_cta: true,
+          custom_instructions: customInstructions,
+        });
+        const generated = (result.generated_caption || '').trim();
+        const hashtags = (result.generated_hashtags || '').trim();
+
+        // Reject thin / descriptive AI output ("A professional video..." etc.)
+        const looksDescriptive =
+          /^(a |an |the )?(professional|polished|short|quick|simple)?\s*(and\s+\w+\s+)?video\b/i.test(generated) ||
+          /^this video\b/i.test(generated);
+
+        let finalCaption: string;
+        if (generated && generated.length >= 60 && !looksDescriptive) {
+          finalCaption = hashtags && !generated.includes('#')
+            ? `${generated}\n\n${hashtags}`
+            : generated;
+        } else {
+          finalCaption = localCaption;
+        }
+
+        setCaption(finalCaption);
+        setDraftCaption(finalCaption);
+      } catch (err) {
+        console.warn('[VideoResultScreen] AI caption failed, using local builder:', err);
+        setCaption(localCaption);
+        setDraftCaption(localCaption);
+      } finally {
+        setCaptionGenerating(false);
+      }
+    })();
+  }, [prompt, answers.tone, selectedPlatforms]);
 
   const [status, setStatus] = useState<'idle' | 'posting' | 'scheduling' | 'done'>('idle');
   const [postError, setPostError] = useState<string | null>(null);
@@ -39,6 +257,8 @@ export function VideoResultScreen({ onBack, onGenerateAnother }: VideoResultScre
   const [schedDate, setSchedDate] = useState('');
   const [schedTime, setSchedTime] = useState('');
   const [finalStatus, setFinalStatus] = useState<'published' | 'scheduled' | null>(null);
+  const [draftPostId, setDraftPostId] = useState<number | null>(null);
+  const draftCreationStartedRef = useRef(false);
 
   const downloadVideoAsFile = async (): Promise<File[]> => {
     if (!videoUrl) return [];
@@ -55,22 +275,76 @@ export function VideoResultScreen({ onBack, onGenerateAnother }: VideoResultScre
     (p) => p.toLowerCase().replace(' / x', '') as PlatformType
   );
 
+  // Auto-save the generated video as a draft Post as soon as caption + video are ready.
+  // This guarantees the user sees it in Magic History even if they navigate away
+  // without explicitly publishing or scheduling.
+  useEffect(() => {
+    if (draftCreationStartedRef.current) return;
+    if (!videoUrl || !caption || captionGenerating) return;
+    draftCreationStartedRef.current = true;
+
+    (async () => {
+      try {
+        const mediaFiles = await downloadVideoAsFile();
+        if (mediaFiles.length === 0) {
+          draftCreationStartedRef.current = false;
+          return;
+        }
+        const draft = await postService.create({
+          caption,
+          media_files: mediaFiles,
+          platforms: publishPlatforms,
+          source: 'magic',
+          status: 'draft',
+          hook: prompt.slice(0, 60),
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        });
+        setDraftPostId(draft.id);
+      } catch (err) {
+        console.warn('[VideoResultScreen] Auto-draft creation failed:', err);
+        draftCreationStartedRef.current = false;
+      }
+    })();
+  }, [videoUrl, caption, captionGenerating]);
+
+  // Keep the draft caption in sync if the user edits it after auto-save.
+  useEffect(() => {
+    if (!draftPostId || !caption) return;
+    const t = setTimeout(() => {
+      postService.update(draftPostId, { caption }).catch(() => {});
+    }, 800);
+    return () => clearTimeout(t);
+  }, [caption, draftPostId]);
+
   const handlePost = async () => {
     setStatus('posting');
     setPostError(null);
     try {
-      const mediaFiles = await downloadVideoAsFile();
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
       const now = new Date();
       now.setMinutes(now.getMinutes() + 1);
-      await postService.create({
-        caption,
-        media_files: mediaFiles,
-        platforms: publishPlatforms,
-        source: 'magic',
-        hook: prompt.slice(0, 60),
-        scheduled_time: now.toISOString(),
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      });
+      const scheduledTime = now.toISOString();
+
+      if (draftPostId) {
+        await postService.update(draftPostId, {
+          caption,
+          status: 'scheduled',
+          scheduled_time: scheduledTime,
+          timezone,
+        });
+      } else {
+        const mediaFiles = await downloadVideoAsFile();
+        const created = await postService.create({
+          caption,
+          media_files: mediaFiles,
+          platforms: publishPlatforms,
+          source: 'magic',
+          hook: prompt.slice(0, 60),
+          scheduled_time: scheduledTime,
+          timezone,
+        });
+        setDraftPostId(created.id);
+      }
       setFinalStatus('published');
       setStatus('done');
     } catch (err: any) {
@@ -89,17 +363,29 @@ export function VideoResultScreen({ onBack, onGenerateAnother }: VideoResultScre
     setStatus('scheduling');
     setPostError(null);
     try {
-      const mediaFiles = await downloadVideoAsFile();
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
       const scheduledTime = new Date(`${schedDate}T${schedTime}`).toISOString();
-      await postService.create({
-        caption,
-        media_files: mediaFiles,
-        platforms: publishPlatforms,
-        source: 'magic',
-        hook: prompt.slice(0, 60),
-        scheduled_time: scheduledTime,
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      });
+
+      if (draftPostId) {
+        await postService.update(draftPostId, {
+          caption,
+          status: 'scheduled',
+          scheduled_time: scheduledTime,
+          timezone,
+        });
+      } else {
+        const mediaFiles = await downloadVideoAsFile();
+        const created = await postService.create({
+          caption,
+          media_files: mediaFiles,
+          platforms: publishPlatforms,
+          source: 'magic',
+          hook: prompt.slice(0, 60),
+          scheduled_time: scheduledTime,
+          timezone,
+        });
+        setDraftPostId(created.id);
+      }
       setFinalStatus('scheduled');
       setStatus('done');
       setShowScheduler(false);
@@ -182,7 +468,6 @@ export function VideoResultScreen({ onBack, onGenerateAnother }: VideoResultScre
             src={videoUrl}
             controls
             autoPlay
-            loop
             className="w-full"
             style={{ maxHeight: 420, background: '#000' }}
           />
@@ -219,7 +504,7 @@ export function VideoResultScreen({ onBack, onGenerateAnother }: VideoResultScre
         <div>
           <div className="flex items-center justify-between mb-2">
             <p className="text-[13px] font-semibold text-text-secondary uppercase tracking-wide">Caption</p>
-            {!editingCaption && (
+            {!editingCaption && !captionGenerating && (
               <button
                 onClick={() => { setDraftCaption(caption); setEditingCaption(true); }}
                 className="text-[12px] font-semibold px-3 py-1 rounded-[8px]"
@@ -267,7 +552,12 @@ export function VideoResultScreen({ onBack, onGenerateAnother }: VideoResultScre
               className="rounded-[12px] px-4 py-3 text-[14px] text-text-secondary leading-relaxed whitespace-pre-line"
               style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-color)' }}
             >
-              {caption}
+              {captionGenerating ? (
+                <span className="flex items-center gap-2 text-text-muted">
+                  <span className="w-3.5 h-3.5 rounded-full border-2 animate-spin" style={{ borderColor: 'rgba(255,255,255,0.2)', borderTopColor: 'rgb(var(--c-coral))' }} />
+                  Crafting the perfect caption…
+                </span>
+              ) : caption}
             </div>
           )}
         </div>
@@ -328,24 +618,25 @@ export function VideoResultScreen({ onBack, onGenerateAnother }: VideoResultScre
         <div className="flex gap-3">
           <button
             onClick={() => setShowScheduler(!showScheduler)}
-            disabled={status === 'posting' || status === 'scheduling'}
+            disabled={status === 'posting' || status === 'scheduling' || captionGenerating}
             className="flex-1 py-3.5 rounded-[14px] text-[15px] font-semibold transition-all"
             style={{
               background: 'rgba(255,255,255,0.06)',
               border: '1px solid var(--border-color)',
               color: 'rgb(var(--c-text-primary))',
+              opacity: captionGenerating ? 0.5 : 1,
             }}
           >
             📅 Schedule
           </button>
           <button
             onClick={handlePost}
-            disabled={status === 'posting' || status === 'scheduling'}
+            disabled={status === 'posting' || status === 'scheduling' || captionGenerating}
             className="flex-1 py-3.5 rounded-[14px] text-[15px] font-bold text-white transition-all"
             style={{
               background: 'linear-gradient(135deg, rgb(var(--c-coral)), rgb(var(--c-coral-hover)))',
               boxShadow: 'var(--shadow-glow-coral)',
-              opacity: status === 'posting' ? 0.7 : 1,
+              opacity: status === 'posting' || captionGenerating ? 0.7 : 1,
             }}
           >
             {status === 'posting' ? (
