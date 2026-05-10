@@ -28,6 +28,7 @@ import {
 import { Button, Input, Modal } from '../../components/ui';
 import {
   financeService,
+  type AutoExpensesResponse,
   type ExpenseCategory,
   type ExpenseEntry,
   type FinanceSummary,
@@ -137,7 +138,11 @@ export function AdminFinancePage() {
   const [summary, setSummary] = useState<FinanceSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [section, setSection] = useState<'overview' | 'revenue' | 'expenses'>('overview');
+  const [section, setSection] = useState<'overview' | 'revenue' | 'expenses' | 'auto'>('overview');
+
+  // Auto-calculated API expenses tab state
+  const [autoData, setAutoData] = useState<AutoExpensesResponse | null>(null);
+  const [autoLoading, setAutoLoading] = useState(false);
 
   // Expenses tab state
   const [expenses, setExpenses] = useState<ExpenseEntry[]>([]);
@@ -202,6 +207,16 @@ export function AdminFinancePage() {
     }
   }, []);
 
+  const loadAutoExpenses = useCallback(async () => {
+    setAutoLoading(true);
+    try {
+      const data = await financeService.getAutoExpenses({ months: 12 });
+      setAutoData(data);
+    } finally {
+      setAutoLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     loadSummary();
   }, [loadSummary]);
@@ -211,6 +226,9 @@ export function AdminFinancePage() {
   useEffect(() => {
     if (section === 'revenue') loadRevenue();
   }, [section, loadRevenue]);
+  useEffect(() => {
+    if (section === 'auto') loadAutoExpenses();
+  }, [section, loadAutoExpenses]);
 
   // ── Handlers ──────────────────────────────────────────
   const openCreateModal = () => {
@@ -392,12 +410,13 @@ export function AdminFinancePage() {
         {[
           { key: 'overview', label: 'Overview' },
           { key: 'revenue', label: 'Revenue' },
-          { key: 'expenses', label: 'Expenses' },
+          { key: 'expenses', label: 'Manual Expenses' },
+          { key: 'auto', label: 'Auto API Costs' },
         ].map((t) => (
           <button
             key={t.key}
             type="button"
-            onClick={() => setSection(t.key as 'overview' | 'revenue' | 'expenses')}
+            onClick={() => setSection(t.key as 'overview' | 'revenue' | 'expenses' | 'auto')}
             className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
               section === t.key
                 ? 'bg-bg-elevated text-text-primary shadow-sm'
@@ -408,6 +427,15 @@ export function AdminFinancePage() {
           </button>
         ))}
       </div>
+
+      {/* Manual / auto split (when auto data already in summary) */}
+      {(summary.manual_expense_usd !== undefined || summary.auto_expense_usd !== undefined) && (
+        <div className="text-xs text-text-secondary -mt-3">
+          Expenses include manual entries ({fmtUSD(summary.manual_expense_usd || '0')})
+          + auto-calculated API costs from <code className="text-coral">apiModelCost.md</code> rates
+          ({fmtUSD(summary.auto_expense_usd || '0')}).
+        </div>
+      )}
 
       {section === 'overview' && (
         <>
@@ -631,6 +659,11 @@ export function AdminFinancePage() {
           onEdit={openEditModal}
           onDelete={deleteExpense}
         />
+      )}
+
+      {/* Auto-calculated API costs tab */}
+      {section === 'auto' && (
+        <AutoExpensesPanel data={autoData} loading={autoLoading} onRefresh={loadAutoExpenses} />
       )}
 
       {/* Create / edit expense modal */}
@@ -940,6 +973,273 @@ function ExpensesTable({
           </div>
         </>
       )}
+    </motion.div>
+  );
+}
+
+// ─── Auto-calculated API costs panel ─────────────────────────────────
+interface AutoExpensesPanelProps {
+  data: AutoExpensesResponse | null;
+  loading: boolean;
+  onRefresh: () => void;
+}
+
+const COST_TYPE_COLOR: Record<string, string> = {
+  text: COLORS.purple,
+  image: COLORS.amber,
+  video: COLORS.coral,
+  voice: COLORS.blue,
+};
+
+function AutoExpensesPanel({ data, loading, onRefresh }: AutoExpensesPanelProps) {
+  if (loading && !data) {
+    return (
+      <div className="rounded-3xl border border-white/[0.08] bg-bg-card p-12 text-center text-sm text-text-secondary">
+        Computing API costs from <code className="text-coral">apiModelCost.md</code> rates…
+      </div>
+    );
+  }
+  if (!data) return null;
+
+  const total = parseFloat(data.total_usd);
+  const monthChartData = data.by_month.map((m) => ({
+    month: fmtMonth(m.month),
+    Total: parseFloat(m.total),
+    OpenAI: parseFloat(m.by_category.openai || '0'),
+    Gemini: parseFloat(m.by_category.gemini || '0'),
+    Claude: parseFloat(m.by_category.claude || '0'),
+  }));
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="space-y-6"
+    >
+      {/* Header / hero */}
+      <div className="rounded-3xl border border-white/[0.08] bg-bg-card p-6">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-bold text-text-primary">Auto-calculated API costs</h2>
+            <p className="text-xs text-text-muted mt-1">
+              Computed live from every diamond deduction · {data.deduction_count.toLocaleString()} API calls
+              tracked · {data.window.from} → {data.window.to}
+            </p>
+            <p className="text-[11px] text-text-muted mt-0.5">
+              Rate source: <code className="text-coral">{data.rate_source}</code>
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="text-right">
+              <div className="text-[10px] uppercase tracking-wider text-text-muted">Total cost</div>
+              <div className="text-2xl font-extrabold text-coral">{fmtUSD(total)}</div>
+            </div>
+            <Button variant="secondary" onClick={onRefresh} disabled={loading}>
+              {loading ? 'Refreshing…' : 'Refresh'}
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* By cost type */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {data.by_cost_type.map((c) => (
+          <div
+            key={c.cost_type}
+            className="rounded-2xl border border-white/[0.08] bg-bg-card p-4"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span
+                className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded"
+                style={{
+                  background: `${COST_TYPE_COLOR[c.cost_type] || COLORS.textMuted}20`,
+                  color: COST_TYPE_COLOR[c.cost_type] || COLORS.textMuted,
+                }}
+              >
+                {c.cost_type}
+              </span>
+              <span className="text-[10px] text-text-muted">{c.count.toLocaleString()} calls</span>
+            </div>
+            <div className="text-xl font-extrabold text-text-primary">{fmtUSD(c.total)}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Monthly chart */}
+      {monthChartData.length > 0 && (
+        <div className="rounded-3xl border border-white/[0.08] bg-bg-card p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-sm font-bold text-text-primary">Monthly API cost</h3>
+              <p className="text-[11px] text-text-muted mt-0.5">Stacked by provider</p>
+            </div>
+            <ChartBarSquareIcon className="w-5 h-5 text-text-muted" />
+          </div>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={monthChartData} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
+                <CartesianGrid stroke="rgba(255,255,255,0.04)" vertical={false} />
+                <XAxis
+                  dataKey="month"
+                  stroke={COLORS.textMuted}
+                  fontSize={11}
+                  tickLine={false}
+                  axisLine={{ stroke: 'rgba(255,255,255,0.06)' }}
+                />
+                <YAxis
+                  stroke={COLORS.textMuted}
+                  fontSize={11}
+                  tickLine={false}
+                  axisLine={false}
+                  tickFormatter={(v) => (v >= 1000 ? `$${(v / 1000).toFixed(0)}k` : `$${v}`)}
+                />
+                <Tooltip
+                  cursor={{ fill: 'rgba(255,255,255,0.03)' }}
+                  contentStyle={{
+                    background: COLORS.bgCard,
+                    border: '1px solid rgba(255,255,255,0.12)',
+                    borderRadius: 12,
+                    fontSize: 12,
+                    color: COLORS.textPrimary,
+                  }}
+                  formatter={(value) => fmtUSD(Number(value ?? 0))}
+                />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Bar dataKey="Claude" stackId="a" fill={COLORS.purple} />
+                <Bar dataKey="Gemini" stackId="a" fill={COLORS.amber} />
+                <Bar dataKey="OpenAI" stackId="a" fill={COLORS.green} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
+      {/* By feature breakdown */}
+      <div className="rounded-3xl border border-white/[0.08] bg-bg-card overflow-hidden">
+        <div className="px-5 py-4 border-b border-white/[0.06]">
+          <h3 className="text-sm font-bold text-text-primary">Cost by feature</h3>
+          <p className="text-[11px] text-text-muted mt-0.5">
+            Each row aggregates every API call for that feature, tokens included
+          </p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left text-text-muted border-b border-white/[0.04]">
+                <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider">Feature</th>
+                <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider">Type</th>
+                <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider">Provider</th>
+                <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-right">Calls</th>
+                <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-right">Tokens</th>
+                <th className="px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-right">Cost</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.by_feature.map((f) => (
+                <tr key={f.feature} className="border-b border-white/[0.04] hover:bg-white/[0.02]">
+                  <td className="px-5 py-3 font-mono text-text-primary text-xs">{f.feature}</td>
+                  <td className="px-5 py-3">
+                    <span
+                      className="px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded"
+                      style={{
+                        background: `${COST_TYPE_COLOR[f.cost_type] || COLORS.textMuted}20`,
+                        color: COST_TYPE_COLOR[f.cost_type] || COLORS.textMuted,
+                      }}
+                    >
+                      {f.cost_type}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3 capitalize text-text-secondary text-xs">{f.category}</td>
+                  <td className="px-5 py-3 text-right font-mono text-text-secondary">
+                    {f.count.toLocaleString()}
+                  </td>
+                  <td className="px-5 py-3 text-right font-mono text-text-secondary">
+                    {f.tokens > 0 ? f.tokens.toLocaleString() : '—'}
+                  </td>
+                  <td className="px-5 py-3 text-right font-mono font-bold text-coral">
+                    {fmtUSD(f.total)}
+                  </td>
+                </tr>
+              ))}
+              {data.by_feature.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-5 py-8 text-center text-sm text-text-muted">
+                    No API usage in this window.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Top users + recent feed */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="rounded-3xl border border-white/[0.08] bg-bg-card overflow-hidden">
+          <div className="px-5 py-4 border-b border-white/[0.06]">
+            <h3 className="text-sm font-bold text-text-primary">Top users by cost</h3>
+            <p className="text-[11px] text-text-muted mt-0.5">Highest-spending accounts in window</p>
+          </div>
+          <div className="divide-y divide-white/[0.04]">
+            {data.top_users.length === 0 ? (
+              <div className="py-8 text-center text-sm text-text-muted">No users yet.</div>
+            ) : (
+              data.top_users.map((u) => (
+                <div key={u.user_id} className="flex items-center justify-between px-5 py-3">
+                  <div>
+                    <div className="text-sm font-semibold text-text-primary">{u.username}</div>
+                    <div className="text-[10px] text-text-muted">
+                      {u.count.toLocaleString()} API calls · ID #{u.user_id}
+                    </div>
+                  </div>
+                  <div className="font-mono font-bold text-coral">{fmtUSD(u.total)}</div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="rounded-3xl border border-white/[0.08] bg-bg-card overflow-hidden">
+          <div className="px-5 py-4 border-b border-white/[0.06]">
+            <h3 className="text-sm font-bold text-text-primary">Recent API calls</h3>
+            <p className="text-[11px] text-text-muted mt-0.5">Last 50 deductions with computed cost</p>
+          </div>
+          <div className="divide-y divide-white/[0.04] max-h-96 overflow-y-auto">
+            {data.recent.length === 0 ? (
+              <div className="py-8 text-center text-sm text-text-muted">No recent activity.</div>
+            ) : (
+              data.recent.map((r) => (
+                <div key={r.id} className="px-5 py-2.5 hover:bg-white/[0.02]">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-xs text-text-primary truncate">
+                          {r.feature}
+                        </span>
+                        <span
+                          className="px-1.5 py-0 text-[9px] font-bold uppercase tracking-wider rounded shrink-0"
+                          style={{
+                            background: `${COST_TYPE_COLOR[r.cost_type] || COLORS.textMuted}20`,
+                            color: COST_TYPE_COLOR[r.cost_type] || COLORS.textMuted,
+                          }}
+                        >
+                          {r.cost_type}
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-text-muted truncate">
+                        {r.user || '—'} · {r.model || r.provider || '—'} · {fmtDate(r.created_at)}
+                      </div>
+                    </div>
+                    <div className="font-mono text-xs font-bold text-coral shrink-0">
+                      {fmtUSD(r.cost_usd)}
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
     </motion.div>
   );
 }

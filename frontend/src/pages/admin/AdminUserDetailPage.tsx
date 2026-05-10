@@ -21,7 +21,7 @@ import { DiamondRechargeForm } from '../../components/admin/DiamondRechargeForm'
 import { PromptOverrideEditor } from '../../components/admin/PromptOverrideEditor';
 import { PromptAuditTimeline } from '../../components/admin/PromptAuditTimeline';
 import { adminPromptService } from '../../services';
-import type { PromptDescriptor, PromptType } from '../../services/adminPromptService';
+import type { PromptDescriptor, PromptType, ExecutionRecord } from '../../services/adminPromptService';
 
 type TabType =
   | 'overview'
@@ -54,6 +54,14 @@ export function AdminUserDetailPage() {
   const [promptsLoading, setPromptsLoading] = useState(false);
   const [promptsError, setPromptsError] = useState<string | null>(null);
   const [auditPrompt, setAuditPrompt] = useState<{ type: PromptType; name: string } | null>(null);
+
+  // Execution history state
+  const [execHistory, setExecHistory] = useState<ExecutionRecord[] | null>(null);
+  const [execHistoryTotal, setExecHistoryTotal] = useState(0);
+  const [execHistoryPage, setExecHistoryPage] = useState(1);
+  const [execHistoryLoading, setExecHistoryLoading] = useState(false);
+  const [execHistoryFilter, setExecHistoryFilter] = useState<string>('');
+  const [expandedExec, setExpandedExec] = useState<number | null>(null);
 
   const {
     userDetail, userDetailLoading, fetchUserDetail,
@@ -132,6 +140,27 @@ export function AdminUserDetailPage() {
       cancelled = true;
     };
   }, [activeTab, userId]);
+
+  useEffect(() => {
+    if (activeTab !== 'prompts' || !userId) return;
+    let cancelled = false;
+    setExecHistoryLoading(true);
+    adminPromptService
+      .executionHistory(userId, {
+        prompt_type: execHistoryFilter ? (execHistoryFilter as PromptType) : undefined,
+        page: execHistoryPage,
+        page_size: 20,
+      })
+      .then((res) => {
+        if (!cancelled) {
+          setExecHistory(res.executions);
+          setExecHistoryTotal(res.total);
+        }
+      })
+      .catch(() => { if (!cancelled) setExecHistory([]); })
+      .finally(() => { if (!cancelled) setExecHistoryLoading(false); });
+    return () => { cancelled = true; };
+  }, [activeTab, userId, execHistoryPage, execHistoryFilter]);
 
   const handleApprove = async () => {
     await approveUser(userId);
@@ -502,6 +531,145 @@ export function AdminUserDetailPage() {
               promptDisplayName={auditPrompt?.name ?? ''}
               onClose={() => setAuditPrompt(null)}
             />
+
+            {/* ── Execution history ── */}
+            <div className="mt-6 space-y-3">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                  <h3 className="text-sm font-semibold text-white">Execution history</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Every AI call made for this user — prompt sent + response received.
+                    {execHistoryTotal > 0 && ` (${execHistoryTotal} total)`}
+                  </p>
+                </div>
+                <select
+                  value={execHistoryFilter}
+                  onChange={(e) => { setExecHistoryFilter(e.target.value); setExecHistoryPage(1); }}
+                  className="px-3 py-1.5 text-xs bg-white/[0.05] border border-white/[0.08] text-text-primary rounded-lg focus:outline-none"
+                >
+                  <option value="">All prompt types</option>
+                  {[
+                    ['idea_system', 'Ideas — System'], ['idea_user', 'Ideas — User'],
+                    ['idea_regenerate', 'Ideas — Regenerate'],
+                    ['caption_system', 'Caption — System'], ['caption_user', 'Caption — User'],
+                    ['caption_regenerate', 'Caption — Regenerate'], ['caption_adapt', 'Caption — Adapt'],
+                    ['image_refiner', 'Image — Refiner'], ['image_product_bg', 'Image — Product BG'],
+                    ['image_product_smart', 'Image — Smart BG'], ['video_prompt', 'Video — Prompt'],
+                    ['brand_dna', 'Brand DNA — Reg'], ['brand_dna_website', 'Brand DNA — Website'],
+                    ['brand_dna_manual', 'Brand DNA — Manual'],
+                    ['trending_filter', 'Trending — Filter'],
+                    ['competitor_analyze', 'Competitor — Analyze'], ['competitor_suggest', 'Competitor — Suggest'],
+                    ['pillars_generate', 'Pillars — Generate'], ['support_chat', 'Support — Chat'],
+                  ].map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+              </div>
+
+              {execHistoryLoading && (
+                <div className="flex justify-center py-6">
+                  <div className="w-5 h-5 border-2 border-amber-500/30 border-t-amber-500 rounded-full animate-spin" />
+                </div>
+              )}
+
+              {!execHistoryLoading && execHistory !== null && execHistory.length === 0 && (
+                <p className="text-center text-xs text-slate-500 py-6">No executions recorded yet.</p>
+              )}
+
+              {!execHistoryLoading && execHistory && execHistory.length > 0 && (
+                <div className="space-y-2">
+                  {execHistory.map((ex) => (
+                    <div
+                      key={ex.id}
+                      className="rounded-xl border border-white/[0.06] bg-white/[0.02] overflow-hidden"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setExpandedExec(expandedExec === ex.id ? null : ex.id)}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-white/[0.03] transition-colors"
+                      >
+                        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${ex.success ? 'bg-green-500' : 'bg-red-500'}`} />
+                        <span className="text-[11px] font-mono text-text-muted w-32 flex-shrink-0 truncate">
+                          {ex.prompt_type}
+                        </span>
+                        {ex.was_override && (
+                          <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-coral/15 text-coral border border-coral/20 flex-shrink-0">
+                            Custom
+                          </span>
+                        )}
+                        <span className="text-[11px] text-text-muted flex-shrink-0 ml-auto">
+                          {ex.model_used || '—'}
+                        </span>
+                        <span className="text-[11px] text-text-muted flex-shrink-0 w-16 text-right">
+                          {ex.tokens_in > 0 ? `${ex.tokens_in.toLocaleString()} tk` : '—'}
+                        </span>
+                        <span className="text-[11px] text-text-muted flex-shrink-0 w-36 text-right">
+                          {new Date(ex.created_at).toLocaleString()}
+                        </span>
+                      </button>
+
+                      {expandedExec === ex.id && (
+                        <div className="border-t border-white/[0.06] px-4 py-3 space-y-3">
+                          {ex.brand_name && (
+                            <div className="text-[10px] text-text-muted">
+                              Brand: <span className="text-text-secondary">{ex.brand_name}</span>
+                            </div>
+                          )}
+                          {ex.error_message && (
+                            <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded px-3 py-2">
+                              {ex.error_message}
+                            </div>
+                          )}
+                          <div>
+                            <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted mb-1">
+                              Prompt sent
+                            </div>
+                            <pre className="whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-text-secondary bg-bg-primary/60 border border-white/[0.06] rounded-lg p-3 max-h-48 overflow-y-auto">
+                              {ex.prompt_sent}
+                            </pre>
+                          </div>
+                          {ex.response_received && (
+                            <div>
+                              <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted mb-1">
+                                AI response
+                              </div>
+                              <pre className="whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-text-secondary bg-bg-primary/60 border border-white/[0.06] rounded-lg p-3 max-h-48 overflow-y-auto">
+                                {ex.response_received}
+                              </pre>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Pagination */}
+              {execHistoryTotal > 20 && (
+                <div className="flex items-center justify-between pt-2">
+                  <button
+                    type="button"
+                    disabled={execHistoryPage === 1}
+                    onClick={() => setExecHistoryPage((p) => p - 1)}
+                    className="text-xs px-3 py-1.5 rounded-lg border border-white/[0.08] text-text-secondary hover:bg-white/[0.04] disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Previous
+                  </button>
+                  <span className="text-xs text-text-muted">
+                    Page {execHistoryPage} of {Math.ceil(execHistoryTotal / 20)}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={execHistoryPage >= Math.ceil(execHistoryTotal / 20)}
+                    onClick={() => setExecHistoryPage((p) => p + 1)}
+                    className="text-xs px-3 py-1.5 rounded-lg border border-white/[0.08] text-text-secondary hover:bg-white/[0.04] disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         )}
 

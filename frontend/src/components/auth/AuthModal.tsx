@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -15,6 +15,8 @@ import {
   SparklesIcon,
   ExclamationTriangleIcon,
   XMarkIcon,
+  ShieldCheckIcon,
+  ArrowPathIcon,
 } from '@heroicons/react/24/outline';
 import { Modal, Button, Input } from '../ui';
 import { useAuthStore } from '../../store';
@@ -109,6 +111,12 @@ function AuthAlert({ message, onDismiss }: { message: string; onDismiss?: () => 
   );
 }
 
+type OtpPending = {
+  user_id: number;
+  email: string;
+  otp_ttl_seconds: number;
+};
+
 export function AuthModal({
   isOpen,
   mode,
@@ -117,10 +125,19 @@ export function AuthModal({
   onModeChange,
 }: AuthModalProps) {
   const navigate = useNavigate();
-  const { login, isLoading, error, clearError } = useAuthStore();
+  const { isLoading, error, clearError } = useAuthStore();
   const [showPwd, setShowPwd] = useState(false);
   const [showPwd2, setShowPwd2] = useState(false);
-  const [signupSuccess, setSignupSuccess] = useState(false);
+
+  // OTP step — set after a successful signup or after a login that returned
+  // 403 requires_verification. While non-null we render the OTP screen.
+  const [otpPending, setOtpPending] = useState<OtpPending | null>(null);
+  const [otpCode, setOtpCode] = useState('');
+  const [otpError, setOtpError] = useState<string | null>(null);
+  const [otpSubmitting, setOtpSubmitting] = useState(false);
+  const [otpResending, setOtpResending] = useState(false);
+  const [secondsLeft, setSecondsLeft] = useState(0);
+  const otpInputRef = useRef<HTMLInputElement | null>(null);
 
   const loginForm = useForm<LoginFormData>({ resolver: zodResolver(loginSchema) });
   const signupForm = useForm<SignupFormData>({
@@ -135,20 +152,66 @@ export function AuthModal({
   useEffect(() => {
     if (!isOpen) {
       clearError();
-      setSignupSuccess(false);
+      setOtpPending(null);
+      setOtpCode('');
+      setOtpError(null);
+      setSecondsLeft(0);
       loginForm.reset();
       signupForm.reset({ email: initialEmail ?? '' });
     }
   }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Reverse-countdown ticker. Reset whenever otpPending changes (new signup
+  // or resend). The expiry is enforced by the server; this is just UI.
+  useEffect(() => {
+    if (!otpPending) return;
+    setSecondsLeft(otpPending.otp_ttl_seconds);
+    const id = window.setInterval(() => {
+      setSecondsLeft((s) => (s > 0 ? s - 1 : 0));
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [otpPending]);
+
+  // Auto-focus the OTP input when the screen appears.
+  useEffect(() => {
+    if (otpPending) {
+      const t = window.setTimeout(() => otpInputRef.current?.focus(), 80);
+      return () => window.clearTimeout(t);
+    }
+  }, [otpPending]);
+
   const onLogin = async (data: LoginFormData) => {
     try {
-      await login(data);
-      const currentUser = useAuthStore.getState().user;
-      onClose();
-      navigate(currentUser?.is_staff ? '/admin-panel' : '/dashboard');
-    } catch {
-      /* surfaced via store error */
+      // Direct fetch so we can read the 403 requires_verification payload —
+      // the store's login() throws on non-2xx and discards the body.
+      const res = await fetch('/api/v1/auth/login/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (res.status === 403 && body?.requires_verification) {
+        setOtpPending({
+          user_id: body.user_id,
+          email: body.email,
+          otp_ttl_seconds: body.otp_ttl_seconds ?? 60,
+        });
+        return;
+      }
+      if (!res.ok) {
+        throw new Error(body?.error || body?.detail || 'Login failed');
+      }
+      if (body?.tokens) {
+        localStorage.setItem('access_token', body.tokens.access);
+        localStorage.setItem('refresh_token', body.tokens.refresh);
+        await useAuthStore.getState().fetchUser();
+        const currentUser = useAuthStore.getState().user;
+        onClose();
+        navigate(currentUser?.is_staff ? '/admin-panel' : '/dashboard');
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Login failed';
+      useAuthStore.setState({ error: message });
     }
   };
 
@@ -171,14 +234,22 @@ export function AuthModal({
         throw new Error(typeof msg === 'string' ? msg : 'Registration failed');
       }
       const result = await res.json();
+      // New flow: backend always returns requires_verification + user_id.
+      if (result.requires_verification && result.user_id) {
+        setOtpPending({
+          user_id: result.user_id,
+          email: result.email || data.email,
+          otp_ttl_seconds: result.otp_ttl_seconds ?? 60,
+        });
+        return;
+      }
+      // Legacy path — backend returned tokens directly.
       if (result.tokens) {
         localStorage.setItem('access_token', result.tokens.access);
         localStorage.setItem('refresh_token', result.tokens.refresh);
         await useAuthStore.getState().fetchUser();
         onClose();
         navigate('/dashboard');
-      } else {
-        setSignupSuccess(true);
       }
     } catch (err) {
       signupForm.setError('root', {
@@ -187,26 +258,103 @@ export function AuthModal({
     }
   };
 
+  const onVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!otpPending) return;
+    const code = otpCode.trim();
+    if (code.length !== 6) {
+      setOtpError('Enter all 6 digits.');
+      return;
+    }
+    setOtpSubmitting(true);
+    setOtpError(null);
+    try {
+      const res = await fetch('/api/v1/auth/verify-otp/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: otpPending.user_id, code }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(body?.error || 'Verification failed');
+      }
+      if (body?.tokens) {
+        localStorage.setItem('access_token', body.tokens.access);
+        localStorage.setItem('refresh_token', body.tokens.refresh);
+        await useAuthStore.getState().fetchUser();
+        const currentUser = useAuthStore.getState().user;
+        onClose();
+        navigate(currentUser?.is_staff ? '/admin-panel' : '/dashboard');
+      }
+    } catch (err) {
+      setOtpError(err instanceof Error ? err.message : 'Verification failed');
+    } finally {
+      setOtpSubmitting(false);
+    }
+  };
+
+  const onResendOtp = async () => {
+    if (!otpPending || secondsLeft > 0 || otpResending) return;
+    setOtpResending(true);
+    setOtpError(null);
+    try {
+      const res = await fetch('/api/v1/auth/resend-otp/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: otpPending.user_id }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(body?.error || 'Could not resend code');
+      }
+      // Re-arm countdown by setting otpPending again (same id, fresh ttl).
+      setOtpPending({
+        ...otpPending,
+        otp_ttl_seconds: body?.otp_ttl_seconds ?? 60,
+      });
+      setOtpCode('');
+    } catch (err) {
+      setOtpError(err instanceof Error ? err.message : 'Could not resend code');
+    } finally {
+      setOtpResending(false);
+    }
+  };
+
+  const showOtp = otpPending !== null;
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} size="md" showCloseButton>
       <div className="-mt-2">
         {/* Brand mark + heading */}
         <div className="flex flex-col items-center text-center mb-6">
           <div className="w-12 h-12 rounded-2xl bg-gradient-primary shadow-glow-coral flex items-center justify-center mb-3">
-            <SparklesIcon className="w-6 h-6 text-white" />
+            {showOtp ? (
+              <ShieldCheckIcon className="w-6 h-6 text-white" />
+            ) : (
+              <SparklesIcon className="w-6 h-6 text-white" />
+            )}
           </div>
           <h2 className="text-2xl font-bold font-heading text-text-primary tracking-tight">
-            {mode === 'login' ? 'Welcome back' : 'Create your account'}
+            {showOtp
+              ? 'Verify your email'
+              : mode === 'login'
+                ? 'Welcome back'
+                : 'Create your account'}
           </h2>
           <p className="text-sm text-text-secondary mt-1">
-            {mode === 'login'
-              ? 'Sign in to keep creating with Sellanto'
-              : 'Join thousands shipping content with AI'}
+            {showOtp
+              ? `Enter the 6-digit code we sent to ${otpPending?.email}`
+              : mode === 'login'
+                ? 'Sign in to keep creating with Sellanto'
+                : 'Join thousands shipping content with AI'}
           </p>
         </div>
 
-        {/* Mode toggle */}
-        <div className="relative grid grid-cols-2 p-1 rounded-xl bg-white/[0.04] border border-white/[0.06] mb-6">
+        {/* Mode toggle — hidden during OTP step */}
+        <div
+          className="relative grid grid-cols-2 p-1 rounded-xl bg-white/[0.04] border border-white/[0.06] mb-6"
+          style={{ display: showOtp ? 'none' : undefined }}
+        >
           <motion.div
             layout
             transition={{ type: 'spring', stiffness: 350, damping: 30 }}
@@ -234,7 +382,109 @@ export function AuthModal({
         </div>
 
         <AnimatePresence mode="wait">
-          {mode === 'login' ? (
+          {showOtp ? (
+            <motion.form
+              key="otp"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.2 }}
+              onSubmit={onVerifyOtp}
+              className="space-y-4"
+            >
+              {/* OTP digits + reverse countdown side-by-side */}
+              <div className="flex items-end gap-3">
+                <div className="flex-1">
+                  <label className="block text-xs font-medium text-text-secondary mb-1.5">
+                    6-digit code
+                  </label>
+                  <input
+                    ref={otpInputRef}
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    pattern="\d{6}"
+                    maxLength={6}
+                    placeholder="• • • • • •"
+                    value={otpCode}
+                    onChange={(e) =>
+                      setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))
+                    }
+                    className="w-full px-4 py-3 rounded-xl bg-white/[0.04] border border-white/[0.08] text-text-primary text-center text-2xl font-mono tracking-[0.6em] focus:outline-none focus:border-coral focus:ring-2 focus:ring-coral/30 placeholder:text-text-muted/40"
+                  />
+                </div>
+                {/* Reverse second-counter, sits next to the OTP field */}
+                <div
+                  className={`shrink-0 w-20 h-[50px] rounded-xl border flex flex-col items-center justify-center font-mono ${
+                    secondsLeft > 0
+                      ? 'border-coral/30 bg-coral/5 text-coral'
+                      : 'border-white/[0.06] bg-white/[0.02] text-text-muted'
+                  }`}
+                  aria-live="polite"
+                  title={secondsLeft > 0 ? 'Code expires in' : 'Code expired'}
+                >
+                  <span className="text-[10px] uppercase tracking-[0.15em] opacity-70">
+                    {secondsLeft > 0 ? 'expires' : 'expired'}
+                  </span>
+                  <span className="text-lg font-bold leading-none mt-0.5">
+                    {secondsLeft > 0 ? `0:${secondsLeft.toString().padStart(2, '0')}` : '0:00'}
+                  </span>
+                </div>
+              </div>
+
+              <AnimatePresence>
+                {otpError && (
+                  <AuthAlert
+                    message={otpError}
+                    onDismiss={() => setOtpError(null)}
+                  />
+                )}
+              </AnimatePresence>
+
+              <Button
+                type="submit"
+                fullWidth
+                size="lg"
+                isLoading={otpSubmitting}
+                disabled={otpCode.length !== 6}
+                rightIcon={<ArrowRightIcon className="w-4 h-4" />}
+              >
+                Verify &amp; continue
+              </Button>
+
+              <div className="flex items-center justify-between text-xs">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOtpPending(null);
+                    setOtpCode('');
+                    setOtpError(null);
+                  }}
+                  className="text-text-muted hover:text-text-primary transition-colors"
+                >
+                  ← Use a different account
+                </button>
+                <button
+                  type="button"
+                  onClick={onResendOtp}
+                  disabled={secondsLeft > 0 || otpResending}
+                  className={`flex items-center gap-1.5 font-medium transition-colors ${
+                    secondsLeft > 0 || otpResending
+                      ? 'text-text-muted cursor-not-allowed'
+                      : 'text-coral hover:underline'
+                  }`}
+                >
+                  <ArrowPathIcon
+                    className={`w-3.5 h-3.5 ${otpResending ? 'animate-spin' : ''}`}
+                  />
+                  {secondsLeft > 0
+                    ? `Resend in 0:${secondsLeft.toString().padStart(2, '0')}`
+                    : otpResending
+                      ? 'Sending…'
+                      : 'Resend code'}
+                </button>
+              </div>
+            </motion.form>
+          ) : mode === 'login' ? (
             <motion.form
               key="login"
               initial={{ opacity: 0, x: -16 }}
@@ -300,33 +550,6 @@ export function AuthModal({
                 </a>
               </p>
             </motion.form>
-          ) : signupSuccess ? (
-            <motion.div
-              key="success"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="text-center py-6"
-            >
-              <div className="w-14 h-14 mx-auto rounded-2xl bg-gradient-success flex items-center justify-center mb-4">
-                <SparklesIcon className="w-7 h-7 text-white" />
-              </div>
-              <h3 className="text-lg font-bold text-text-primary mb-1">
-                Account requested
-              </h3>
-              <p className="text-sm text-text-secondary">
-                Your account is awaiting approval. We'll let you know as soon as it's
-                ready.
-              </p>
-              <Button
-                variant="secondary"
-                fullWidth
-                size="md"
-                className="mt-5"
-                onClick={onClose}
-              >
-                Got it
-              </Button>
-            </motion.div>
           ) : (
             <motion.form
               key="signup"

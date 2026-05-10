@@ -121,8 +121,55 @@ class AdminDashboardView(APIView):
         message_tokens = safe_query_one("SELECT COALESCE(SUM(tokens_used), 0) as total FROM messages WHERE sender = 'bot'")
         message_token_total = to_float(message_tokens.get('total', 0))
 
+        # ── Accurate cost: pull every DiamondTransaction deduction and apply
+        # the rate table from docs/apiModelCost.md (Anthropic / Google / OpenAI
+        # verified rates). This replaces the old hardcoded gpt-4o estimate.
+        from accounts.models import DiamondTransaction
+        from accounts.services.cost_calculator import calculate_transaction_cost
+        from decimal import Decimal as _D
+
+        _accurate_total = _D('0')
+        _ledger_tokens = 0
+        for _tx in DiamondTransaction.objects.filter(transaction_type='deduction').iterator():
+            _accurate_total += calculate_transaction_cost(_tx)
+            _ledger_tokens += _tx.raw_tokens or 0
+
+        # Layer in image and video costs that may not yet be in the ledger.
+        # ImageGeneration and VideoGeneration tables are the source of truth
+        # for media counts — older rows may pre-date diamond tracking.
+        from ai_image.models import ImageGeneration
+        from ai_video.models import VideoGeneration
+        from accounts.services.cost_calculator import (
+            calculate_image_cost, calculate_video_cost,
+        )
+
+        # Count completed media that have NO matching DiamondTransaction
+        # (legacy rows). Approximate per-image / per-second cost for them.
+        ledger_image_count = DiamondTransaction.objects.filter(
+            transaction_type='deduction',
+            feature__in=['image', 'image_standard', 'image_hd'],
+        ).count()
+        completed_image_count = ImageGeneration.objects.filter(status='completed').count()
+        legacy_image_count = max(0, completed_image_count - ledger_image_count)
+        if legacy_image_count > 0:
+            _accurate_total += calculate_image_cost('image', 'gemini', '') * legacy_image_count
+
+        ledger_video_count = DiamondTransaction.objects.filter(
+            transaction_type='deduction',
+            feature__startswith='video_',
+        ).count()
+        completed_videos = VideoGeneration.objects.filter(status='completed')
+        legacy_videos = completed_videos[ledger_video_count:]
+        for _v in legacy_videos:
+            duration = getattr(_v, 'duration', 0) or 5
+            _accurate_total += calculate_video_cost(
+                f'video_{duration}s', 'veo-3.1-generate-preview',
+                duration_override=duration,
+            )
+
         total_tokens = caption_token_total + message_token_total
-        estimated_cost_val = estimate_cost(total_tokens)
+        # Show the accurate auto-calculated total instead of the legacy estimate.
+        estimated_cost_val = float(_accurate_total)
 
         pending_approvals = safe_query("""
             SELECT u.id, u.username, u.email, u.date_joined, p.company, p.phone
@@ -1257,36 +1304,34 @@ class AdminTestWebhookView(APIView):
 # ==================== Per-User Magic Mode Prompt Overrides ====================
 
 PROMPT_TYPE_META = [
-    {
-        'type': 'idea_system',
-        'display_name': 'Idea Generator — System',
-        'stage': 'Magic Mode · Idea generation (system role)',
-    },
-    {
-        'type': 'idea_user',
-        'display_name': 'Idea Generator — User Context',
-        'stage': 'Magic Mode · Idea generation (user message)',
-    },
-    {
-        'type': 'caption_system',
-        'display_name': 'Caption Generator — System',
-        'stage': 'Magic Mode · Caption generation',
-    },
-    {
-        'type': 'image_refiner',
-        'display_name': 'Image Prompt Refiner',
-        'stage': 'Magic Mode · Image prompt refinement',
-    },
-    {
-        'type': 'brand_dna',
-        'display_name': 'Brand DNA Enhancer',
-        'stage': 'Brand profile · DNA enrichment',
-    },
-    {
-        'type': 'video_prompt',
-        'display_name': 'Video Prompt Builder',
-        'stage': 'Magic Mode · Video generation (Veo)',
-    },
+    # Ideas
+    {'type': 'idea_system',         'display_name': 'Idea Generator — System',              'stage': 'Magic Mode · Idea generation (system role)'},
+    {'type': 'idea_user',           'display_name': 'Idea Generator — User Context',         'stage': 'Magic Mode · Idea generation (user message)'},
+    {'type': 'idea_regenerate',     'display_name': 'Idea Regenerator — System',             'stage': 'Magic Mode · Idea regeneration with feedback'},
+    # Captions
+    {'type': 'caption_system',      'display_name': 'Caption Generator — System',            'stage': 'Magic Mode · Caption generation (system role)'},
+    {'type': 'caption_user',        'display_name': 'Caption Generator — User Context',      'stage': 'Magic Mode · Caption generation (user message)'},
+    {'type': 'caption_regenerate',  'display_name': 'Caption Regenerator — System',          'stage': 'Magic Mode · Caption regeneration with feedback'},
+    {'type': 'caption_adapt',       'display_name': 'Caption Cross-Platform Adapter',        'stage': 'Magic Mode · Caption adaptation to other platforms'},
+    # Images
+    {'type': 'image_refiner',       'display_name': 'Image Prompt Refiner',                 'stage': 'Magic Mode · Image prompt refinement'},
+    {'type': 'image_product_bg',    'display_name': 'Product Background Prompt',             'stage': 'Magic Mode · Product image background generation'},
+    {'type': 'image_product_smart', 'display_name': 'Style-Matched Background Prompt',      'stage': 'Magic Mode · Smart style-matched background'},
+    # Video
+    {'type': 'video_prompt',        'display_name': 'Video Prompt Builder',                 'stage': 'Magic Mode · Video generation (Veo)'},
+    # Brand DNA
+    {'type': 'brand_dna',           'display_name': 'Brand DNA — Registration Enrichment',  'stage': 'Brand profile · Registration DNA enrichment'},
+    {'type': 'brand_dna_website',   'display_name': 'Brand DNA — Website Extraction',       'stage': 'Brand profile · Full website DNA extraction'},
+    {'type': 'brand_dna_manual',    'display_name': 'Brand DNA — Manual Enhancement',       'stage': 'Brand profile · Manual input DNA enhancement'},
+    # Trending
+    {'type': 'trending_filter',     'display_name': 'Trending Topics Filter — System',      'stage': 'Magic Mode · Google Trends Claude filter'},
+    # Competitors
+    {'type': 'competitor_analyze',  'display_name': 'Competitor Crawler — Analysis',        'stage': 'Competitor intel · Crawl & analyse posts'},
+    {'type': 'competitor_suggest',  'display_name': 'Competitor Suggester — System',        'stage': 'Competitor intel · Suggest new competitors'},
+    # Pillars
+    {'type': 'pillars_generate',    'display_name': 'Content Pillars Generator — System',   'stage': 'Strategy · Content pillar generation'},
+    # Support
+    {'type': 'support_chat',        'display_name': 'Support Chat — System Prompt',         'stage': 'Support bot · Chat system instructions'},
 ]
 _VALID_PROMPT_TYPES = {p['type'] for p in PROMPT_TYPE_META}
 
@@ -1314,8 +1359,10 @@ class AdminPromptOverridesListView(APIView):
     permission_classes = [IsOriginalAdmin]
 
     def get(self, request, user_id):
-        from accounts.models import UserPromptOverride
-        from accounts.services.prompt_resolver import PROMPT_SCHEMA, get_default_preview
+        from accounts.models import UserPromptOverride, PromptExecution
+        from accounts.services.prompt_resolver import (
+            PROMPT_SCHEMA, get_default_preview, get_default_full,
+        )
 
         try:
             target_user = User.objects.get(id=user_id)
@@ -1326,15 +1373,44 @@ class AdminPromptOverridesListView(APIView):
             o.prompt_type: o
             for o in UserPromptOverride.objects.filter(user=target_user)
         }
+
+        # Bulk-fetch the most recent execution per prompt_type for this user
+        # so the admin UI can show "what actually got sent last time" with
+        # all dynamic variables already filled in.
+        last_exec_map = {}
+        for prompt_type in _VALID_PROMPT_TYPES:
+            last = (
+                PromptExecution.objects
+                .filter(user=target_user, prompt_type=prompt_type)
+                .order_by('-created_at')
+                .first()
+            )
+            if last is not None:
+                last_exec_map[prompt_type] = last
+
         prompts = []
         for meta in PROMPT_TYPE_META:
             t = meta['type']
             o = existing.get(t)
+            last = last_exec_map.get(t)
             prompts.append({
                 **meta,
                 'variables': PROMPT_SCHEMA.get(t, []),
                 'default_preview': get_default_preview(t),
+                'default_full': get_default_full(t),
                 'override': _serialize_override(o) if o else None,
+                'last_execution': {
+                    'id': last.id,
+                    'created_at': last.created_at.isoformat(),
+                    'was_override': last.was_override,
+                    'model_used': last.model_used,
+                    'tokens_in': last.tokens_in,
+                    'tokens_out': last.tokens_out,
+                    'success': last.success,
+                    'prompt_sent': last.prompt_sent,
+                    'response_received': last.response_received,
+                    'brand_name': last.brand_name,
+                } if last else None,
             })
 
         return Response({
@@ -1489,5 +1565,76 @@ class AdminPromptOverrideAuditView(APIView):
                 }
                 for r in rows
             ],
+        })
+
+
+class AdminPromptExecutionHistoryView(APIView):
+    """GET /api/v1/admin/users/<user_id>/prompt-executions/
+
+    Query params:
+      prompt_type  — filter to a specific prompt type (optional)
+      page         — 1-based page number (default 1)
+      page_size    — records per page, max 100 (default 20)
+
+    Returns a paginated list of PromptExecution records for the user, newest
+    first, including the full prompt sent, the AI response, model used, token
+    count, latency, and whether an admin override was active.
+    """
+    permission_classes = [IsOriginalAdmin]
+
+    def get(self, request, user_id):
+        from accounts.models import PromptExecution
+
+        try:
+            target_user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        prompt_type = request.GET.get('prompt_type', '').strip()
+        try:
+            page = max(1, int(request.GET.get('page', 1)))
+            page_size = min(100, max(1, int(request.GET.get('page_size', 20))))
+        except (ValueError, TypeError):
+            page, page_size = 1, 20
+
+        qs = PromptExecution.objects.filter(user=target_user)
+        if prompt_type:
+            qs = qs.filter(prompt_type=prompt_type)
+
+        total = qs.count()
+        offset = (page - 1) * page_size
+        rows = qs.select_related()[offset: offset + page_size]
+
+        executions = [
+            {
+                'id': r.id,
+                'prompt_type': r.prompt_type,
+                'was_override': r.was_override,
+                'model_used': r.model_used,
+                'tokens_in': r.tokens_in,
+                'tokens_out': r.tokens_out,
+                'latency_ms': r.latency_ms,
+                'success': r.success,
+                'error_message': r.error_message,
+                'brand_id': r.brand_id,
+                'brand_name': r.brand_name,
+                'prompt_sent': r.prompt_sent,
+                'response_received': r.response_received,
+                'created_at': r.created_at.isoformat(),
+            }
+            for r in rows
+        ]
+
+        return Response({
+            'target_user': {
+                'id': target_user.id,
+                'username': target_user.username,
+                'email': target_user.email,
+            },
+            'total': total,
+            'page': page,
+            'page_size': page_size,
+            'total_pages': max(1, (total + page_size - 1) // page_size),
+            'executions': executions,
         })
 

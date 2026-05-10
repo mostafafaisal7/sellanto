@@ -32,7 +32,12 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from accounts.models import ExpenseEntry, PaymentRequest
+from accounts.models import DiamondTransaction, ExpenseEntry, PaymentRequest
+from accounts.services.cost_calculator import (
+    calculate_transaction_cost,
+    cost_type_for_feature,
+    map_feature_to_provider_category,
+)
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -161,14 +166,37 @@ class FinanceSummaryView(APIView):
         revenue_total = revenue_qs.aggregate(s=Sum('revenue_usd'))['s'] or Decimal('0')
         revenue_count = revenue_qs.count()
 
-        # Expenses (debit side).
+        # Expenses (debit side) — manual entries.
         expense_qs = ExpenseEntry.objects.filter(
             incurred_on__gte=window_start.date(),
             incurred_on__lt=window_end.date() + timedelta(days=1),
         )
-        expense_total = expense_qs.aggregate(s=Sum('amount_usd'))['s'] or Decimal('0')
+        manual_expense_total = expense_qs.aggregate(s=Sum('amount_usd'))['s'] or Decimal('0')
         expense_count = expense_qs.count()
 
+        # Auto-calculated API costs (from DiamondTransaction + apiModelCost.md rates).
+        auto_expense_total = Decimal('0')
+        auto_by_category: dict[str, Decimal] = {}
+        auto_by_month: dict[str, Decimal] = {}
+        tx_qs = DiamondTransaction.objects.filter(
+            transaction_type='deduction',
+            created_at__gte=window_start,
+            created_at__lt=window_end,
+        )
+        for tx in tx_qs.iterator():
+            cost = calculate_transaction_cost(tx)
+            if cost <= 0:
+                continue
+            auto_expense_total += cost
+            cat = map_feature_to_provider_category(
+                (tx.feature or '').lower(),
+                (tx.provider or '').lower(),
+            )
+            auto_by_category[cat] = auto_by_category.get(cat, Decimal('0')) + cost
+            mkey = tx.created_at.replace(day=1, hour=0, minute=0, second=0, microsecond=0).date().isoformat()
+            auto_by_month[mkey] = auto_by_month.get(mkey, Decimal('0')) + cost
+
+        expense_total = manual_expense_total + auto_expense_total
         net = revenue_total - expense_total
 
         # By-month breakdown (revenue + expense)
@@ -196,26 +224,54 @@ class FinanceSummaryView(APIView):
             key = row['bucket'].replace(day=1).isoformat() if hasattr(row['bucket'], 'replace') else row['bucket'].isoformat()
             month_map.setdefault(key, {'month': key, 'revenue': '0', 'expense': '0', 'net': '0'})
             month_map[key]['expense'] = str(row['total'] or 0)
+        # Layer in auto-calculated API costs by month
+        for key, auto_total in auto_by_month.items():
+            month_map.setdefault(key, {'month': key, 'revenue': '0', 'expense': '0', 'net': '0'})
+            current_expense = _decimal(month_map[key]['expense'])
+            month_map[key]['expense'] = str(current_expense + auto_total)
         for key, entry in month_map.items():
             entry['net'] = str(_decimal(entry['revenue']) - _decimal(entry['expense']))
         by_month = sorted(month_map.values(), key=lambda e: e['month'])
 
-        # Expense breakdown by category.
-        cat_rows = (
+        # Expense breakdown by category — merge manual + auto-calculated.
+        cat_lookup = dict(ExpenseEntry.CATEGORY_CHOICES)
+        cat_totals: dict[str, dict] = {}
+
+        # Start with manual expenses (preserves count for those).
+        for r in (
             expense_qs
             .values('category')
             .annotate(total=Sum('amount_usd'), n=Count('id'))
-            .order_by('-total')
-        )
-        cat_lookup = dict(ExpenseEntry.CATEGORY_CHOICES)
-        expense_by_category = [
-            {
+        ):
+            cat_totals[r['category']] = {
                 'category': r['category'],
                 'label': cat_lookup.get(r['category'], r['category']),
-                'total': str(r['total'] or 0),
+                'total': r['total'] or Decimal('0'),
                 'count': r['n'],
+                'auto_total': Decimal('0'),
             }
-            for r in cat_rows
+
+        # Layer in auto-calculated API costs per category.
+        for cat, auto_total in auto_by_category.items():
+            entry = cat_totals.setdefault(cat, {
+                'category': cat,
+                'label': cat_lookup.get(cat, cat),
+                'total': Decimal('0'),
+                'count': 0,
+                'auto_total': Decimal('0'),
+            })
+            entry['total'] += auto_total
+            entry['auto_total'] += auto_total
+
+        expense_by_category = [
+            {
+                'category': e['category'],
+                'label': e['label'],
+                'total': str(e['total']),
+                'auto_total': str(e['auto_total']),
+                'count': e['count'],
+            }
+            for e in sorted(cat_totals.values(), key=lambda x: x['total'], reverse=True)
         ]
 
         # Recent activity feeds.
@@ -239,6 +295,8 @@ class FinanceSummaryView(APIView):
             },
             'revenue_usd': str(revenue_total),
             'expense_usd': str(expense_total),
+            'manual_expense_usd': str(manual_expense_total),
+            'auto_expense_usd': str(auto_expense_total),
             'net_profit_usd': str(net),
             'revenue_count': revenue_count,
             'expense_count': expense_count,
@@ -399,3 +457,244 @@ class ExpenseDetailView(APIView):
             return Response({'error': 'Not found'}, status=404)
         e.delete()
         return Response({'ok': True})
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Auto-calculated API costs (dynamic, derived from DiamondTransaction)
+# ─────────────────────────────────────────────────────────────────────
+
+class AutoExpensesView(APIView):
+    """GET /api/v1/admin/finance/auto-expenses/?from=YYYY-MM-DD&to=YYYY-MM-DD&months=12
+
+    Reads every DiamondTransaction deduction and applies the rate table from
+    docs/apiModelCost.md to compute the actual USD cost. Returns the full
+    breakdown by month, provider category, feature, and cost type — for both
+    old and new users alike (no backfill needed).
+
+    Returns:
+      {
+        window: { from, to },
+        total_usd,
+        deduction_count,
+        by_month:           [{month, total, by_category: {...}}],
+        by_category:        [{category, label, total, count}],
+        by_feature:         [{feature, cost_type, category, total, count, tokens}],
+        by_cost_type:       [{cost_type, total, count}],
+        top_users:          [{user_id, username, total, count}],
+        recent:             [...last 50 deductions with computed cost...],
+      }
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        denied = _require_admin(request)
+        if denied:
+            return denied
+
+        # Date window — same logic as FinanceSummaryView
+        from_date = _parse_date(request.query_params.get('from'))
+        to_date = _parse_date(request.query_params.get('to'))
+        try:
+            months = max(1, min(int(request.query_params.get('months', 12)), 36))
+        except (TypeError, ValueError):
+            months = 12
+
+        if from_date and to_date:
+            window_start = datetime.combine(from_date, datetime.min.time())
+            window_end = datetime.combine(to_date, datetime.max.time()) + timedelta(seconds=1)
+        else:
+            today = timezone.now()
+            window_end = today
+            year = today.year
+            month = today.month - (months - 1)
+            while month <= 0:
+                month += 12
+                year -= 1
+            window_start = today.replace(
+                year=year, month=month, day=1, hour=0, minute=0, second=0, microsecond=0,
+            )
+
+        if window_start and timezone.is_naive(window_start):
+            window_start = timezone.make_aware(window_start)
+        if window_end and timezone.is_naive(window_end):
+            window_end = timezone.make_aware(window_end)
+
+        # Pull all deductions in the window
+        qs = (
+            DiamondTransaction.objects
+            .filter(
+                transaction_type='deduction',
+                created_at__gte=window_start,
+                created_at__lt=window_end,
+            )
+            .select_related('user')
+            .order_by('-created_at')
+        )
+
+        category_lookup = dict(ExpenseEntry.CATEGORY_CHOICES)
+
+        total = Decimal('0')
+        deduction_count = 0
+
+        by_month_map: dict[str, dict] = {}
+        by_category_map: dict[str, dict] = {}
+        by_feature_map: dict[tuple, dict] = {}
+        by_cost_type_map: dict[str, dict] = {}
+        by_user_map: dict[int, dict] = {}
+
+        recent = []
+        recent_limit = 50
+
+        for tx in qs.iterator():
+            cost = calculate_transaction_cost(tx)
+            if cost <= 0:
+                # Still count the call (for stats) but skip dollar aggregation
+                deduction_count += 1
+                continue
+
+            feature = (tx.feature or 'unknown').strip().lower() or 'unknown'
+            provider = (tx.provider or '').strip().lower()
+            cost_type = cost_type_for_feature(feature)
+            category = map_feature_to_provider_category(feature, provider)
+
+            total += cost
+            deduction_count += 1
+
+            # Month bucket
+            month_key = tx.created_at.replace(day=1, hour=0, minute=0, second=0, microsecond=0).date().isoformat()
+            mb = by_month_map.setdefault(month_key, {
+                'month': month_key,
+                'total': Decimal('0'),
+                'count': 0,
+                'by_category': {'openai': Decimal('0'), 'gemini': Decimal('0'), 'claude': Decimal('0'), 'other_api': Decimal('0')},
+            })
+            mb['total'] += cost
+            mb['count'] += 1
+            if category in mb['by_category']:
+                mb['by_category'][category] += cost
+            else:
+                mb['by_category']['other_api'] += cost
+
+            # Category bucket
+            cb = by_category_map.setdefault(category, {
+                'category': category,
+                'label': category_lookup.get(category, category),
+                'total': Decimal('0'),
+                'count': 0,
+            })
+            cb['total'] += cost
+            cb['count'] += 1
+
+            # Feature bucket
+            fkey = (feature, cost_type, category)
+            fb = by_feature_map.setdefault(fkey, {
+                'feature': feature,
+                'cost_type': cost_type,
+                'category': category,
+                'total': Decimal('0'),
+                'count': 0,
+                'tokens': 0,
+            })
+            fb['total'] += cost
+            fb['count'] += 1
+            fb['tokens'] += tx.raw_tokens or 0
+
+            # Cost type bucket
+            ctb = by_cost_type_map.setdefault(cost_type, {
+                'cost_type': cost_type,
+                'total': Decimal('0'),
+                'count': 0,
+            })
+            ctb['total'] += cost
+            ctb['count'] += 1
+
+            # User bucket
+            if tx.user_id:
+                ub = by_user_map.setdefault(tx.user_id, {
+                    'user_id': tx.user_id,
+                    'username': tx.user.username if tx.user else f'user_{tx.user_id}',
+                    'total': Decimal('0'),
+                    'count': 0,
+                })
+                ub['total'] += cost
+                ub['count'] += 1
+
+            # Recent feed
+            if len(recent) < recent_limit:
+                recent.append({
+                    'id': tx.id,
+                    'created_at': tx.created_at.isoformat(),
+                    'user': tx.user.username if tx.user else None,
+                    'feature': feature,
+                    'cost_type': cost_type,
+                    'provider': provider,
+                    'model': tx.model_used or '',
+                    'category': category,
+                    'category_label': category_lookup.get(category, category),
+                    'tokens': tx.raw_tokens or 0,
+                    'diamonds': abs(tx.amount),
+                    'cost_usd': str(cost),
+                })
+
+        # Stringify decimals + sort
+        by_month = []
+        for key in sorted(by_month_map.keys()):
+            entry = by_month_map[key]
+            by_month.append({
+                'month': entry['month'],
+                'total': str(entry['total']),
+                'count': entry['count'],
+                'by_category': {k: str(v) for k, v in entry['by_category'].items()},
+            })
+
+        by_category = sorted(
+            (
+                {**c, 'total': str(c['total'])}
+                for c in by_category_map.values()
+            ),
+            key=lambda x: Decimal(x['total']),
+            reverse=True,
+        )
+
+        by_feature = sorted(
+            (
+                {**f, 'total': str(f['total'])}
+                for f in by_feature_map.values()
+            ),
+            key=lambda x: Decimal(x['total']),
+            reverse=True,
+        )
+
+        by_cost_type = sorted(
+            (
+                {**c, 'total': str(c['total'])}
+                for c in by_cost_type_map.values()
+            ),
+            key=lambda x: Decimal(x['total']),
+            reverse=True,
+        )
+
+        top_users = sorted(
+            (
+                {**u, 'total': str(u['total'])}
+                for u in by_user_map.values()
+            ),
+            key=lambda x: Decimal(x['total']),
+            reverse=True,
+        )[:20]
+
+        return Response({
+            'window': {
+                'from': window_start.date().isoformat(),
+                'to': (window_end - timedelta(seconds=1)).date().isoformat(),
+            },
+            'total_usd': str(total),
+            'deduction_count': deduction_count,
+            'by_month': by_month,
+            'by_category': by_category,
+            'by_feature': by_feature,
+            'by_cost_type': by_cost_type,
+            'top_users': top_users,
+            'recent': recent,
+            'rate_source': 'docs/apiModelCost.md (verified May 2026)',
+        })

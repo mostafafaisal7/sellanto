@@ -49,10 +49,12 @@ class BrandDNAPromptBuilder:
             workspace_prefs=workspace_prefs
         )
 
-        # 5. Apply per-user admin override (if any)
+        # 5. Apply per-user admin override (if any) + log the final prompt
         if user is not None:
             try:
-                from accounts.services.prompt_resolver import resolve_prompt
+                from accounts.services.prompt_resolver import (
+                    resolve_prompt, save_execution,
+                )
                 video_vars = {
                     'user_prompt': user_prompt,
                     'brand_name': brand_context.get('name', ''),
@@ -65,7 +67,19 @@ class BrandDNAPromptBuilder:
                     'lighting': (product_analysis or {}).get('lighting', ''),
                     'temperature': (product_analysis or {}).get('temperature', ''),
                 }
-                enhanced = resolve_prompt(user, 'video_prompt', enhanced, video_vars)
+                enhanced, _vp_was_override = resolve_prompt(
+                    user, 'video_prompt', enhanced, video_vars, return_meta=True,
+                )
+                # Log final video prompt as an execution (no response — Veo
+                # output is a video file, not a text response we can store).
+                save_execution(
+                    user, 'video_prompt', enhanced,
+                    response_received='(video file generated)',
+                    was_override=_vp_was_override,
+                    model_used='video-prompt-builder',
+                    success=True,
+                    brand=getattr(self, '_last_brand', None),
+                )
             except Exception:
                 pass
 

@@ -7,6 +7,10 @@ import {
   EyeSlashIcon,
   ExclamationTriangleIcon,
   ClockIcon,
+  DocumentTextIcon,
+  BoltIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
 } from '@heroicons/react/24/outline';
 import { Button, Modal } from '../ui';
 import {
@@ -32,12 +36,17 @@ export function PromptOverrideEditor({ userId, prompt, onSaved, onOpenAudit }: P
   const [text, setText] = useState(prompt.override?.prompt_text ?? '');
   const [isActive, setIsActive] = useState(prompt.override?.is_active ?? true);
   const [showDefault, setShowDefault] = useState(false);
+  const [showLastRun, setShowLastRun] = useState(false);
+  const [showLastResponse, setShowLastResponse] = useState(false);
   const [saving, setSaving] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
   const [confirmSave, setConfirmSave] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const fullDefault = prompt.default_full || prompt.default_preview;
+  const lastExec = prompt.last_execution;
 
   useEffect(() => {
     setText(prompt.override?.prompt_text ?? '');
@@ -166,15 +175,42 @@ export function PromptOverrideEditor({ userId, prompt, onSaved, onOpenAudit }: P
         </div>
       )}
 
-      {/* Textarea / default preview */}
+      {/* Textarea / default full prompt */}
       {showDefault ? (
         <div>
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted mb-1.5">
-            Default prompt (read-only)
+          <div className="flex items-center justify-between mb-1.5">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted flex items-center gap-1.5">
+              <DocumentTextIcon className="w-3.5 h-3.5" />
+              Full default prompt (read-only · {fullDefault.length.toLocaleString()} chars)
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                navigator.clipboard.writeText(fullDefault).catch(() => {});
+                setSuccess('Copied to clipboard');
+                setTimeout(() => setSuccess(null), 1500);
+              }}
+              className="text-[10px] text-text-secondary hover:text-text-primary px-2 py-0.5 rounded hover:bg-white/[0.04]"
+            >
+              Copy
+            </button>
           </div>
-          <pre className="whitespace-pre-wrap font-mono text-xs leading-relaxed text-text-secondary bg-bg-primary/50 border border-white/[0.06] rounded-lg p-3 max-h-64 overflow-y-auto">
-            {prompt.default_preview}
+          <pre className="whitespace-pre-wrap font-mono text-xs leading-relaxed text-text-secondary bg-bg-primary/50 border border-white/[0.06] rounded-lg p-3 max-h-[28rem] overflow-y-auto">
+            {fullDefault || '(no default registered — this prompt is built inline at the call site)'}
           </pre>
+          <div className="mt-2 flex gap-2">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setText(fullDefault);
+                setShowDefault(false);
+              }}
+              disabled={!fullDefault}
+            >
+              Copy default into editor
+            </Button>
+          </div>
         </div>
       ) : (
         <div>
@@ -201,6 +237,99 @@ export function PromptOverrideEditor({ userId, prompt, onSaved, onOpenAudit }: P
                 </span>
                 . Magic Mode will fall back to default at runtime if these are needed.
               </span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Last actual run snapshot — exactly what got sent + what came back */}
+      {lastExec && !showDefault && (
+        <div className="rounded-lg border border-purple/20 bg-purple/[0.04]">
+          <button
+            type="button"
+            onClick={() => setShowLastRun((v) => !v)}
+            className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-purple/[0.06] rounded-lg transition-colors"
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <BoltIcon className="w-4 h-4 text-purple flex-shrink-0" />
+              <div className="min-w-0">
+                <div className="text-xs font-bold text-text-primary flex items-center gap-2 flex-wrap">
+                  Last actual run
+                  {lastExec.was_override ? (
+                    <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-coral/15 text-coral border border-coral/20">
+                      Custom
+                    </span>
+                  ) : (
+                    <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-white/[0.04] text-text-muted border border-white/[0.06]">
+                      Default
+                    </span>
+                  )}
+                  {!lastExec.success && (
+                    <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-coral/15 text-coral border border-coral/20">
+                      Failed
+                    </span>
+                  )}
+                </div>
+                <div className="text-[10px] text-text-muted truncate">
+                  {new Date(lastExec.created_at).toLocaleString()} ·{' '}
+                  {lastExec.model_used || 'unknown model'} ·{' '}
+                  {(lastExec.tokens_in + lastExec.tokens_out).toLocaleString()} tokens
+                  {lastExec.brand_name ? ` · ${lastExec.brand_name}` : ''}
+                </div>
+              </div>
+            </div>
+            {showLastRun ? (
+              <ChevronUpIcon className="w-4 h-4 text-text-muted flex-shrink-0" />
+            ) : (
+              <ChevronDownIcon className="w-4 h-4 text-text-muted flex-shrink-0" />
+            )}
+          </button>
+
+          {showLastRun && (
+            <div className="px-3 pb-3 space-y-2">
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                    Prompt sent (all dynamic values filled in)
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(lastExec.prompt_sent).catch(() => {});
+                      setSuccess('Copied prompt');
+                      setTimeout(() => setSuccess(null), 1500);
+                    }}
+                    className="text-[10px] text-text-secondary hover:text-text-primary px-2 py-0.5 rounded hover:bg-white/[0.04]"
+                  >
+                    Copy
+                  </button>
+                </div>
+                <pre className="whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-text-secondary bg-bg-primary/60 border border-white/[0.06] rounded-md p-2.5 max-h-72 overflow-y-auto">
+                  {lastExec.prompt_sent || '(empty)'}
+                </pre>
+              </div>
+
+              {lastExec.response_received && (
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => setShowLastResponse((v) => !v)}
+                    className="w-full text-left text-[10px] font-semibold uppercase tracking-wider text-text-muted hover:text-text-primary flex items-center gap-1 mb-1"
+                  >
+                    {showLastResponse ? (
+                      <ChevronUpIcon className="w-3 h-3" />
+                    ) : (
+                      <ChevronDownIcon className="w-3 h-3" />
+                    )}
+                    AI response ({lastExec.response_received.length.toLocaleString()} chars)
+                  </button>
+                  {showLastResponse && (
+                    <pre className="whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-text-secondary bg-bg-primary/60 border border-white/[0.06] rounded-md p-2.5 max-h-72 overflow-y-auto">
+                      {lastExec.response_received}
+                    </pre>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

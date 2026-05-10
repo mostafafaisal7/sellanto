@@ -51,6 +51,10 @@ class UserProfile(models.Model):
     
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
     is_approved = models.BooleanField(default=False, help_text='Admin approval required')
+    email_verified = models.BooleanField(
+        default=False,
+        help_text='Set to True after the user enters the OTP from their welcome email.',
+    )
     phone = models.CharField(max_length=20, blank=True, null=True)
     company = models.CharField(max_length=200, blank=True, null=True)
     avatar = models.ImageField(upload_to='avatars/', blank=True, null=True)
@@ -320,8 +324,14 @@ class DiamondTransaction(models.Model):
                                help_text='e.g. caption, image, video, voice, messenger')
     provider = models.CharField(max_length=20, blank=True, default='',
                                 help_text='e.g. claude, openai, gemini')
-    raw_tokens = models.IntegerField(default=0, help_text='Actual API tokens used')
+    raw_tokens = models.IntegerField(default=0, help_text='Total API tokens (input + output)')
+    input_tokens = models.IntegerField(default=0, help_text='Exact input/prompt tokens from provider')
+    output_tokens = models.IntegerField(default=0, help_text='Exact output/completion tokens from provider')
+    cache_read_tokens = models.IntegerField(default=0, help_text='Cached input tokens (90% discount on Anthropic)')
+    cache_write_tokens = models.IntegerField(default=0, help_text='Cache write tokens (1.25x cost on Anthropic)')
     model_used = models.CharField(max_length=100, blank=True, default='')
+    media_count = models.IntegerField(default=0, help_text='Image/video count for media features')
+    duration_seconds = models.IntegerField(default=0, help_text='Video duration in seconds (for video features)')
     raw_cost_usd = models.DecimalField(max_digits=10, decimal_places=6, default=0)
 
     # Admin recharge metadata
@@ -615,18 +625,40 @@ class UserPromptOverride(models.Model):
     """
 
     PROMPT_TYPE_CHOICES = [
-        ('idea_system', 'Idea Generator — System'),
-        ('idea_user', 'Idea Generator — User Context'),
-        ('caption_system', 'Caption Generator — System'),
-        ('image_refiner', 'Image Prompt Refiner'),
-        ('brand_dna', 'Brand DNA Enhancer'),
-        ('video_prompt', 'Video Prompt Builder'),
+        # ── Ideas ──────────────────────────────────────────────
+        ('idea_system',           'Ideas — System Prompt'),
+        ('idea_user',             'Ideas — User Prompt'),
+        ('idea_regenerate',       'Ideas — Regenerate (Feedback)'),
+        # ── Captions ───────────────────────────────────────────
+        ('caption_system',        'Caption — System Prompt'),
+        ('caption_user',          'Caption — User Prompt'),
+        ('caption_regenerate',    'Caption — Regenerate (Feedback)'),
+        ('caption_adapt',         'Caption — Cross-Platform Adapt'),
+        # ── Images ─────────────────────────────────────────────
+        ('image_refiner',         'Image — Prompt Refiner'),
+        ('image_product_bg',      'Image — Product Background'),
+        ('image_product_smart',   'Image — Style-Matched Background'),
+        # ── Video ──────────────────────────────────────────────
+        ('video_prompt',          'Video — Prompt Builder'),
+        # ── Brand DNA ──────────────────────────────────────────
+        ('brand_dna',             'Brand DNA — Registration Enrichment'),
+        ('brand_dna_website',     'Brand DNA — Full Website Extraction'),
+        ('brand_dna_manual',      'Brand DNA — Manual Input Enhancement'),
+        # ── Trending ───────────────────────────────────────────
+        ('trending_filter',       'Trending — Google Trends Filter'),
+        # ── Competitors ────────────────────────────────────────
+        ('competitor_analyze',    'Competitor — Crawl Analysis'),
+        ('competitor_suggest',    'Competitor — Suggest'),
+        # ── Pillars ────────────────────────────────────────────
+        ('pillars_generate',      'Content Pillars — Generate'),
+        # ── Support ────────────────────────────────────────────
+        ('support_chat',          'Support — Chat System Prompt'),
     ]
 
     user = models.ForeignKey(
         User, on_delete=models.CASCADE, related_name='prompt_overrides'
     )
-    prompt_type = models.CharField(max_length=30, choices=PROMPT_TYPE_CHOICES)
+    prompt_type = models.CharField(max_length=50, choices=PROMPT_TYPE_CHOICES)
     prompt_text = models.TextField()
     is_active = models.BooleanField(default=True)
 
@@ -671,7 +703,7 @@ class PromptOverrideAuditLog(models.Model):
         User, on_delete=models.CASCADE,
         related_name='prompt_audit_targets',
     )
-    prompt_type = models.CharField(max_length=30)
+    prompt_type = models.CharField(max_length=50)
     action = models.CharField(max_length=20, choices=ACTION_CHOICES)
     admin = models.ForeignKey(
         User, on_delete=models.SET_NULL, null=True,
@@ -690,6 +722,51 @@ class PromptOverrideAuditLog(models.Model):
     def __str__(self):
         admin_name = self.admin.username if self.admin else 'system'
         return f'{admin_name} · {self.action} · {self.prompt_type} · {self.target_user.username}'
+
+
+class PromptExecution(models.Model):
+    """Records every AI prompt sent and the response received, per user.
+
+    Admins view these in the admin panel to see exactly what prompt
+    was used (static default or active override) and what the AI returned.
+    Kept for 90 days then auto-purged via management command.
+    """
+
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='prompt_executions',
+    )
+    prompt_type = models.CharField(max_length=50)
+    was_override = models.BooleanField(
+        default=False,
+        help_text='True if an active UserPromptOverride was applied.',
+    )
+    prompt_sent = models.TextField(help_text='Exact prompt text sent to the LLM.')
+    response_received = models.TextField(
+        blank=True, help_text='Raw text returned by the LLM.',
+    )
+    model_used = models.CharField(max_length=80, blank=True)
+    tokens_in = models.PositiveIntegerField(default=0)
+    tokens_out = models.PositiveIntegerField(default=0)
+    latency_ms = models.PositiveIntegerField(default=0)
+    success = models.BooleanField(default=True)
+    error_message = models.TextField(blank=True)
+    brand_id = models.IntegerField(null=True, blank=True)
+    brand_name = models.CharField(max_length=200, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'prompt_executions'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', 'prompt_type', '-created_at']),
+            models.Index(fields=['user', '-created_at']),
+        ]
+        verbose_name = 'Prompt Execution'
+        verbose_name_plural = 'Prompt Executions'
+
+    def __str__(self):
+        tag = '✦' if self.was_override else '·'
+        return f'{self.user.username} {tag} {self.prompt_type} · {self.created_at:%Y-%m-%d %H:%M}'
 
 
 # ============================================================
@@ -907,3 +984,82 @@ class ExpenseEntry(models.Model):
 
     def __str__(self):
         return f'{self.get_category_display()} · ${self.amount_usd} · {self.incurred_on}'
+
+
+# ============================================================
+# EMAIL OTP — first-time signup verification
+# ============================================================
+
+class EmailOTP(models.Model):
+    """One-time 6-digit code emailed at signup, valid for 60 seconds.
+
+    A user may have many rows over their lifetime; only the most recent
+    unused, unexpired one is honoured. `verify()` is single-use — once a
+    code matches it's marked used so it can't be replayed.
+    """
+
+    CODE_TTL_SECONDS = 60
+    MAX_ATTEMPTS = 5
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='email_otps')
+    code = models.CharField(max_length=6, db_index=True)
+    is_used = models.BooleanField(default=False)
+    attempts = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+
+    class Meta:
+        db_table = 'email_otps'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', '-created_at']),
+        ]
+
+    def __str__(self):
+        return f'OTP for {self.user.username} (expires {self.expires_at:%H:%M:%S})'
+
+    @property
+    def is_expired(self) -> bool:
+        return timezone.now() >= self.expires_at
+
+    @classmethod
+    def issue(cls, user) -> 'EmailOTP':
+        """Invalidate any prior outstanding codes and create a fresh one."""
+        import secrets
+        cls.objects.filter(user=user, is_used=False).update(is_used=True)
+        code = f'{secrets.randbelow(1_000_000):06d}'
+        return cls.objects.create(
+            user=user,
+            code=code,
+            expires_at=timezone.now() + timedelta(seconds=cls.CODE_TTL_SECONDS),
+        )
+
+    @classmethod
+    def verify(cls, user, code: str) -> tuple[bool, str]:
+        """Returns (ok, message). On success the OTP is marked used."""
+        if not code or not code.strip().isdigit() or len(code.strip()) != 6:
+            return False, 'Enter the 6-digit code from your email.'
+
+        otp = cls.objects.filter(user=user, is_used=False).order_by('-created_at').first()
+        if not otp:
+            return False, 'No active code. Request a new one.'
+
+        if otp.is_expired:
+            otp.is_used = True
+            otp.save(update_fields=['is_used'])
+            return False, 'Code expired. Request a new one.'
+
+        if otp.attempts >= cls.MAX_ATTEMPTS:
+            otp.is_used = True
+            otp.save(update_fields=['is_used'])
+            return False, 'Too many wrong attempts. Request a new code.'
+
+        if otp.code != code.strip():
+            otp.attempts += 1
+            otp.save(update_fields=['attempts'])
+            remaining = cls.MAX_ATTEMPTS - otp.attempts
+            return False, f'Wrong code. {remaining} attempt(s) left.'
+
+        otp.is_used = True
+        otp.save(update_fields=['is_used'])
+        return True, 'ok'

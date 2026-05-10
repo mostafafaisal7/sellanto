@@ -333,7 +333,7 @@ Region: {brand.target_region}
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            deduct_diamonds(user=request.user, feature='compute_times', provider='claude', raw_tokens=llm_result.tokens_used if hasattr(llm_result, 'tokens_used') else 0)
+            deduct_diamonds(user=request.user, feature='compute_times', result=llm_result)
 
             result = json.loads(llm_result.content)
             recs = result.get('recommendations', [])

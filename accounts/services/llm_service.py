@@ -70,7 +70,11 @@ class LLMResponse:
     content: str = ''
     model: str = ''
     provider: str = ''
-    tokens_used: int = 0
+    tokens_used: int = 0          # total = input + output (back-compat)
+    input_tokens: int = 0         # exact prompt/input tokens from provider
+    output_tokens: int = 0        # exact completion/output tokens from provider
+    cache_read_tokens: int = 0    # cached input tokens (Claude prompt cache hits)
+    cache_write_tokens: int = 0   # cache write tokens
     finish_reason: str = ''
     error: str = ''
     raw_response: Any = None
@@ -302,10 +306,17 @@ class UnifiedLLMService:
                     content = content[:-3]
                 content = content.strip()
 
-            # Calculate token usage
-            tokens_used = 0
+            # Exact token usage (Anthropic returns input/output separately)
+            input_tokens = 0
+            output_tokens = 0
+            cache_read = 0
+            cache_write = 0
             if resp.usage:
-                tokens_used = resp.usage.input_tokens + resp.usage.output_tokens
+                input_tokens = getattr(resp.usage, 'input_tokens', 0) or 0
+                output_tokens = getattr(resp.usage, 'output_tokens', 0) or 0
+                cache_read = getattr(resp.usage, 'cache_read_input_tokens', 0) or 0
+                cache_write = getattr(resp.usage, 'cache_creation_input_tokens', 0) or 0
+            tokens_used = input_tokens + output_tokens
 
             return LLMResponse(
                 success=True,
@@ -313,6 +324,10 @@ class UnifiedLLMService:
                 model=resp.model,
                 provider='claude',
                 tokens_used=tokens_used,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                cache_read_tokens=cache_read,
+                cache_write_tokens=cache_write,
                 finish_reason=resp.stop_reason or '',
                 raw_response=resp,
                 thinking=thinking_text,
@@ -341,12 +356,27 @@ class UnifiedLLMService:
 
             resp = client.chat.completions.create(**params)
 
+            # Exact token usage (OpenAI returns prompt/completion separately)
+            input_tokens = 0
+            output_tokens = 0
+            cache_read = 0
+            if resp.usage:
+                input_tokens = getattr(resp.usage, 'prompt_tokens', 0) or 0
+                output_tokens = getattr(resp.usage, 'completion_tokens', 0) or 0
+                # OpenAI prompt cache hits (if available)
+                pt_details = getattr(resp.usage, 'prompt_tokens_details', None)
+                if pt_details is not None:
+                    cache_read = getattr(pt_details, 'cached_tokens', 0) or 0
+
             return LLMResponse(
                 success=True,
                 content=resp.choices[0].message.content or '',
                 model=resp.model,
                 provider='openai',
-                tokens_used=resp.usage.total_tokens if resp.usage else 0,
+                tokens_used=(resp.usage.total_tokens if resp.usage else 0),
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                cache_read_tokens=cache_read,
                 finish_reason=resp.choices[0].finish_reason or '',
                 raw_response=resp,
             )
@@ -413,9 +443,12 @@ class UnifiedLLMService:
                     content = content[:-3]
                 content = content.strip()
 
-            # Token usage
+            # Exact token usage (Gemini returns prompt/candidates separately)
             usage = result.get('usageMetadata', {})
-            tokens = usage.get('promptTokenCount', 0) + usage.get('candidatesTokenCount', 0)
+            input_tokens = usage.get('promptTokenCount', 0) or 0
+            output_tokens = usage.get('candidatesTokenCount', 0) or 0
+            cache_read = usage.get('cachedContentTokenCount', 0) or 0
+            tokens = input_tokens + output_tokens
 
             finish = candidates[0].get('finishReason', '') if candidates else ''
 
@@ -425,6 +458,9 @@ class UnifiedLLMService:
                 model=model,
                 provider='gemini',
                 tokens_used=tokens,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                cache_read_tokens=cache_read,
                 finish_reason=finish,
                 raw_response=result,
             )

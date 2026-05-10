@@ -62,6 +62,8 @@ urlpatterns = [
     path('auth/logout/', views.LogoutView.as_view(), name='api-logout'),
     path('auth/refresh/', TokenRefreshView.as_view(), name='api-token-refresh'),
     path('auth/me/', views.CurrentUserView.as_view(), name='api-current-user'),
+    path('auth/verify-otp/', views.VerifyOTPView.as_view(), name='api-verify-otp'),
+    path('auth/resend-otp/', views.ResendOTPView.as_view(), name='api-resend-otp'),
 
     # User Profile endpoints
     path('profile/', views.UserProfileView.as_view(), name='api-profile'),
@@ -276,6 +278,9 @@ urlpatterns = [
     path('admin/users/<int:user_id>/prompt-overrides/<str:prompt_type>/audit/',
          admin_views.AdminPromptOverrideAuditView.as_view(),
          name='api-admin-prompt-override-audit'),
+    path('admin/users/<int:user_id>/prompt-executions/',
+         admin_views.AdminPromptExecutionHistoryView.as_view(),
+         name='api-admin-prompt-executions'),
     path('admin/conversations/<int:conv_id>/messages/', admin_views.AdminConversationMessagesView.as_view(), name='api-admin-conv-messages'),
     path('admin/bulk-approve/', admin_views.AdminBulkApproveView.as_view(), name='api-admin-bulk-approve'),
 
@@ -308,6 +313,7 @@ urlpatterns = [
     path('admin/finance/revenue/', finance_views.RevenueListView.as_view(), name='api-admin-finance-revenue'),
     path('admin/finance/expenses/', finance_views.ExpenseListView.as_view(), name='api-admin-finance-expenses'),
     path('admin/finance/expenses/<int:expense_id>/', finance_views.ExpenseDetailView.as_view(), name='api-admin-finance-expense-detail'),
+    path('admin/finance/auto-expenses/', finance_views.AutoExpensesView.as_view(), name='api-admin-finance-auto-expenses'),
 
     # Diamond Admin endpoints
     path('admin/users/<int:user_id>/recharge/', diamond_views.AdminRechargeView.as_view(), name='api-admin-recharge'),

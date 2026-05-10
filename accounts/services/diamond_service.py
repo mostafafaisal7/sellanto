@@ -152,11 +152,28 @@ def pre_check(user, feature, **kwargs):
 
 
 def deduct_diamonds(user, feature, provider='', raw_tokens=0,
-                    model_used='', raw_cost_usd=0, **kwargs):
+                    model_used='', raw_cost_usd=0, result=None,
+                    input_tokens=0, output_tokens=0,
+                    cache_read_tokens=0, cache_write_tokens=0,
+                    media_count=0, duration_seconds=0, **kwargs):
     """Deduct diamonds after a successful AI call.
 
     Uses SELECT FOR UPDATE to prevent race conditions and ensure ACID compliance.
     Creates an immutable DiamondTransaction ledger entry.
+
+    Args:
+        user, feature: required.
+        provider, raw_tokens, model_used, raw_cost_usd: explicit metadata.
+        input_tokens, output_tokens: exact prompt/completion token split — used
+            for 100% accurate cost calculation (Claude $3 in / $15 out etc).
+        cache_read_tokens, cache_write_tokens: prompt cache metrics for
+            providers that bill them at different rates.
+        media_count: number of images/videos generated (for media features).
+        duration_seconds: video duration (for accurate per-second video cost).
+        result: optional LLMResponse / dict / object. When provided, its
+            `.provider`, `.model`, `.input_tokens`, `.output_tokens`, etc.
+            auto-fill any explicit values left blank — so the actual API path
+            that served the request is recorded accurately for cost reporting.
 
     Returns:
         int: Diamonds deducted
@@ -166,6 +183,39 @@ def deduct_diamonds(user, feature, provider='', raw_tokens=0,
     """
     from accounts.models import DiamondWallet, DiamondTransaction
     from django.db import transaction
+
+    # Auto-fill from LLMResponse / dict if provided
+    if result is not None:
+        def _attr(obj, name, default=''):
+            if isinstance(obj, dict):
+                return obj.get(name, default)
+            return getattr(obj, name, default)
+
+        if not provider:
+            provider = _attr(result, 'provider', '') or provider
+        if not model_used:
+            # LLMResponse uses .model; some callers may use .model_used
+            model_used = _attr(result, 'model', '') or _attr(result, 'model_used', '') or model_used
+        if not input_tokens:
+            input_tokens = _attr(result, 'input_tokens', 0) or input_tokens
+        if not output_tokens:
+            output_tokens = _attr(result, 'output_tokens', 0) or output_tokens
+        if not cache_read_tokens:
+            cache_read_tokens = _attr(result, 'cache_read_tokens', 0) or cache_read_tokens
+        if not cache_write_tokens:
+            cache_write_tokens = _attr(result, 'cache_write_tokens', 0) or cache_write_tokens
+        if not raw_tokens:
+            raw_tokens = _attr(result, 'tokens_used', 0) or raw_tokens
+        if not raw_cost_usd:
+            raw_cost_usd = _attr(result, 'cost_usd', 0) or _attr(result, 'raw_cost_usd', 0) or raw_cost_usd
+        if not media_count:
+            media_count = _attr(result, 'media_count', 0) or media_count
+        if not duration_seconds:
+            duration_seconds = _attr(result, 'duration', 0) or _attr(result, 'duration_seconds', 0) or duration_seconds
+
+    # Derive total tokens from split if not given explicitly
+    if not raw_tokens and (input_tokens or output_tokens):
+        raw_tokens = input_tokens + output_tokens
 
     cost = get_diamond_cost(feature, **kwargs)
 
@@ -186,7 +236,7 @@ def deduct_diamonds(user, feature, provider='', raw_tokens=0,
         wallet.total_spent += cost
         wallet.save()
 
-        # Create immutable transaction record
+        # Create immutable transaction record with full cost metadata
         DiamondTransaction.objects.create(
             user=user,
             amount=-cost,
@@ -195,6 +245,12 @@ def deduct_diamonds(user, feature, provider='', raw_tokens=0,
             feature=feature,
             provider=provider,
             raw_tokens=raw_tokens,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cache_read_tokens=cache_read_tokens,
+            cache_write_tokens=cache_write_tokens,
+            media_count=media_count,
+            duration_seconds=duration_seconds,
             model_used=model_used,
             raw_cost_usd=raw_cost_usd,
         )

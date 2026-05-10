@@ -54,6 +54,7 @@ export interface CategoryBreakdown {
   category: ExpenseCategory;
   label: string;
   total: string;
+  auto_total?: string; // portion auto-calculated from API usage
   count: number;
 }
 
@@ -61,6 +62,8 @@ export interface FinanceSummary {
   window: { from: string; to: string };
   revenue_usd: string;
   expense_usd: string;
+  manual_expense_usd?: string;
+  auto_expense_usd?: string;
   net_profit_usd: string;
   revenue_count: number;
   expense_count: number;
@@ -68,6 +71,74 @@ export interface FinanceSummary {
   expense_by_category: CategoryBreakdown[];
   recent_revenue: RevenueEntry[];
   recent_expenses: ExpenseEntry[];
+}
+
+// ── Auto-calculated API expenses (from DiamondTransaction + apiModelCost.md) ──
+
+export type CostType = 'text' | 'image' | 'video' | 'voice';
+
+export interface AutoMonthEntry {
+  month: string;
+  total: string;
+  count: number;
+  by_category: Record<string, string>;
+}
+
+export interface AutoCategoryEntry {
+  category: ExpenseCategory;
+  label: string;
+  total: string;
+  count: number;
+}
+
+export interface AutoFeatureEntry {
+  feature: string;
+  cost_type: CostType;
+  category: ExpenseCategory;
+  total: string;
+  count: number;
+  tokens: number;
+}
+
+export interface AutoCostTypeEntry {
+  cost_type: CostType;
+  total: string;
+  count: number;
+}
+
+export interface AutoTopUserEntry {
+  user_id: number;
+  username: string;
+  total: string;
+  count: number;
+}
+
+export interface AutoRecentEntry {
+  id: number;
+  created_at: string;
+  user: string | null;
+  feature: string;
+  cost_type: CostType;
+  provider: string;
+  model: string;
+  category: ExpenseCategory;
+  category_label: string;
+  tokens: number;
+  diamonds: number;
+  cost_usd: string;
+}
+
+export interface AutoExpensesResponse {
+  window: { from: string; to: string };
+  total_usd: string;
+  deduction_count: number;
+  by_month: AutoMonthEntry[];
+  by_category: AutoCategoryEntry[];
+  by_feature: AutoFeatureEntry[];
+  by_cost_type: AutoCostTypeEntry[];
+  top_users: AutoTopUserEntry[];
+  recent: AutoRecentEntry[];
+  rate_source: string;
 }
 
 export interface ExpenseListResponse {
@@ -127,6 +198,18 @@ export const financeService = {
 
   async deleteExpense(id: number): Promise<{ ok: boolean }> {
     const { data } = await api.delete<{ ok: boolean }>(`/admin/finance/expenses/${id}/`);
+    return data;
+  },
+
+  async getAutoExpenses(params?: {
+    from?: string;
+    to?: string;
+    months?: number;
+  }): Promise<AutoExpensesResponse> {
+    const { data } = await api.get<AutoExpensesResponse>(
+      '/admin/finance/auto-expenses/',
+      { params }
+    );
     return data;
   },
 };

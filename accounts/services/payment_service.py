@@ -320,6 +320,14 @@ def submit_payment_request(
     if not sent:
         log.warning('payment_service: admin notification not delivered for #%s', req.id)
 
+    # Send the user a "🎉 payment received, technician verifying ASAP" email.
+    # Best-effort: failures never block the request.
+    try:
+        from accounts.services.email_service import send_payment_pending_email
+        send_payment_pending_email(user, req)
+    except Exception:  # noqa: BLE001
+        log.exception('payment_service: pending-confirmation email failed for #%s', req.id)
+
     return req
 
 

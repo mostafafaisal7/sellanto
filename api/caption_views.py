@@ -182,9 +182,18 @@ Output:
             }, status=402)
 
         try:
+            import time as _time
+            from accounts.services.prompt_resolver import (
+                get_default_full, resolve_prompt as _resolve, save_execution as _save_exec,
+            )
+            _default_caption_system = get_default_full('caption_system')
+            _caption_system_prompt, _caption_sys_was_override = _resolve(
+                request.user, 'caption_system', _default_caption_system, {}, return_meta=True,
+            )
+            _t0 = _time.monotonic()
             llm_result = service.chat_completion(
                 messages=[
-                    {"role": "system", "content": "You are a world-class social media copywriter and brand strategist specializing in high-engagement, conversion-focused content.\n\nYour task is to generate high-quality social media caption variants that feel authentic, strategic, emotionally engaging, and platform-optimized.\n\nYou understand:\n- Audience psychology and scroll-stopping behavior patterns\n- Hook frameworks: question hooks, bold-claim hooks, statistic hooks, story hooks, curiosity-gap hooks, and pattern-interrupt hooks\n- Storytelling frameworks: AIDA (Attention-Interest-Desire-Action), PAS (Problem-Agitate-Solve), BAB (Before-After-Bridge), and open loops\n- Persuasion principles: social proof, urgency, scarcity, reciprocity, authority, and emotional triggers (curiosity, FOMO, aspiration, empathy)\n- Modern social media best practices across all major platforms\n- Brand voice consistency and platform-native writing conventions\n\nYou also generate professional, detailed, and visually descriptive image prompts optimized for DALL-E 3 — specifying subject, composition, lighting, style, mood, color palette, and camera angle for maximum visual impact.\n\nCRITICAL OUTPUT RULES:\n- Return ONLY valid JSON — no markdown, no commentary, no wrapping\n- Follow the JSON schema exactly\n- Ensure captions are natural and human-like\n- Avoid generic or repetitive phrasing\n- Each variant must be clearly different in hook, angle, structure, and persuasion style"},
+                    {"role": "system", "content": _caption_system_prompt},
                     {"role": "user", "content": prompt},
                 ],
                 temperature=0.8,
@@ -192,13 +201,39 @@ Output:
                 response_format={"type": "json_object"},
                 thinking_budget=10000 if think_harder else 0,
             )
+            _latency_ms = int((_time.monotonic() - _t0) * 1000)
+
+            # Log BOTH system and user prompts with their full rendered values
+            _combined_prompt = f"SYSTEM:\n{_caption_system_prompt}\n\nUSER:\n{prompt}"
+            _save_exec(
+                request.user, 'caption_system', _caption_system_prompt,
+                response_received='', was_override=_caption_sys_was_override,
+                model_used=getattr(llm_result, 'model', ''),
+                tokens_in=getattr(llm_result, 'input_tokens', 0),
+                tokens_out=getattr(llm_result, 'output_tokens', 0),
+                latency_ms=_latency_ms, success=llm_result.success,
+                error_message=llm_result.error or '',
+                brand=post.brand if post.brand_id else None,
+            )
+            _save_exec(
+                request.user, 'caption_user', _combined_prompt,
+                response_received=llm_result.content if llm_result.success else '',
+                was_override=False,
+                model_used=getattr(llm_result, 'model', ''),
+                tokens_in=getattr(llm_result, 'input_tokens', 0),
+                tokens_out=getattr(llm_result, 'output_tokens', 0),
+                latency_ms=_latency_ms, success=llm_result.success,
+                error_message=llm_result.error or '',
+                brand=post.brand if post.brand_id else None,
+            )
+
             if not llm_result.success:
                 return Response(
                     {'error': llm_result.error or 'No AI API key configured. Go to Settings to add your OpenAI or Gemini key.'},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            deduct_diamonds(user=request.user, feature='caption', provider='claude', raw_tokens=llm_result.tokens_used if hasattr(llm_result, 'tokens_used') else 0)
+            deduct_diamonds(user=request.user, feature='caption', result=llm_result)
 
             result = json.loads(llm_result.content)
             generated = result.get('captions', [])

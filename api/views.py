@@ -117,7 +117,12 @@ def diamond_gate(user, feature, **kwargs):
 
 @method_decorator(csrf_exempt, name='dispatch')
 class RegisterView(generics.CreateAPIView):
-    """User registration endpoint — returns JWT tokens for immediate login"""
+    """User registration endpoint.
+
+    Creates the user but does NOT return JWT tokens. The user must first enter
+    a 6-digit OTP emailed to them (see VerifyOTPView). This way the email
+    address is verified before they can log in.
+    """
     permission_classes = [AllowAny]
     authentication_classes = []
     serializer_class = RegisterSerializer
@@ -127,16 +132,19 @@ class RegisterView(generics.CreateAPIView):
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
 
-        # Generate JWT tokens so user is logged in immediately
-        refresh = RefreshToken.for_user(user)
+        # Issue OTP and email it. Email failures are non-fatal — the user
+        # can still hit /resend-otp/ if SMTP was misconfigured.
+        from accounts.models import EmailOTP
+        from accounts.services.email_service import send_otp_email
+        otp = EmailOTP.issue(user)
+        send_otp_email(user, otp.code, ttl_seconds=EmailOTP.CODE_TTL_SECONDS)
 
         return Response({
-            'message': 'Registration successful!',
-            'user': UserSerializer(user).data,
-            'tokens': {
-                'access': str(refresh.access_token),
-                'refresh': str(refresh),
-            },
+            'message': 'Verification code sent to your email.',
+            'requires_verification': True,
+            'user_id': user.id,
+            'email': user.email,
+            'otp_ttl_seconds': EmailOTP.CODE_TTL_SECONDS,
         }, status=status.HTTP_201_CREATED)
 
 
@@ -206,22 +214,40 @@ Return ONLY a single JSON object with all 15 Brand DNA fields.
 </output_format>"""
 
                         # Per-user admin override of the brand-DNA prompt
-                        prompt = resolve_prompt(
+                        import time as _bd_time
+                        from accounts.services.prompt_resolver import save_execution as _bd_save_exec
+                        prompt, _bd_was_override = resolve_prompt(
                             request.user, 'brand_dna', prompt,
                             {
                                 'existing_dna': existing_dna,
                                 'website_url': brand.website_url,
                                 'website_content': website_content,
                             },
+                            return_meta=True,
                         )
 
+                        _bd_system = 'You are a brand strategist specializing in enriching brand identity profiles. Your task is to enhance an existing Brand DNA by cross-referencing it with fresh website data — filling gaps, adding specificity, and improving strategic usefulness WITHOUT overwriting the user\'s original input.\n\nPrinciples:\n- User-provided values are sacred — enhance, never replace\n- Empty fields are opportunities — fill them with evidence-based content\n- Thin descriptions should be enriched with specifics from the website\n- The enhanced DNA should be immediately useful for content creation\n\nReturn ONLY valid JSON — no markdown, no commentary.'
+                        _bd_t0 = _bd_time.monotonic()
                         result = service.chat_completion(
                             messages=[
-                                {'role': 'system', 'content': 'You are a brand strategist specializing in enriching brand identity profiles. Your task is to enhance an existing Brand DNA by cross-referencing it with fresh website data — filling gaps, adding specificity, and improving strategic usefulness WITHOUT overwriting the user\'s original input.\n\nPrinciples:\n- User-provided values are sacred — enhance, never replace\n- Empty fields are opportunities — fill them with evidence-based content\n- Thin descriptions should be enriched with specifics from the website\n- The enhanced DNA should be immediately useful for content creation\n\nReturn ONLY valid JSON — no markdown, no commentary.'},
+                                {'role': 'system', 'content': _bd_system},
                                 {'role': 'user', 'content': prompt},
                             ],
                             temperature=0.3,
                             max_tokens=2500,
+                        )
+                        _bd_latency = int((_bd_time.monotonic() - _bd_t0) * 1000)
+                        _bd_save_exec(
+                            request.user, 'brand_dna',
+                            f"SYSTEM:\n{_bd_system}\n\nUSER:\n{prompt}",
+                            response_received=(result.content if result.success else ''),
+                            was_override=_bd_was_override,
+                            model_used=getattr(result, 'model', ''),
+                            tokens_in=getattr(result, 'input_tokens', 0),
+                            tokens_out=getattr(result, 'output_tokens', 0),
+                            latency_ms=_bd_latency, success=result.success,
+                            error_message=result.error or '',
+                            brand=brand,
                         )
                         if not result.success:
                             raise Exception(result.error)
@@ -248,20 +274,23 @@ Return ONLY a single JSON object with all 15 Brand DNA fields.
             except Exception:
                 pass  # AI enhancement is best-effort; structured DNA is already saved
 
-        # Generate JWT tokens so user is logged in immediately
-        refresh = RefreshToken.for_user(user)
+        # Issue OTP and email it. JWT tokens are NOT returned here — the user
+        # must verify the OTP before they can log in (see VerifyOTPView).
+        from accounts.models import EmailOTP
+        from accounts.services.email_service import send_otp_email
+        otp = EmailOTP.issue(user)
+        send_otp_email(user, otp.code, ttl_seconds=EmailOTP.CODE_TTL_SECONDS)
 
         return Response({
-            'message': 'Registration successful!',
-            'user': UserSerializer(user).data,
+            'message': 'Verification code sent to your email.',
+            'requires_verification': True,
+            'user_id': user.id,
+            'email': user.email,
+            'otp_ttl_seconds': EmailOTP.CODE_TTL_SECONDS,
             'workspace_id': workspace.id,
             'brand_id': brand.id,
             'brand_dna': brand.brand_dna,
             'ai_enhanced': ai_enhanced,
-            'tokens': {
-                'refresh': str(refresh),
-                'access': str(refresh.access_token),
-            },
         }, status=status.HTTP_201_CREATED)
 
 
@@ -286,15 +315,24 @@ class LoginView(APIView):
                 status=status.HTTP_401_UNAUTHORIZED
             )
 
-        # Approval check removed to allow connection
-        # try:
-        #     if not user.is_superuser and not user.profile.is_approved:
-        #         return Response(
-        #             {'error': 'Your account is pending approval'},
-        #             status=status.HTTP_403_FORBIDDEN
-        #         )
-        # except UserProfile.DoesNotExist:
-        #     pass
+        # Block login until first-time email OTP has been verified. Staff/
+        # superusers (existing admin accounts pre-OTP feature) skip the gate.
+        try:
+            profile = user.profile
+        except Exception:
+            profile = None
+        if profile and not profile.email_verified and not (user.is_staff or user.is_superuser):
+            from accounts.models import EmailOTP
+            from accounts.services.email_service import send_otp_email
+            otp = EmailOTP.issue(user)
+            send_otp_email(user, otp.code, ttl_seconds=EmailOTP.CODE_TTL_SECONDS)
+            return Response({
+                'error': 'Email not verified. Check your inbox for a 6-digit code.',
+                'requires_verification': True,
+                'user_id': user.id,
+                'email': user.email,
+                'otp_ttl_seconds': EmailOTP.CODE_TTL_SECONDS,
+            }, status=status.HTTP_403_FORBIDDEN)
 
         # Generate tokens
         refresh = RefreshToken.for_user(user)
@@ -305,6 +343,108 @@ class LoginView(APIView):
                 'access': str(refresh.access_token),
                 'refresh': str(refresh),
             }
+        })
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class VerifyOTPView(APIView):
+    """POST /api/v1/auth/verify-otp/   { user_id, code }
+
+    Validates the 6-digit code emailed at signup. On success: marks the
+    user's profile as email_verified, sends the welcome email, and returns
+    JWT tokens so the SPA can log them in immediately.
+    """
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def post(self, request):
+        from accounts.models import EmailOTP
+        from accounts.services.email_service import send_welcome_email
+
+        data = request.data or {}
+        user_id = data.get('user_id')
+        code = (data.get('code') or '').strip()
+
+        if not user_id or not code:
+            return Response(
+                {'error': 'user_id and code are required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            user = User.objects.get(id=int(user_id))
+        except (User.DoesNotExist, ValueError, TypeError):
+            return Response(
+                {'error': 'User not found.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        ok, message = EmailOTP.verify(user, code)
+        if not ok:
+            return Response({'error': message}, status=status.HTTP_400_BAD_REQUEST)
+
+        # First-time success: flip the flag and send the welcome email.
+        try:
+            profile = user.profile
+            already_verified = profile.email_verified
+            if not already_verified:
+                profile.email_verified = True
+                profile.save(update_fields=['email_verified'])
+        except Exception:
+            already_verified = False
+
+        if not already_verified:
+            send_welcome_email(user)
+
+        refresh = RefreshToken.for_user(user)
+        return Response({
+            'message': 'Email verified.',
+            'user': UserSerializer(user).data,
+            'tokens': {
+                'access': str(refresh.access_token),
+                'refresh': str(refresh),
+            },
+        })
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class ResendOTPView(APIView):
+    """POST /api/v1/auth/resend-otp/   { user_id }
+
+    Issues a fresh 60-second OTP and emails it. Existing unused codes for
+    the same user are invalidated by EmailOTP.issue().
+    """
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def post(self, request):
+        from accounts.models import EmailOTP
+        from accounts.services.email_service import send_otp_email
+
+        data = request.data or {}
+        user_id = data.get('user_id')
+        if not user_id:
+            return Response(
+                {'error': 'user_id is required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            user = User.objects.get(id=int(user_id))
+        except (User.DoesNotExist, ValueError, TypeError):
+            return Response(
+                {'error': 'User not found.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        otp = EmailOTP.issue(user)
+        sent = send_otp_email(user, otp.code, ttl_seconds=EmailOTP.CODE_TTL_SECONDS)
+
+        return Response({
+            'message': 'A new code has been sent to your email.' if sent
+                       else 'Code generated, but email could not be sent.',
+            'otp_ttl_seconds': EmailOTP.CODE_TTL_SECONDS,
+            'email_sent': sent,
         })
 
 
@@ -772,13 +912,8 @@ def generate_caption(request):
             api_settings.total_generations += 1
             api_settings.save()
 
-            # Deduct Diamond Tokens
-            deduct_diamonds(
-                user=request.user, feature='caption',
-                provider=result.get('provider', 'claude'),
-                raw_tokens=result.get('tokens_used', 0),
-                model_used=result.get('model_used', ''),
-            )
+            # Deduct Diamond Tokens (auto-extracts provider/model/tokens from result dict)
+            deduct_diamonds(user=request.user, feature='caption', result=result)
         else:
             caption_gen.status = 'failed'
             caption_gen.error_message = result.get('error', 'Unknown error')
@@ -853,13 +988,8 @@ def regenerate_caption(request, pk):
             caption_gen.tokens_used += result.get('tokens_used', 0)
             caption_gen.save()
 
-            # Deduct Diamond Tokens
-            deduct_diamonds(
-                user=request.user, feature='caption_regenerate',
-                provider=result.get('provider', 'openai'),
-                raw_tokens=result.get('tokens_used', 0),
-                model_used=result.get('model_used', ''),
-            )
+            # Deduct Diamond Tokens (auto-extracts provider/model/tokens from result dict)
+            deduct_diamonds(user=request.user, feature='caption_regenerate', result=result)
 
             return Response({
                 'success': True,
@@ -1301,14 +1431,20 @@ def refine_image_prompt(request):
         )
 
         # Per-user admin override of the image-refiner system prompt
-        system_message = resolve_prompt(
+        import time as _time_ir
+        from accounts.services.prompt_resolver import (
+            resolve_prompt as _ir_resolve, save_execution as _ir_save_exec,
+        )
+        system_message, _ir_was_override = _ir_resolve(
             request.user, 'image_refiner', system_message,
             {'context_block': context_block, 'user_prompt': user_prompt},
+            return_meta=True,
         )
 
         if override_prompt:
             user_message = override_prompt
 
+        _t0 = _time_ir.monotonic()
         result = service.chat_completion(
             messages=[
                 {"role": "system", "content": system_message},
@@ -1318,17 +1454,26 @@ def refine_image_prompt(request):
             max_tokens=600 if think_harder else 300,
             thinking_budget=10000 if think_harder else 0,
         )
+        _ir_latency_ms = int((_time_ir.monotonic() - _t0) * 1000)
+
+        _ir_save_exec(
+            request.user, 'image_refiner',
+            f"SYSTEM:\n{system_message}\n\nUSER:\n{user_message}",
+            response_received=(result.content if result.success else ''),
+            was_override=_ir_was_override,
+            model_used=getattr(result, 'model', ''),
+            tokens_in=getattr(result, 'input_tokens', 0),
+            tokens_out=getattr(result, 'output_tokens', 0),
+            latency_ms=_ir_latency_ms, success=result.success,
+            error_message=result.error or '',
+        )
+
         if not result.success:
             return Response({'error': result.error}, status=status.HTTP_400_BAD_REQUEST)
         refined_prompt = result.content.strip()
 
-        # Deduct Diamond Tokens
-        deduct_diamonds(
-            user=request.user, feature='refine_prompt',
-            provider=getattr(result, 'provider', 'openai'),
-            raw_tokens=getattr(result, 'tokens_used', 0),
-            model_used=getattr(result, 'model_used', ''),
-        )
+        # Deduct Diamond Tokens (auto-extracts provider/model/tokens from LLMResponse)
+        deduct_diamonds(user=request.user, feature='refine_prompt', result=result)
 
         return Response({'refined_prompt': refined_prompt, 'used_prompt': f"SYSTEM:\n{system_message}\n\nUSER:\n{user_message}"})
 
@@ -1686,14 +1831,12 @@ def generate_image(request):
             generation2.sibling_generation = generation
             generation2.save(update_fields=['sibling_generation'])
 
-            # Deduct diamonds for both
+            # Deduct diamonds for both — captures actual model + count
             for res in [result1, result2]:
                 if res.get('success'):
                     deduct_diamonds(
-                        user=request.user, feature='image',
-                        provider=res.get('provider', 'openai'),
-                        raw_tokens=res.get('tokens_used', 0),
-                        model_used=res.get('model_used', ''),
+                        user=request.user, feature='image', result=res,
+                        media_count=1,
                     )
 
             # Update usage stats (2 images)
@@ -1740,12 +1883,7 @@ def generate_image(request):
                     img_settings.gemini_images_generated += 1
                 img_settings.save()
 
-                deduct_diamonds(
-                    user=request.user, feature='image',
-                    provider=result.get('provider', 'openai'),
-                    raw_tokens=result.get('tokens_used', 0),
-                    model_used=result.get('model_used', ''),
-                )
+                deduct_diamonds(user=request.user, feature='image', result=result, media_count=1)
 
                 return Response(ImageGenerationSerializer(generation, context={'request': request}).data)
             else:
@@ -2228,17 +2366,43 @@ Return ONLY a single JSON object with all 15 fields as keys.
 - Return valid JSON only.
 </constraints>"""
 
+            # Per-user admin override of brand_dna_website prompt
+            import time as _time
+            from accounts.services.prompt_resolver import (
+                resolve_prompt as _resolve_dna, save_execution as _save_dna_exec,
+            )
+            prompt, _dna_was_override = _resolve_dna(
+                request.user, 'brand_dna_website', prompt,
+                {'url': url, 'page_title': page_data['title'], 'page_content': page_data['content']},
+                return_meta=True,
+            )
             if override_prompt:
                 prompt = override_prompt
 
+            _dna_system = 'You are a senior brand strategist who extracts comprehensive brand identity profiles from website content. You combine analytical precision with strategic intuition to build Brand DNA profiles that power content creation.\n\nYour approach:\n- You read website copy the way a strategist reads — looking for positioning, messaging hierarchy, value propositions, and audience signals\n- You distinguish between what a brand SAYS and what it MEANS\n- You extract implicit signals (tone of voice from writing style, target audience from language choices, values from what they emphasize)\n- You are specific and detailed — "professional" is not a useful brand voice description; "authoritative but approachable, uses industry jargon sparingly, favors short sentences and active voice" IS\n\nCRITICAL: Base ALL analysis on the actual page content provided. Clearly distinguish between directly stated facts and reasonable inferences.\n\nReturn ONLY valid JSON — no markdown, no commentary.'
+            _t0 = _time.monotonic()
             result = service.chat_completion(
                 messages=[
-                    {'role': 'system', 'content': 'You are a senior brand strategist who extracts comprehensive brand identity profiles from website content. You combine analytical precision with strategic intuition to build Brand DNA profiles that power content creation.\n\nYour approach:\n- You read website copy the way a strategist reads — looking for positioning, messaging hierarchy, value propositions, and audience signals\n- You distinguish between what a brand SAYS and what it MEANS\n- You extract implicit signals (tone of voice from writing style, target audience from language choices, values from what they emphasize)\n- You are specific and detailed — "professional" is not a useful brand voice description; "authoritative but approachable, uses industry jargon sparingly, favors short sentences and active voice" IS\n\nCRITICAL: Base ALL analysis on the actual page content provided. Clearly distinguish between directly stated facts and reasonable inferences.\n\nReturn ONLY valid JSON — no markdown, no commentary.'},
+                    {'role': 'system', 'content': _dna_system},
                     {'role': 'user', 'content': prompt},
                 ],
                 temperature=0.3,
                 max_tokens=5000 if think_harder else 2500,
                 thinking_budget=10000 if think_harder else 0,
+            )
+            _latency_ms = int((_time.monotonic() - _t0) * 1000)
+
+            _save_dna_exec(
+                request.user, 'brand_dna_website',
+                f"SYSTEM:\n{_dna_system}\n\nUSER:\n{prompt}",
+                response_received=(result.content if result.success else ''),
+                was_override=_dna_was_override,
+                model_used=getattr(result, 'model', ''),
+                tokens_in=getattr(result, 'input_tokens', 0),
+                tokens_out=getattr(result, 'output_tokens', 0),
+                latency_ms=_latency_ms, success=result.success,
+                error_message=result.error or '',
+                brand=brand,
             )
 
             if not result.success:
@@ -2288,13 +2452,8 @@ Return ONLY a single JSON object with all 15 fields as keys.
             from brands.models import PromptHistory
             PromptHistory.save_prompt(brand, 'brand_dna', prompt)
 
-            # Deduct Diamond Tokens
-            deduct_diamonds(
-                user=request.user, feature='brand_dna',
-                provider=getattr(result, 'provider', 'openai'),
-                raw_tokens=getattr(result, 'tokens_used', 0),
-                model_used=getattr(result, 'model_used', ''),
-            )
+            # Deduct Diamond Tokens (auto-extracts provider/model/tokens from LLMResponse)
+            deduct_diamonds(user=request.user, feature='brand_dna', result=result)
 
             return Response({
                 'success': True,
@@ -2726,8 +2885,15 @@ class SupportChatView(APIView):
             # Get RAG context from uploaded knowledge documents
             rag_context = self._get_rag_context(latest_user_msg) if latest_user_msg else ''
 
-            # Build system prompt with RAG context
+            # Build system prompt with RAG context — allow admin override
+            import time as _time
+            from accounts.services.prompt_resolver import (
+                resolve_prompt as _sup_resolve, save_execution as _sup_save_exec,
+            )
             system_prompt = SUPPORT_SYSTEM_PROMPT
+            system_prompt, _sup_was_override = _sup_resolve(
+                request.user, 'support_chat', system_prompt, {}, return_meta=True,
+            )
             if rag_context:
                 system_prompt += f"\n\n---\n\n## Additional Knowledge Base\nUse the following information from our knowledge documents to provide more accurate answers:\n\n{rag_context}"
 
@@ -2739,11 +2905,27 @@ class SupportChatView(APIView):
                 if role in ('user', 'assistant') and content:
                     api_messages.append({'role': role, 'content': content})
 
+            _t0 = _time.monotonic()
             result = service.chat_completion(
                 messages=api_messages,
                 temperature=0.7,
                 max_tokens=2000 if think_harder else 1000,
                 thinking_budget=10000 if think_harder else 0,
+            )
+            _latency_ms = int((_time.monotonic() - _t0) * 1000)
+
+            # Build prompt-sent snapshot (system + last user message for compactness)
+            _last_user = latest_user_msg or '(no message)'
+            _sup_save_exec(
+                request.user, 'support_chat',
+                f"SYSTEM:\n{system_prompt}\n\nUSER:\n{_last_user}",
+                response_received=(result.content if result.success else ''),
+                was_override=_sup_was_override,
+                model_used=getattr(result, 'model', ''),
+                tokens_in=getattr(result, 'input_tokens', 0),
+                tokens_out=getattr(result, 'output_tokens', 0),
+                latency_ms=_latency_ms, success=result.success,
+                error_message=result.error or '',
             )
 
             if not result.success:
@@ -2752,9 +2934,7 @@ class SupportChatView(APIView):
             # Deduct Diamond Tokens
             deduct_diamonds(
                 user=request.user, feature='support_chat',
-                provider=getattr(result, 'provider', 'openai'),
-                raw_tokens=getattr(result, 'tokens_used', 0),
-                model_used=getattr(result, 'model_used', ''),
+                result=result,
             )
 
             return Response({
@@ -3748,6 +3928,24 @@ class VideoGenerateAPIView(APIView):
                 video_gen.brand_enhanced_prompt = result.get('enhanced_prompt', '')
                 video_gen.status = 'completed'
                 video_gen.save()
+
+                # Track exact API cost: actual Veo model used + exact duration
+                actual_model = result.get('model_used', '') or 'veo-3.1-generate-preview'
+                try:
+                    from accounts.services.diamond_service import (
+                        deduct_diamonds as _deduct_video,
+                        InsufficientDiamondsError as _InsufErr,
+                    )
+                    _deduct_video(
+                        user=request.user,
+                        feature=f'video_{duration}s',
+                        provider='gemini',
+                        model_used=actual_model,
+                        media_count=1,
+                        duration_seconds=duration,
+                    )
+                except Exception:
+                    pass  # Logging-only; don't fail the response
 
                 video_url = None
                 if video_gen.generated_video:

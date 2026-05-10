@@ -9,7 +9,7 @@ from django.db.models import Count, Q
 from django.utils import timezone
 
 from accounts.services.diamond_service import pre_check, deduct_diamonds
-from accounts.services.prompt_resolver import resolve_prompt
+from accounts.services.prompt_resolver import resolve_prompt, save_execution
 
 logger = logging.getLogger(__name__)
 
@@ -492,7 +492,7 @@ Return ONLY valid JSON array — no markdown, no commentary."""},
                 if not result.success:
                     return Response({'error': result.error}, status=status.HTTP_400_BAD_REQUEST)
 
-                deduct_diamonds(user=request.user, feature='competitor_analysis', provider='claude', raw_tokens=result.tokens_used if hasattr(result, 'tokens_used') else 0)
+                deduct_diamonds(user=request.user, feature='competitor_analysis', result=result)
                 last_provider = getattr(result, 'provider', 'claude')
                 last_model = getattr(result, 'model', '')
 
@@ -847,7 +847,9 @@ Return ONLY a JSON array of exactly {count} objects:
             'learning_context': learning_context,
             'count': count,
         }
-        prompt = resolve_prompt(request.user, 'idea_user', prompt, idea_user_vars)
+        prompt, idea_user_was_override = resolve_prompt(
+            request.user, 'idea_user', prompt, idea_user_vars, return_meta=True
+        )
 
         override_prompt = request.data.get('override_prompt', '')
         think_harder = request.data.get('think_harder', False)
@@ -868,8 +870,11 @@ Return ONLY a JSON array of exactly {count} objects:
             from accounts.services.llm_service import get_llm_service
 
             service = get_llm_service(request.user)
-            default_idea_system = 'You are a senior social media strategist and creative director who generates content ideas that are specific, actionable, and strategically grounded.\n\nYour ideas are NOT generic "post about X" suggestions. Each idea is detailed enough that a content creator could execute it without additional briefing.\n\nYour approach combines:\n- Data signals (trending topics, competitor gaps, past performance)\n- Audience psychology (what makes people stop, save, share, and comment)\n- Content strategy (pillar balance, funnel alignment, platform optimization)\n- Creative frameworks (storytelling, contrarian takes, data-driven hooks, behind-the-scenes, social proof, UGC-inspired, educational series)\n\nYou understand that the best content ideas are at the intersection of:\n1. What the brand wants to say\n2. What the audience wants to hear\n3. What the platform rewards\n\nCRITICAL OUTPUT RULES:\n- Return ONLY a valid JSON array — no markdown, no commentary\n- Each idea must be specific enough to execute immediately\n- No duplicate angles or overlapping ideas'
-            idea_system_prompt = resolve_prompt(request.user, 'idea_system', default_idea_system, {})
+            from accounts.services.prompt_resolver import get_default_full
+            default_idea_system = get_default_full('idea_system')
+            idea_system_prompt, idea_sys_was_override = resolve_prompt(
+                request.user, 'idea_system', default_idea_system, {}, return_meta=True
+            )
             result = service.chat_completion(
                 messages=[
                     {'role': 'system', 'content': idea_system_prompt},
@@ -881,9 +886,26 @@ Return ONLY a JSON array of exactly {count} objects:
             )
 
             if not result.success:
+                save_execution(
+                    request.user, 'idea_user',
+                    f"SYSTEM:\n{idea_system_prompt}\n\nUSER:\n{prompt}",
+                    success=False, error_message=result.error,
+                    was_override=idea_user_was_override or idea_sys_was_override,
+                    model_used=result.model, brand=brand,
+                )
                 return Response({'error': result.error}, status=status.HTTP_400_BAD_REQUEST)
 
-            deduct_diamonds(user=request.user, feature='strategy_ideas', provider='claude', raw_tokens=result.tokens_used if hasattr(result, 'tokens_used') else 0)
+            save_execution(
+                request.user, 'idea_user',
+                f"SYSTEM:\n{idea_system_prompt}\n\nUSER:\n{prompt}",
+                response_received=result.content,
+                was_override=idea_user_was_override or idea_sys_was_override,
+                model_used=result.model,
+                tokens_in=result.tokens_used,
+                brand=brand,
+            )
+
+            deduct_diamonds(user=request.user, feature='strategy_ideas', result=result)
 
             import json
             raw = result.content
@@ -1051,9 +1073,14 @@ Return ONLY this JSON:
             }, status=402)
 
         try:
+            from accounts.services.prompt_resolver import get_default_full
+            default_regen_system = get_default_full('idea_regenerate')
+            regen_system, regen_was_override = resolve_prompt(
+                request.user, 'idea_regenerate', default_regen_system, {}, return_meta=True
+            )
             llm_result = service.chat_completion(
                 messages=[
-                    {'role': 'system', 'content': 'You are a creative director who can take any content idea and reimagine it with a completely different creative execution — different hook, different angle, different emotional appeal — while keeping the strategic intent intact.\n\nYou think in terms of creative pivots:\n- If the original was educational, try emotional storytelling\n- If the original asked a question, try a bold, contrarian claim\n- If the original was serious, try humor or relatability\n- If the original was broad, try hyper-specific\n\nCRITICAL OUTPUT RULES:\n- Return ONLY valid JSON — no markdown, no commentary\n- The new version must feel like a brand-new idea, not a rewording'},
+                    {'role': 'system', 'content': regen_system},
                     {'role': 'user', 'content': prompt},
                 ],
                 temperature=0.9,
@@ -1062,9 +1089,25 @@ Return ONLY this JSON:
                 thinking_budget=10000 if think_harder else 0,
             )
             if not llm_result.success:
+                save_execution(
+                    request.user, 'idea_regenerate',
+                    f"SYSTEM:\n{regen_system}\n\nUSER:\n{prompt}",
+                    success=False, error_message=llm_result.error,
+                    was_override=regen_was_override, model_used=llm_result.model,
+                    brand=brand,
+                )
                 return Response({'error': llm_result.error}, status=status.HTTP_400_BAD_REQUEST)
 
-            deduct_diamonds(user=request.user, feature='idea_regenerate', provider='claude', raw_tokens=llm_result.tokens_used if hasattr(llm_result, 'tokens_used') else 0)
+            save_execution(
+                request.user, 'idea_regenerate',
+                f"SYSTEM:\n{regen_system}\n\nUSER:\n{prompt}",
+                response_received=llm_result.content,
+                was_override=regen_was_override,
+                model_used=llm_result.model,
+                tokens_in=llm_result.tokens_used,
+                brand=brand,
+            )
+            deduct_diamonds(user=request.user, feature='idea_regenerate', result=llm_result)
 
             result = json.loads(llm_result.content)
         except Exception as e:
@@ -1399,7 +1442,7 @@ class SuggestCompetitorsView(APIView):
         try:
             service = get_llm_service(request.user)
 
-            system_prompt = """You are a competitive intelligence researcher with deep knowledge of the global business landscape. You specialize in identifying direct, indirect, and aspirational competitors for brands across industries.
+            default_competitor_system = """You are a competitive intelligence researcher with deep knowledge of the global business landscape. You specialize in identifying direct, indirect, and aspirational competitors for brands across industries.
 
 Your suggestions are ALWAYS real, verifiable companies — never fabricated.
 You prioritize companies that have active, monitorable online presences.
@@ -1407,6 +1450,9 @@ You prioritize companies that have active, monitorable online presences.
 CRITICAL: If you are not confident a company exists or cannot verify its handle/URL, do NOT include it. Accuracy is more important than hitting the requested count.
 
 Return ONLY valid JSON — no markdown, no commentary."""
+            system_prompt, cs_was_override = resolve_prompt(
+                request.user, 'competitor_suggest', default_competitor_system, {}, return_meta=True
+            )
 
             prompt = f"""<task>
 Suggest real competitor companies for competitive analysis and monitoring.
@@ -1472,10 +1518,25 @@ IMPORTANT: Only suggest companies you are confident are real. If unsure about a 
                 thinking_budget=10000 if think_harder else 0,
             )
 
+            full_prompt = f"SYSTEM:\n{system_prompt}\n\nUSER:\n{prompt}"
             if not llm_result.success:
+                save_execution(
+                    request.user, 'competitor_suggest', full_prompt,
+                    success=False, error_message=llm_result.error,
+                    was_override=cs_was_override, model_used=llm_result.model,
+                    brand=brand,
+                )
                 return Response({'error': llm_result.error}, status=status.HTTP_400_BAD_REQUEST)
 
-            deduct_diamonds(user=request.user, feature='competitor_suggest', provider='claude', raw_tokens=llm_result.tokens_used if hasattr(llm_result, 'tokens_used') else 0)
+            save_execution(
+                request.user, 'competitor_suggest', full_prompt,
+                response_received=llm_result.content,
+                was_override=cs_was_override,
+                model_used=llm_result.model,
+                tokens_in=llm_result.tokens_used,
+                brand=brand,
+            )
+            deduct_diamonds(user=request.user, feature='competitor_suggest', result=llm_result)
 
             import json
             result = json.loads(llm_result.content)
@@ -1483,7 +1544,6 @@ IMPORTANT: Only suggest companies you are confident are real. If unsure about a 
 
             # Save prompt to history
             from brands.models import PromptHistory
-            full_prompt = f"SYSTEM:\n{system_prompt}\n\nUSER:\n{prompt}"
             PromptHistory.save_prompt(brand, 'suggest_competitors', full_prompt)
 
             return Response({
@@ -1595,7 +1655,7 @@ The existing {len(existing_pillars)} pillars will be rebalanced so ALL pillars t
             else:
                 pct_instruction = f"Percentages must sum to exactly 100."
 
-            system_prompt = """You are a content strategy architect who designs balanced content pillar frameworks for social media brands. Your pillars are not vague categories — they are strategic content territories that guide what to create, why, and how it serves the brand's goals.
+            default_pillar_system = """You are a content strategy architect who designs balanced content pillar frameworks for social media brands. Your pillars are not vague categories — they are strategic content territories that guide what to create, why, and how it serves the brand's goals.
 
 A great pillar framework:
 - Covers the full content funnel (awareness > consideration > conversion > retention)
@@ -1605,6 +1665,9 @@ A great pillar framework:
 - Is flexible enough to accommodate trends and timely content
 
 Return ONLY valid JSON — no markdown, no commentary."""
+            system_prompt, pillar_was_override = resolve_prompt(
+                request.user, 'pillars_generate', default_pillar_system, {}, return_meta=True
+            )
 
             prompt = f"""<task>
 Generate a content pillar strategy framework for a brand's social media presence.
@@ -1671,10 +1734,25 @@ Existing pillars (DO NOT duplicate): {', '.join(existing_pillars) if existing_pi
                 thinking_budget=10000 if think_harder else 0,
             )
 
+            pillar_full_prompt = f"SYSTEM:\n{system_prompt}\n\nUSER:\n{prompt}"
             if not llm_result.success:
+                save_execution(
+                    request.user, 'pillars_generate', pillar_full_prompt,
+                    success=False, error_message=llm_result.error,
+                    was_override=pillar_was_override, model_used=llm_result.model,
+                    brand=brand,
+                )
                 return Response({'error': llm_result.error}, status=status.HTTP_400_BAD_REQUEST)
 
-            deduct_diamonds(user=request.user, feature='pillar_generation', provider='claude', raw_tokens=llm_result.tokens_used if hasattr(llm_result, 'tokens_used') else 0)
+            save_execution(
+                request.user, 'pillars_generate', pillar_full_prompt,
+                response_received=llm_result.content,
+                was_override=pillar_was_override,
+                model_used=llm_result.model,
+                tokens_in=llm_result.tokens_used,
+                brand=brand,
+            )
+            deduct_diamonds(user=request.user, feature='pillar_generation', result=llm_result)
 
             result = json.loads(llm_result.content)
             pillars_data = result.get('pillars', [])

@@ -10,6 +10,8 @@ from datetime import timedelta, date
 
 from django.utils import timezone
 
+from accounts.services.prompt_resolver import resolve_prompt, save_execution
+
 logger = logging.getLogger(__name__)
 
 
@@ -272,7 +274,7 @@ def generate_trending_for_brand(brand_id, user, override_prompt=None, think_hard
                 parts.append(f"Brand Voice: {dna.get('tone') or dna.get('brand_voice')}")
             dna_summary = '\n'.join(parts)
 
-        system_prompt = """You are a real-time social media trend analyst. You receive REAL Google Trends data and must identify the most relevant trending opportunities for a specific brand.
+        default_system = """You are a real-time social media trend analyst. You receive REAL Google Trends data and must identify the most relevant trending opportunities for a specific brand.
 
 Your job:
 1. Analyze the real-time Google Trends data provided
@@ -287,6 +289,9 @@ You prioritize:
 - Actionability — each topic should clearly suggest content to create
 
 Return ONLY valid JSON — no markdown, no commentary."""
+        system_prompt, was_override = resolve_prompt(
+            user, 'trending_filter', default_system, {}, return_meta=True
+        )
 
         prompt = f"""<context>
 Today's date: {today_str}
@@ -371,7 +376,24 @@ TOP QUERIES (most searched related to brand keywords):
         )
 
         if not llm_result.success:
+            save_execution(
+                user, 'trending_filter',
+                f"SYSTEM:\n{system_prompt}\n\nUSER:\n{prompt}",
+                success=False, error_message=llm_result.error,
+                was_override=was_override, model_used=llm_result.model,
+                brand=brand,
+            )
             raise Exception(llm_result.error)
+
+        save_execution(
+            user, 'trending_filter',
+            f"SYSTEM:\n{system_prompt}\n\nUSER:\n{prompt}",
+            response_received=llm_result.content,
+            was_override=was_override,
+            model_used=llm_result.model,
+            tokens_in=llm_result.tokens_used,
+            brand=brand,
+        )
 
         content = llm_result.content.strip()
         parsed = json.loads(content)
