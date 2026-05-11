@@ -85,6 +85,7 @@ INSTALLED_APPS = [
     'onboarding',
     'brands',
     'video_studio',  # AI Video Generation with Google Veo
+    'ads',  # Paid ads automation (Meta Marketing API + Google Ads API)
 ]
 
 MIDDLEWARE = [

@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { Layout } from './components/layout';
+import { Layout, PublicLayout } from './components/layout';
 import { AdminLayout } from './components/admin/AdminLayout';
 import {
   DashboardPage,
@@ -236,7 +236,10 @@ function App() {
           {/* Dev / Test */}
           <Route path="/test-api" element={<APITestPage />} />
 
-          {/* Info Pages */}
+        </Route>
+
+        {/* Public info pages — accessible without login */}
+        <Route element={<PublicLayout />}>
           <Route path="/about" element={<AboutPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="/terms" element={<TermsPage />} />

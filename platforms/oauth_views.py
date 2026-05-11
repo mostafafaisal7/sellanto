@@ -39,13 +39,15 @@ logger = logging.getLogger(__name__)
 
 # ─── Facebook API Constants ────────────────────────────────────────────────────
 
-FB_GRAPH     = 'https://graph.facebook.com/v18.0'
-FB_AUTH_URL  = 'https://www.facebook.com/v18.0/dialog/oauth'
+FB_GRAPH     = 'https://graph.facebook.com/v21.0'
+FB_AUTH_URL  = 'https://www.facebook.com/v21.0/dialog/oauth'
 FB_TOKEN_URL = f'{FB_GRAPH}/oauth/access_token'
 
-# Permissions for posting + Messenger + Instagram
-# instagram_content_publish requires it to be enabled under
-# Meta Console → App Review → Permissions and Features before use.
+# Permissions for posting + Messenger + Instagram + Ads
+# Ads scopes (ads_management, ads_read, business_management, pages_manage_ads)
+# work in dev tier immediately for the app admin. For non-admin users they
+# require App Review approval (Advanced Access for ads_management) before
+# Meta will surface them on the consent screen for other accounts.
 FB_SCOPES = ','.join([
     'pages_show_list',
     'pages_manage_metadata',
@@ -54,6 +56,11 @@ FB_SCOPES = ','.join([
     'pages_messaging',
     'instagram_basic',
     'instagram_content_publish',
+    # Ads
+    'ads_management',
+    'ads_read',
+    'business_management',
+    'pages_manage_ads',
 ])
 
 

@@ -58,6 +58,13 @@ DIAMOND_COSTS = {
     'prompt_engineer_diagnose': 5,
     'prompt_engineer_reprompt': 5,
     'ai_styles': 5,
+
+    # Paid Ads (Meta + Google) — automation setup cost, ad spend paid direct by user to platform
+    'ads_boost_post': 50,             # boost an organic post via Meta Ads
+    'ads_campaign_create': 100,       # full campaign creation (multi-step)
+    'ads_audience_create': 30,        # upload custom audience / build lookalike
+    'ads_ai_targeting_suggest': 20,   # AI suggests targeting from Brand DNA
+    'ads_insights_pull': 2,           # pull fresh insights (cheap, runs often)
 }
 
 # Plan-based diamond grants

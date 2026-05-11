@@ -339,6 +339,9 @@ urlpatterns = [
     path('magic/posts/<str:industry>/<str:goal>/<str:tone>/<str:platforms>/<str:colors>/',
          views.MagicModeCachedPostsView.as_view(), name='api-magic-cached-posts'),
 
+    # Paid ads automation (Meta + Google Ads) — mounted under /api/v1/ads/
+    path('ads/', include('ads.urls')),
+
     # ViewSet routes
     path('', include(router.urls)),
 ]
