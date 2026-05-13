@@ -482,6 +482,12 @@ def facebook_oauth_callback(request):
 
     logger.info(f'[FB OAuth] Success for {user.username}: {len(connected_pages)} pages, {len(failed_pages)} failed')
 
+    # ── Auto-discover Meta Ad Accounts (best-effort) ──────────────────────────
+    # The long-lived user token grants /me/adaccounts when ads_management or
+    # ads_read scope was approved. Failure is non-fatal — OAuth itself already
+    # succeeded; we just lose ad account auto-population.
+    _auto_discover_ad_accounts(user, long_lived_token)
+
     # ── Auto-setup Messenger (server-side, no frontend roundtrip needed) ──────
     # This runs in the callback itself so Messenger is ready immediately after
     # OAuth — no COOP/postMessage issues, no admin action required.
@@ -920,6 +926,70 @@ def facebook_connection_status(request):
         'missing':  missing,
         'warnings': warnings,
     })
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# HELPERS — Meta Ad Accounts Auto-Discovery
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _auto_discover_ad_accounts(user, long_lived_token):
+    """
+    Calls /me/adaccounts with the user's long-lived token and upserts
+    AdAccount rows. Non-fatal — any failure here does NOT break the OAuth
+    flow (pages and messenger are already saved by the time this runs).
+
+    The same long-lived user token used for Pages also authorizes ad account
+    enumeration when the user approved `ads_management` or `ads_read` on the
+    consent screen. We store it (encrypted) per ad account so the ads service
+    layer can use it without going through OAuth again.
+    """
+    try:
+        from ads.services import meta_ads
+        from ads.services.token_encryption import encrypt_token
+        from ads.models import AdAccount
+
+        accounts_data = meta_ads.list_user_ad_accounts(long_lived_token)
+    except meta_ads.MetaAdsError as e:
+        # Most common: user didn't grant ads_management/ads_read on consent.
+        logger.warning(
+            f'[FB OAuth] Ad account discovery skipped for {user.username}: '
+            f'{e} (code={e.code} subcode={e.subcode})'
+        )
+        return
+    except Exception as e:
+        logger.warning(f'[FB OAuth] Ad account discovery error for {user.username}: {e}')
+        return
+
+    if not accounts_data:
+        logger.info(f'[FB OAuth] No ad accounts found for {user.username}')
+        return
+
+    encrypted = encrypt_token(long_lived_token)
+    saved = 0
+    for a in accounts_data:
+        ext_id = a.get('account_id')
+        if not ext_id:
+            continue
+        try:
+            AdAccount.objects.update_or_create(
+                user=user,
+                provider='meta',
+                external_id=ext_id,
+                defaults={
+                    'name':           a.get('name', ''),
+                    'currency_code':  a.get('currency', ''),
+                    'timezone_name':  a.get('timezone_name', ''),
+                    'business_id':    a.get('business_id', ''),
+                    'encrypted_token': encrypted,
+                    'is_active':      True,
+                    'last_synced_at': timezone.now(),
+                },
+            )
+            saved += 1
+        except Exception as e:
+            logger.error(f'[FB OAuth] AdAccount save failed for {ext_id}: {e}')
+
+    logger.info(f'[FB OAuth] Auto-saved {saved}/{len(accounts_data)} ad accounts for {user.username}')
 
 
 # ══════════════════════════════════════════════════════════════════════════════

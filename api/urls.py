@@ -21,6 +21,7 @@ from . import rbac_views
 from . import diamond_views
 from . import payment_views
 from . import finance_views
+from . import stripe_views
 
 # Create router for viewsets
 router = DefaultRouter()
@@ -64,6 +65,10 @@ urlpatterns = [
     path('auth/me/', views.CurrentUserView.as_view(), name='api-current-user'),
     path('auth/verify-otp/', views.VerifyOTPView.as_view(), name='api-verify-otp'),
     path('auth/resend-otp/', views.ResendOTPView.as_view(), name='api-resend-otp'),
+    path('auth/change-password/', views.ChangePasswordView.as_view(), name='api-change-password'),
+    path('auth/forgot-password/', views.ForgotPasswordRequestView.as_view(), name='api-forgot-password'),
+    path('auth/forgot-password/resend/', views.ForgotPasswordResendView.as_view(), name='api-forgot-password-resend'),
+    path('auth/forgot-password/verify/', views.ForgotPasswordVerifyView.as_view(), name='api-forgot-password-verify'),
 
     # User Profile endpoints
     path('profile/', views.UserProfileView.as_view(), name='api-profile'),
@@ -301,12 +306,89 @@ urlpatterns = [
     # One-click approve/reject from admin email — no auth, token signs the action.
     path('payments/action/<str:token>/', payment_views.payment_action_by_token, name='api-payment-action-by-token'),
 
+    # Billing — Stripe (card-on-file primary)
+    path('billing/stripe/charge/',
+         stripe_views.CreateChargeIntentView.as_view(),
+         name='api-stripe-charge'),
+    path('billing/stripe/charge-saved/',
+         stripe_views.ChargeOffSessionView.as_view(),
+         name='api-stripe-charge-saved'),
+    path('billing/stripe/subscribe/',
+         stripe_views.CreateSubscriptionView.as_view(),
+         name='api-stripe-subscribe'),
+    path('billing/stripe/payment-methods/',
+         stripe_views.PaymentMethodsView.as_view(),
+         name='api-stripe-payment-methods'),
+    path('billing/stripe/payment-methods/<str:pm_id>/',
+         stripe_views.PaymentMethodDetailView.as_view(),
+         name='api-stripe-payment-method-detail'),
+    path('billing/stripe/has-card/',
+         stripe_views.HasCardOnFileView.as_view(),
+         name='api-stripe-has-card'),
+    path('billing/stripe/cancel/',
+         stripe_views.CancelSubscriptionView.as_view(),
+         name='api-stripe-cancel'),
+    path('billing/stripe/session/<str:session_id>/',
+         stripe_views.CheckoutSessionStatusView.as_view(),
+         name='api-stripe-session-status'),
+    path('billing/stripe/topup-catalog/',
+         stripe_views.TopupCatalogView.as_view(),
+         name='api-stripe-topup-catalog'),
+    path('billing/stripe/diamond-rate/',
+         stripe_views.DiamondRateView.as_view(),
+         name='api-stripe-diamond-rate'),
+    path('billing/stripe/webhook/',
+         stripe_views.StripeWebhookView.as_view(),
+         name='api-stripe-webhook'),
+
+    # Billing — Payment history & refunds (user-facing)
+    path('billing/payments/',
+         stripe_views.PaymentHistoryView.as_view(),
+         name='api-billing-payments'),
+    path('billing/refunds/request/',
+         stripe_views.RequestRefundView.as_view(),
+         name='api-billing-refund-request'),
+
+    # Billing — Ad-boost wallet reservation
+    path('billing/boost/reserve/',
+         stripe_views.BoostReserveView.as_view(),
+         name='api-billing-boost-reserve'),
+    path('billing/boost/release/',
+         stripe_views.BoostReleaseView.as_view(),
+         name='api-billing-boost-release'),
+
+    # Admin — refunds queue
+    path('admin/refunds/',
+         admin_views.AdminRefundListView.as_view(),
+         name='api-admin-refunds'),
+    path('admin/refunds/<int:pr_id>/<str:action>/',
+         admin_views.AdminRefundActionView.as_view(),
+         name='api-admin-refund-action'),
+
+    # Admin — Stripe settings test connection
+    path('admin/stripe-settings/test/',
+         admin_views.AdminStripeSettingsTestView.as_view(),
+         name='api-admin-stripe-settings-test'),
+
+    # Billing — Stripe Hosted Checkout (legacy / 3DS fallback path)
+    path('billing/stripe/checkout/',
+         stripe_views.CreatePlanCheckoutView.as_view(),
+         name='api-stripe-checkout'),
+    path('billing/stripe/topup/',
+         stripe_views.CreateTopupCheckoutView.as_view(),
+         name='api-stripe-topup'),
+
     # Payment / Billing — admin
     path('admin/payments/', payment_views.AdminPaymentRequestListView.as_view(), name='api-admin-payments-list'),
     path('admin/payments/<int:payment_id>/approve/', payment_views.AdminPaymentApproveView.as_view(), name='api-admin-payments-approve'),
     path('admin/payments/<int:payment_id>/reject/', payment_views.AdminPaymentRejectView.as_view(), name='api-admin-payments-reject'),
     path('admin/payout-accounts/', payment_views.AdminPayoutAccountListView.as_view(), name='api-admin-payout-accounts'),
     path('admin/payout-accounts/<int:account_id>/', payment_views.AdminPayoutAccountDetailView.as_view(), name='api-admin-payout-account-detail'),
+
+    # Admin Stripe Settings (DB-stored Stripe keys & price IDs)
+    path('admin/stripe-settings/',
+         admin_views.AdminStripeSettingsView.as_view(),
+         name='api-admin-stripe-settings'),
 
     # Admin Finance / Accounting
     path('admin/finance/summary/', finance_views.FinanceSummaryView.as_view(), name='api-admin-finance-summary'),

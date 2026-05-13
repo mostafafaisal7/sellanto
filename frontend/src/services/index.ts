@@ -8,6 +8,7 @@ export { default as imageService } from './imageService';
 export { default as onboardingService } from './onboardingService';
 export { default as diamondService } from './diamondService';
 export { default as subscriptionService } from './subscriptionService';
+export { default as stripeService } from './stripeService';
 export { default as adminPromptService } from './adminPromptService';
 
 // Re-export types for convenience

@@ -6,7 +6,13 @@ import {
   DashboardPage,
   LandingPage,
   LoginPage,
+  ForgotPasswordPage,
   UpgradePage,
+  SuccessPage,
+  CancelPage,
+  BuyDiamondsPage,
+  PaymentMethodsPage,
+  PaymentHistoryPage,
   DiamondAnalyticsPage,
   MyPostsPage,
   CreatePostPage,
@@ -51,6 +57,8 @@ import {
   AdminFacebookSettingsPage,
   AdminPaymentsPage,
   AdminFinancePage,
+  AdminStripeSettingsPage,
+  AdminRefundsPage,
 } from './pages/admin';
 import { LoadingScreen } from './components/ui';
 import { useAuthStore } from './store';
@@ -158,6 +166,10 @@ function App() {
             </PublicRoute>
           }
         />
+        {/* Forgot-password is accessible whether or not the user is signed in —
+            logged-in users can still reach it from the profile page if they
+            don't remember their current password. */}
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
 
         {/* Onboarding route (no layout, full screen) */}
         <Route
@@ -200,6 +212,11 @@ function App() {
         >
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/upgrade" element={<UpgradePage />} />
+          <Route path="/billing/success" element={<SuccessPage />} />
+          <Route path="/billing/cancelled" element={<CancelPage />} />
+          <Route path="/buy-diamonds" element={<BuyDiamondsPage />} />
+          <Route path="/settings/payment-methods" element={<PaymentMethodsPage />} />
+          <Route path="/settings/payments" element={<PaymentHistoryPage />} />
           <Route path="/analytics/diamond" element={<DiamondAnalyticsPage />} />
           <Route path="/posts" element={<MyPostsPage />} />
           <Route path="/posts/drafts" element={<DraftPostsPage />} />
@@ -263,6 +280,8 @@ function App() {
           <Route path="/admin-panel/facebook-settings" element={<AdminFacebookSettingsPage />} />
           <Route path="/admin-panel/payments" element={<AdminPaymentsPage />} />
           <Route path="/admin-panel/finance" element={<AdminFinancePage />} />
+          <Route path="/admin-panel/stripe-settings" element={<AdminStripeSettingsPage />} />
+          <Route path="/admin-panel/refunds" element={<AdminRefundsPage />} />
         </Route>
 
         {/* Catch all - redirect to root (which routes to landing or dashboard) */}

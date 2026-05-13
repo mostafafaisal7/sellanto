@@ -5,3 +5,5 @@ export { AdminAPIKeysPage } from './AdminAPIKeysPage';
 export { AdminFacebookSettingsPage } from './AdminFacebookSettingsPage';
 export { AdminPaymentsPage } from './AdminPaymentsPage';
 export { AdminFinancePage } from './AdminFinancePage';
+export { AdminStripeSettingsPage } from './AdminStripeSettingsPage';
+export { AdminRefundsPage } from './AdminRefundsPage';

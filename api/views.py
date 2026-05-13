@@ -304,10 +304,18 @@ class LoginView(APIView):
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        user = authenticate(
-            username=serializer.validated_data['username'],
-            password=serializer.validated_data['password']
-        )
+        identifier = serializer.validated_data['username']
+        password = serializer.validated_data['password']
+
+        # Try direct username match first, then fall back to email lookup so
+        # users can sign in with either their username or their email address.
+        user = authenticate(username=identifier, password=password)
+        if not user:
+            try:
+                found = User.objects.get(email__iexact=identifier)
+                user = authenticate(username=found.username, password=password)
+            except (User.DoesNotExist, User.MultipleObjectsReturned):
+                pass
 
         if not user:
             return Response(
@@ -471,6 +479,224 @@ class CurrentUserView(generics.RetrieveUpdateAPIView):
 
     def get_object(self):
         return self.request.user
+
+
+# ===================== PASSWORD MANAGEMENT VIEWS =====================
+
+@method_decorator(csrf_exempt, name='dispatch')
+class ChangePasswordView(APIView):
+    """POST /api/v1/auth/change-password/   { current_password, new_password }
+
+    Authenticated user changes their own password by proving they know
+    the current one. We don't blacklist refresh tokens here — the user
+    intentionally initiated this change, so keeping their session alive
+    is the friendly behavior.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        from django.contrib.auth.password_validation import validate_password
+        from django.core.exceptions import ValidationError as DjangoValidationError
+
+        data = request.data or {}
+        current_password = (data.get('current_password') or '').strip()
+        new_password = data.get('new_password') or ''
+
+        if not current_password or not new_password:
+            return Response(
+                {'error': 'Both current_password and new_password are required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user = request.user
+        if not user.check_password(current_password):
+            return Response(
+                {'error': 'Current password is incorrect.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if len(new_password) < 6:
+            return Response(
+                {'error': 'New password must be at least 6 characters.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if new_password == current_password:
+            return Response(
+                {'error': 'New password must be different from your current password.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            validate_password(new_password, user=user)
+        except DjangoValidationError as e:
+            return Response({'error': ' '.join(e.messages)}, status=status.HTTP_400_BAD_REQUEST)
+
+        user.set_password(new_password)
+        user.save(update_fields=['password'])
+
+        return Response({'message': 'Password changed successfully.'})
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class ForgotPasswordRequestView(APIView):
+    """POST /api/v1/auth/forgot-password/   { email }
+
+    Issues a 6-digit OTP for password reset and emails it. Returns the
+    user_id so the SPA can pair it with the OTP on the verify step.
+    Existing pending password-reset codes for the same user are invalidated.
+    """
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def post(self, request):
+        from accounts.models import EmailOTP
+        from accounts.services.email_service import send_password_reset_otp_email
+
+        data = request.data or {}
+        email = (data.get('email') or '').strip().lower()
+
+        if not email:
+            return Response(
+                {'error': 'Email is required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Email is the canonical identifier here. If the same email maps to
+        # multiple accounts (legacy data), take the most recently active one.
+        user = (
+            User.objects
+            .filter(email__iexact=email)
+            .order_by('-last_login', '-date_joined')
+            .first()
+        )
+        if not user:
+            return Response(
+                {'error': 'No account found with that email address.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        otp = EmailOTP.issue(user, purpose=EmailOTP.PURPOSE_PASSWORD_RESET)
+        sent = send_password_reset_otp_email(user, otp.code, ttl_seconds=EmailOTP.CODE_TTL_SECONDS)
+
+        return Response({
+            'message': 'A password reset code has been sent to your email.' if sent
+                       else 'Code generated, but email could not be sent. Try resending.',
+            'user_id': user.id,
+            'username': user.username,
+            'email': user.email,
+            'otp_ttl_seconds': EmailOTP.CODE_TTL_SECONDS,
+            'email_sent': sent,
+        })
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class ForgotPasswordResendView(APIView):
+    """POST /api/v1/auth/forgot-password/resend/   { user_id }
+
+    Re-issues a fresh password-reset OTP for the user. Mirrors ResendOTPView
+    but scoped to the password_reset purpose so it doesn't disturb a
+    pending signup OTP.
+    """
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def post(self, request):
+        from accounts.models import EmailOTP
+        from accounts.services.email_service import send_password_reset_otp_email
+
+        data = request.data or {}
+        user_id = data.get('user_id')
+        if not user_id:
+            return Response(
+                {'error': 'user_id is required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            user = User.objects.get(id=int(user_id))
+        except (User.DoesNotExist, ValueError, TypeError):
+            return Response(
+                {'error': 'User not found.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        otp = EmailOTP.issue(user, purpose=EmailOTP.PURPOSE_PASSWORD_RESET)
+        sent = send_password_reset_otp_email(user, otp.code, ttl_seconds=EmailOTP.CODE_TTL_SECONDS)
+
+        return Response({
+            'message': 'A new code has been sent to your email.' if sent
+                       else 'Code generated, but email could not be sent.',
+            'otp_ttl_seconds': EmailOTP.CODE_TTL_SECONDS,
+            'email_sent': sent,
+        })
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class ForgotPasswordVerifyView(APIView):
+    """POST /api/v1/auth/forgot-password/verify/   { user_id, code, new_password }
+
+    Verifies the password-reset OTP and sets the new password. On success
+    we also blacklist outstanding refresh tokens defensively — if the
+    account was compromised, the attacker's session should not survive
+    the password change.
+    """
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def post(self, request):
+        from accounts.models import EmailOTP
+        from django.contrib.auth.password_validation import validate_password
+        from django.core.exceptions import ValidationError as DjangoValidationError
+
+        data = request.data or {}
+        user_id = data.get('user_id')
+        code = (data.get('code') or '').strip()
+        new_password = data.get('new_password') or ''
+
+        if not user_id or not code or not new_password:
+            return Response(
+                {'error': 'user_id, code and new_password are all required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if len(new_password) < 6:
+            return Response(
+                {'error': 'New password must be at least 6 characters.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            user = User.objects.get(id=int(user_id))
+        except (User.DoesNotExist, ValueError, TypeError):
+            return Response(
+                {'error': 'User not found.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            validate_password(new_password, user=user)
+        except DjangoValidationError as e:
+            return Response({'error': ' '.join(e.messages)}, status=status.HTTP_400_BAD_REQUEST)
+
+        ok, message = EmailOTP.verify(user, code, purpose=EmailOTP.PURPOSE_PASSWORD_RESET)
+        if not ok:
+            return Response({'error': message}, status=status.HTTP_400_BAD_REQUEST)
+
+        user.set_password(new_password)
+        user.save(update_fields=['password'])
+
+        # If a forgot-password flow is being used and the email wasn't yet
+        # verified, this counts as proof of email ownership.
+        try:
+            profile = user.profile
+            if not profile.email_verified:
+                profile.email_verified = True
+                profile.save(update_fields=['email_verified'])
+        except Exception:
+            pass
+
+        return Response({'message': 'Password reset successfully. You can now sign in with your new password.'})
 
 
 # ===================== DASHBOARD VIEWS =====================

@@ -1638,3 +1638,301 @@ class AdminPromptExecutionHistoryView(APIView):
             'executions': executions,
         })
 
+
+# ============================================================
+# STRIPE SETTINGS
+# ============================================================
+
+class AdminStripeSettingsView(APIView):
+    """
+    GET  /api/v1/admin/stripe-settings/  → read current Stripe config + status
+    POST /api/v1/admin/stripe-settings/  → save Stripe keys + price IDs
+
+    Values are stored in the SiteConfiguration table so the admin can
+    rotate keys without touching env files or restarting the server.
+
+    Env-based settings remain as a fallback for first-boot / CI. A
+    field's `source` field tells the admin where the active value is
+    coming from ('db' or 'env').
+
+    Secret values (Secret Key, Webhook Secret) are masked on GET.
+    """
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        from accounts.services import stripe_config
+
+        fields = stripe_config.describe_for_admin()
+
+        # Compute setup status for the UI's progress checklist.
+        by_key = {f['key']: f for f in fields}
+        plan_ready = all(by_key[k]['is_set'] for k in (
+            'price_pro_monthly', 'price_pro_yearly',
+            'price_business_monthly', 'price_business_yearly',
+        ))
+        topup_ready = all(by_key[k]['is_set'] for k in (
+            'price_topup_1k', 'price_topup_5k',
+            'price_topup_10k', 'price_topup_25k',
+        ))
+        keys_ready = all(by_key[k]['is_set'] for k in (
+            'publishable_key', 'secret_key', 'webhook_secret',
+        ))
+
+        # Detect mode (test vs live) from the publishable key prefix when present.
+        pk_value = stripe_config.publishable_key()
+        if pk_value.startswith('pk_live_'):
+            mode = 'live'
+        elif pk_value.startswith('pk_test_'):
+            mode = 'test'
+        else:
+            mode = 'unknown'
+
+        # Build the live webhook URL the admin should register in the Stripe Dashboard.
+        backend_base = request.build_absolute_uri('/').rstrip('/')
+        webhook_url = f'{backend_base}/api/v1/billing/stripe/webhook/'
+
+        return Response({
+            'fields': fields,
+            'status': {
+                'keys_ready':        keys_ready,
+                'plan_prices_ready': plan_ready,
+                'topup_prices_ready': topup_ready,
+                'fully_configured':  stripe_config.is_fully_configured(),
+                'mode':              mode,
+            },
+            'webhook': {
+                'url': webhook_url,
+                'events_to_subscribe': [
+                    'checkout.session.completed',
+                    'customer.subscription.created',
+                    'customer.subscription.updated',
+                    'customer.subscription.deleted',
+                    'invoice.paid',
+                    'invoice.payment_failed',
+                    'payment_intent.succeeded',
+                    'payment_intent.payment_failed',
+                    'payment_method.attached',
+                    'payment_method.detached',
+                ],
+                'note': (
+                    'Register this URL at Stripe Dashboard → Developers → Webhooks. '
+                    'Subscribe to the events above, then copy the signing secret '
+                    '(whsec_…) into the Webhook Secret field on this page.'
+                ),
+            },
+            'help': {
+                'dashboard_url': 'https://dashboard.stripe.com/apikeys',
+                'mode_note': (
+                    'Test mode uses sk_test_/pk_test_ keys; live mode uses '
+                    'sk_live_/pk_live_. Test & live each have their own catalog '
+                    'of Products/Prices and a separate webhook signing secret.'
+                ),
+            },
+        })
+
+    def post(self, request):
+        from accounts.services import stripe_config
+
+        # Filter the payload to only the fields we recognise; ignore the rest
+        # so callers can POST whole-form payloads safely.
+        accepted_keys = {f['key'] for f in stripe_config.ADMIN_FIELDS}
+        payload = {k: v for k, v in request.data.items() if k in accepted_keys}
+
+        result = stripe_config.update_from_admin(payload)
+
+        if result['errors'] and not result['updated']:
+            return Response(
+                {'error': 'Failed to save Stripe settings.',
+                 'details': result['errors']},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Re-read fresh state so the UI immediately reflects new sources.
+        return Response({
+            'updated': result['updated'],
+            'errors':  result['errors'],
+            'fields':  stripe_config.describe_for_admin(),
+            'fully_configured': stripe_config.is_fully_configured(),
+        })
+
+
+class AdminStripeSettingsTestView(APIView):
+    """
+    GET /api/v1/admin/stripe-settings/test/
+
+    Verify the configured secret_key + webhook_secret actually work by
+    calling `stripe.Account.retrieve()` (no side effects). Lets admins
+    confirm the keys before relying on them for real charges.
+    """
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        from accounts.services import stripe_config, stripe_service
+        import stripe as _stripe
+
+        if not stripe_config.secret_key():
+            return Response({
+                'ok': False,
+                'error': 'Secret key is not set. Configure it on this page first.',
+            })
+
+        try:
+            stripe_mod = stripe_service._client()
+            account = stripe_mod.Account.retrieve()
+        except _stripe.error.AuthenticationError as exc:
+            return Response({
+                'ok': False,
+                'error': f'Stripe rejected the secret key: {exc}',
+            })
+        except _stripe.error.StripeError as exc:
+            return Response({
+                'ok': False,
+                'error': f'Stripe API error: {exc}',
+            })
+        except Exception as exc:  # noqa: BLE001
+            return Response({
+                'ok': False,
+                'error': f'Unexpected error: {exc}',
+            })
+
+        # Detect test vs live mode from the publishable key prefix.
+        pk = stripe_config.publishable_key()
+        if pk.startswith('pk_live_'):
+            mode = 'live'
+        elif pk.startswith('pk_test_'):
+            mode = 'test'
+        else:
+            mode = 'unknown'
+
+        return Response({
+            'ok':            True,
+            'account_id':    account.id,
+            'mode':          mode,
+            'email':         getattr(account, 'email', '') or '',
+            'business_name': (getattr(account, 'business_profile', None) or {}).get('name', '') if hasattr(account, 'business_profile') else '',
+            'country':       getattr(account, 'country', '') or '',
+            'charges_enabled': getattr(account, 'charges_enabled', False),
+            'payouts_enabled': getattr(account, 'payouts_enabled', False),
+        })
+
+
+# ============================================================
+# REFUNDS
+# ============================================================
+
+class AdminRefundListView(APIView):
+    """
+    GET /api/v1/admin/refunds/?status=requested|approved|rejected|processing|refunded|failed&page=1
+
+    List PaymentRequest rows that are in some stage of the refund flow.
+    Default filter: status='requested' (pending admin review).
+    """
+    permission_classes = [IsAdminUser]
+    PAGE_SIZE = 30
+
+    def get(self, request):
+        from accounts.models import PaymentRequest
+
+        filter_status = request.query_params.get('status', 'requested')
+        try:
+            page = max(1, int(request.query_params.get('page', '1')))
+        except (TypeError, ValueError):
+            page = 1
+        start = (page - 1) * self.PAGE_SIZE
+        end = start + self.PAGE_SIZE
+
+        qs = PaymentRequest.objects.select_related('user').exclude(refund_status='')
+        if filter_status:
+            qs = qs.filter(refund_status=filter_status)
+        qs = qs.order_by('-refund_requested_at', '-created_at')
+
+        total = qs.count()
+        rows = list(qs[start:end])
+
+        items = [_serialize_refund_for_admin(p) for p in rows]
+        return Response({
+            'items': items,
+            'total': total,
+            'page': page,
+            'page_size': self.PAGE_SIZE,
+            'total_pages': max(1, (total + self.PAGE_SIZE - 1) // self.PAGE_SIZE),
+            'filter_status': filter_status,
+        })
+
+
+def _serialize_refund_for_admin(pr) -> dict:
+    return {
+        'id': pr.id,
+        'user': {
+            'id': pr.user_id,
+            'username': pr.user.username,
+            'email': pr.user.email,
+        },
+        'created_at': pr.created_at.isoformat(),
+        'plan': pr.plan,
+        'purpose': pr.purpose,
+        'amount_usd': str(pr.amount_usd),
+        'revenue_usd': str(pr.revenue_usd),
+        'payment_provider': pr.payment_provider,
+        'payment_method': pr.payment_method,
+        'stripe_payment_intent_id': pr.stripe_payment_intent_id,
+        'stripe_refund_id': pr.stripe_refund_id,
+        'diamonds_granted': pr.diamonds_granted,
+        'diamonds_topped_up': pr.diamonds_topped_up,
+        'refund_status': pr.refund_status,
+        'refund_amount_usd': str(pr.refund_amount_usd),
+        'refund_reason': pr.refund_reason,
+        'refund_admin_notes': pr.refund_admin_notes,
+        'refund_requested_at': pr.refund_requested_at.isoformat() if pr.refund_requested_at else None,
+        'refund_reviewed_at': pr.refund_reviewed_at.isoformat() if pr.refund_reviewed_at else None,
+        'refund_reviewed_by': (
+            pr.refund_reviewed_by.username if pr.refund_reviewed_by_id else None
+        ),
+        'refund_processed_at': pr.refund_processed_at.isoformat() if pr.refund_processed_at else None,
+    }
+
+
+class AdminRefundActionView(APIView):
+    """
+    POST /api/v1/admin/refunds/<pr_id>/approve/   body: { admin_notes? }
+    POST /api/v1/admin/refunds/<pr_id>/reject/    body: { admin_notes }   (required)
+
+    Approve fires Stripe.Refund.create; success arrives via webhook.
+    Reject is a local-only state change with a required reason that's
+    emailed to the user.
+    """
+    permission_classes = [IsAdminUser]
+
+    def post(self, request, pr_id: int, action: str):
+        from accounts.models import PaymentRequest
+        from accounts.services import refund_service
+
+        try:
+            pr = PaymentRequest.objects.get(pk=pr_id)
+        except PaymentRequest.DoesNotExist:
+            return Response({'error': 'Refund request not found'},
+                            status=status.HTTP_404_NOT_FOUND)
+
+        admin_notes = (request.data.get('admin_notes') or '').strip()
+
+        if action == 'approve':
+            result = refund_service.approve_refund(
+                payment_request=pr, admin_user=request.user, admin_notes=admin_notes,
+            )
+        elif action == 'reject':
+            result = refund_service.reject_refund(
+                payment_request=pr, admin_user=request.user, admin_notes=admin_notes,
+            )
+        else:
+            return Response({'error': f'Unknown action: {action}'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        if not result.get('ok'):
+            return Response(result, status=status.HTTP_400_BAD_REQUEST)
+
+        # Return refreshed row so the UI updates without a separate fetch.
+        pr.refresh_from_db()
+        return Response({
+            **result,
+            'item': _serialize_refund_for_admin(pr),
+        })

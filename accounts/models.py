@@ -794,6 +794,7 @@ class AdminPayoutAccount(models.Model):
         ('card', 'Card (Stripe / 2C2P)'),
         ('paypal', 'PayPal'),
         ('crypto', 'Crypto'),
+        ('stripe', 'Stripe'),
         ('other', 'Other'),
     ]
 
@@ -845,6 +846,27 @@ class PaymentRequest(models.Model):
         ('yearly', 'Yearly'),
     ]
 
+    PROVIDER_CHOICES = [
+        ('manual', 'Manual (admin-verified)'),
+        ('stripe', 'Stripe'),
+        ('internal_wallet', 'Internal diamond wallet'),
+    ]
+
+    REFUND_STATUS_CHOICES = [
+        ('', 'Not requested'),
+        ('requested', 'Requested by user'),
+        ('approved', 'Approved by admin (refunding…)'),
+        ('rejected', 'Rejected by admin'),
+        ('processing', 'Sent to Stripe — awaiting confirmation'),
+        ('refunded', 'Refunded'),
+        ('failed', 'Refund attempt failed'),
+    ]
+
+    PURPOSE_CHOICES = [
+        ('plan', 'Plan upgrade'),
+        ('topup', 'Diamond top-up'),
+    ]
+
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='payment_requests')
 
     # What the user is buying
@@ -893,6 +915,63 @@ class PaymentRequest(models.Model):
     fx_rate_used = models.DecimalField(max_digits=20, decimal_places=8, default=0,
                                        help_text='1 local_currency = X USD, captured at approval')
 
+    # Provider / purpose — distinguishes manual claims from Stripe-originated rows
+    # and plan purchases from diamond top-ups. Existing rows default to manual + plan.
+    payment_provider = models.CharField(
+        max_length=20, choices=PROVIDER_CHOICES, default='manual',
+        help_text='Which gateway/flow created this row',
+    )
+    purpose = models.CharField(
+        max_length=20, choices=PURPOSE_CHOICES, default='plan',
+        help_text='plan = subscription purchase; topup = standalone diamond purchase',
+    )
+    stripe_checkout_session_id = models.CharField(
+        max_length=128, blank=True, default='', db_index=True,
+    )
+    stripe_payment_intent_id = models.CharField(
+        max_length=128, blank=True, default='', db_index=True,
+    )
+    stripe_invoice_id = models.CharField(
+        max_length=128, blank=True, default='', db_index=True,
+    )
+    diamonds_topped_up = models.IntegerField(
+        default=0,
+        help_text='Diamonds added by a top-up purchase (separate from plan grant)',
+    )
+
+    # Refund flow — user requests, admin approves, Stripe processes,
+    # webhook confirms. Diamonds/plan are NOT auto-reversed on refund;
+    # admin adjusts those manually if needed.
+    refund_status = models.CharField(
+        max_length=20, choices=REFUND_STATUS_CHOICES, default='', blank=True,
+        db_index=True,
+    )
+    refund_amount_usd = models.DecimalField(
+        max_digits=12, decimal_places=2, default=0,
+        help_text='USD amount refunded. v1 = always full amount.',
+    )
+    refund_reason = models.TextField(
+        blank=True, default='',
+        help_text='User-supplied reason for the refund request.',
+    )
+    refund_admin_notes = models.TextField(
+        blank=True, default='',
+        help_text="Admin's notes on approve/reject decision.",
+    )
+    refund_requested_at = models.DateTimeField(null=True, blank=True)
+    refund_reviewed_at = models.DateTimeField(null=True, blank=True)
+    refund_reviewed_by = models.ForeignKey(
+        User, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='refunds_reviewed',
+    )
+    refund_processed_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text='Set when charge.refunded webhook confirms the refund.',
+    )
+    stripe_refund_id = models.CharField(
+        max_length=64, blank=True, default='', db_index=True,
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -904,6 +983,8 @@ class PaymentRequest(models.Model):
         indexes = [
             models.Index(fields=['user', 'created_at']),
             models.Index(fields=['status', 'created_at']),
+            models.Index(fields=['payment_provider', 'purpose']),
+            models.Index(fields=['refund_status', 'refund_requested_at']),
         ]
 
     def __str__(self):
@@ -991,18 +1072,33 @@ class ExpenseEntry(models.Model):
 # ============================================================
 
 class EmailOTP(models.Model):
-    """One-time 6-digit code emailed at signup, valid for 60 seconds.
+    """One-time 6-digit code emailed for signup OR password reset, valid for 60 seconds.
 
     A user may have many rows over their lifetime; only the most recent
-    unused, unexpired one is honoured. `verify()` is single-use — once a
-    code matches it's marked used so it can't be replayed.
+    unused, unexpired one for a given purpose is honoured. `verify()` is
+    single-use — once a code matches it's marked used so it can't be replayed.
+    Issuing a code only invalidates prior codes of the same purpose, so a
+    pending signup OTP isn't killed by a password-reset request and vice versa.
     """
 
-    CODE_TTL_SECONDS = 60
+    CODE_TTL_SECONDS = 180
     MAX_ATTEMPTS = 5
+
+    PURPOSE_SIGNUP = 'signup'
+    PURPOSE_PASSWORD_RESET = 'password_reset'
+    PURPOSE_CHOICES = [
+        (PURPOSE_SIGNUP, 'Signup / Email Verification'),
+        (PURPOSE_PASSWORD_RESET, 'Password Reset'),
+    ]
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='email_otps')
     code = models.CharField(max_length=6, db_index=True)
+    purpose = models.CharField(
+        max_length=20,
+        choices=PURPOSE_CHOICES,
+        default=PURPOSE_SIGNUP,
+        db_index=True,
+    )
     is_used = models.BooleanField(default=False)
     attempts = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -1013,34 +1109,41 @@ class EmailOTP(models.Model):
         ordering = ['-created_at']
         indexes = [
             models.Index(fields=['user', '-created_at']),
+            models.Index(fields=['user', 'purpose', '-created_at']),
         ]
 
     def __str__(self):
-        return f'OTP for {self.user.username} (expires {self.expires_at:%H:%M:%S})'
+        return f'OTP ({self.purpose}) for {self.user.username} (expires {self.expires_at:%H:%M:%S})'
 
     @property
     def is_expired(self) -> bool:
         return timezone.now() >= self.expires_at
 
     @classmethod
-    def issue(cls, user) -> 'EmailOTP':
-        """Invalidate any prior outstanding codes and create a fresh one."""
+    def issue(cls, user, purpose: str = PURPOSE_SIGNUP) -> 'EmailOTP':
+        """Invalidate any prior outstanding codes *of this purpose* and create a fresh one."""
         import secrets
-        cls.objects.filter(user=user, is_used=False).update(is_used=True)
+        cls.objects.filter(user=user, purpose=purpose, is_used=False).update(is_used=True)
         code = f'{secrets.randbelow(1_000_000):06d}'
         return cls.objects.create(
             user=user,
             code=code,
+            purpose=purpose,
             expires_at=timezone.now() + timedelta(seconds=cls.CODE_TTL_SECONDS),
         )
 
     @classmethod
-    def verify(cls, user, code: str) -> tuple[bool, str]:
+    def verify(cls, user, code: str, purpose: str = PURPOSE_SIGNUP) -> tuple[bool, str]:
         """Returns (ok, message). On success the OTP is marked used."""
         if not code or not code.strip().isdigit() or len(code.strip()) != 6:
             return False, 'Enter the 6-digit code from your email.'
 
-        otp = cls.objects.filter(user=user, is_used=False).order_by('-created_at').first()
+        otp = (
+            cls.objects
+            .filter(user=user, purpose=purpose, is_used=False)
+            .order_by('-created_at')
+            .first()
+        )
         if not otp:
             return False, 'No active code. Request a new one.'
 
@@ -1063,3 +1166,179 @@ class EmailOTP(models.Model):
         otp.is_used = True
         otp.save(update_fields=['is_used'])
         return True, 'ok'
+
+
+# ============================================================
+# STRIPE INTEGRATION
+# ============================================================
+# Stripe is canonical for *payment* state (subscription status, period,
+# payment method). UserProfile remains canonical for *entitlement* state
+# (plan id, limits, end date). Webhooks reconcile UserProfile from Stripe.
+#
+# These models intentionally avoid duplicating data that already lives on
+# UserProfile or DiamondWallet — they only store the linkage to Stripe.
+
+
+class StripeCustomer(models.Model):
+    """Maps a Sellanto user to their Stripe Customer object.
+
+    Created lazily on the user's first Checkout session. We never call
+    Stripe.Customer.create on signup — it would create empty customers
+    for every free signup and clutter the Stripe dashboard.
+    """
+
+    user = models.OneToOneField(
+        User, on_delete=models.CASCADE, related_name='stripe_customer',
+    )
+    stripe_customer_id = models.CharField(max_length=64, unique=True)
+    default_payment_method_id = models.CharField(max_length=64, blank=True, default='')
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'stripe_customers'
+        verbose_name = 'Stripe Customer'
+        verbose_name_plural = 'Stripe Customers'
+
+    def __str__(self):
+        return f'{self.user.username} → {self.stripe_customer_id}'
+
+
+class StripePaymentMethod(models.Model):
+    """A card saved by a user, mirroring a Stripe PaymentMethod.
+
+    Source of truth = Stripe. We keep a local copy so the UI can show
+    "Pay with Visa **** 4242" without round-tripping to Stripe on every
+    page load. `payment_method.attached` / `detached` webhooks keep this
+    in sync.
+
+    Default selection: at most one row per user has `is_default=True`.
+    Repeat purchases off-session use the default PaymentMethod.
+    """
+
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='stripe_payment_methods',
+    )
+    stripe_payment_method_id = models.CharField(max_length=64, unique=True)
+    stripe_customer_id = models.CharField(max_length=64, db_index=True)
+
+    # Display fields (denormalised from Stripe so we don't hit their API for UI)
+    card_brand = models.CharField(max_length=20, blank=True, default='')
+    card_last4 = models.CharField(max_length=4, blank=True, default='')
+    card_exp_month = models.IntegerField(null=True, blank=True)
+    card_exp_year = models.IntegerField(null=True, blank=True)
+    card_funding = models.CharField(max_length=20, blank=True, default='',
+                                    help_text='credit | debit | prepaid | unknown')
+
+    is_default = models.BooleanField(default=False)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'stripe_payment_methods'
+        ordering = ['-is_default', '-created_at']
+        verbose_name = 'Stripe Payment Method'
+        verbose_name_plural = 'Stripe Payment Methods'
+        indexes = [
+            models.Index(fields=['user', 'is_default']),
+        ]
+
+    def __str__(self):
+        return f'{self.user.username} · {self.card_brand} ****{self.card_last4}'
+
+
+class StripeSubscription(models.Model):
+    """Local mirror of a Stripe Subscription.
+
+    Source of truth = Stripe. We keep a local copy so the app can answer
+    "is this user's subscription healthy?" without round-tripping to
+    Stripe on every request. Webhooks keep this in sync.
+    """
+
+    STATUS_CHOICES = [
+        ('active', 'Active'),
+        ('trialing', 'Trialing'),
+        ('past_due', 'Past Due'),
+        ('canceled', 'Canceled'),
+        ('unpaid', 'Unpaid'),
+        ('incomplete', 'Incomplete'),
+        ('incomplete_expired', 'Incomplete Expired'),
+        ('paused', 'Paused'),
+    ]
+
+    BILLING_CYCLE_CHOICES = [
+        ('monthly', 'Monthly'),
+        ('yearly', 'Yearly'),
+    ]
+
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='stripe_subscriptions',
+    )
+    stripe_subscription_id = models.CharField(max_length=64, unique=True)
+    stripe_customer_id = models.CharField(max_length=64, db_index=True)
+    stripe_price_id = models.CharField(max_length=64)
+
+    plan = models.CharField(max_length=20, choices=UserProfile.PLAN_CHOICES)
+    billing_cycle = models.CharField(max_length=10, choices=BILLING_CYCLE_CHOICES)
+
+    status = models.CharField(max_length=30, choices=STATUS_CHOICES)
+    current_period_start = models.DateTimeField(null=True, blank=True)
+    current_period_end = models.DateTimeField(null=True, blank=True)
+    cancel_at_period_end = models.BooleanField(default=False)
+    canceled_at = models.DateTimeField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'stripe_subscriptions'
+        ordering = ['-created_at']
+        verbose_name = 'Stripe Subscription'
+        verbose_name_plural = 'Stripe Subscriptions'
+        indexes = [
+            models.Index(fields=['user', 'status']),
+            models.Index(fields=['stripe_customer_id']),
+        ]
+
+    def __str__(self):
+        return f'{self.user.username} · {self.plan} · {self.status}'
+
+
+class StripeWebhookEvent(models.Model):
+    """Append-only log of every Stripe webhook we've processed.
+
+    The `stripe_event_id` UNIQUE constraint is the primary idempotency
+    guard: Stripe retries webhooks aggressively, and replaying an event
+    that already granted diamonds would double-mint. We do
+    `get_or_create(stripe_event_id=...)` and short-circuit if not created.
+    """
+
+    PROCESSING_STATUS_CHOICES = [
+        ('ok', 'OK'),
+        ('error', 'Error'),
+        ('ignored', 'Ignored'),
+    ]
+
+    stripe_event_id = models.CharField(max_length=64, unique=True)
+    event_type = models.CharField(max_length=80, db_index=True)
+    payload = models.JSONField(blank=True, null=True)
+    processing_status = models.CharField(
+        max_length=20, choices=PROCESSING_STATUS_CHOICES, default='ok',
+    )
+    error = models.TextField(blank=True, default='')
+
+    processed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'stripe_webhook_events'
+        ordering = ['-processed_at']
+        verbose_name = 'Stripe Webhook Event'
+        verbose_name_plural = 'Stripe Webhook Events'
+        indexes = [
+            models.Index(fields=['event_type', 'processed_at']),
+        ]
+
+    def __str__(self):
+        return f'{self.event_type} · {self.stripe_event_id} · {self.processing_status}'

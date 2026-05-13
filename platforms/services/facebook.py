@@ -227,9 +227,14 @@ class FacebookService:
     
     @staticmethod
     def _post_photo(page_id, access_token, caption, photo_path):
-        """Post photo"""
+        """Post photo.
+
+        Returns the feed `post_id` (in <page_id>_<post_id> format) when Meta
+        provides it, so the result can be used for downstream features like
+        Boost Ads. Falls back to the photo media `id` when `post_id` is absent.
+        """
         url = f"https://graph.facebook.com/v18.0/{page_id}/photos"
-        
+
         try:
             with open(photo_path, 'rb') as photo:
                 files = {'source': photo}
@@ -237,24 +242,30 @@ class FacebookService:
                     'caption': caption,
                     'access_token': access_token
                 }
-                
+
                 response = requests.post(url, files=files, data=data)
                 result = response.json()
-            
-            if 'id' in result:
-                return True, result['id']
+
+            # Prefer post_id (feed post, boostable) over id (photo media).
+            post_id = result.get('post_id') or result.get('id')
+            if post_id:
+                return True, post_id
             else:
                 error_msg = result.get('error', {}).get('message', 'Unknown error')
                 return False, error_msg
-                
+
         except Exception as e:
             return False, str(e)
     
     @staticmethod
     def _post_video(page_id, access_token, description, video_path):
-        """Post video"""
+        """Post video.
+
+        Same approach as _post_photo — prefer the feed post_id over the raw
+        video media id, so boost-ads can target the published post.
+        """
         url = f"https://graph.facebook.com/v18.0/{page_id}/videos"
-        
+
         try:
             with open(video_path, 'rb') as video:
                 files = {'source': video}
@@ -262,16 +273,17 @@ class FacebookService:
                     'description': description,
                     'access_token': access_token
                 }
-                
+
                 response = requests.post(url, files=files, data=data)
                 result = response.json()
-            
-            if 'id' in result:
-                return True, result['id']
+
+            post_id = result.get('post_id') or result.get('id')
+            if post_id:
+                return True, post_id
             else:
                 error_msg = result.get('error', {}).get('message', 'Unknown error')
                 return False, error_msg
-                
+
         except Exception as e:
             return False, str(e)
     

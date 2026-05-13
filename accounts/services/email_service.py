@@ -229,6 +229,66 @@ def send_otp_email(user, code: str, ttl_seconds: int = 60) -> bool:
 
 
 # ─────────────────────────────────────────────────────────────────────
+# Password-reset OTP — same 6-digit code mechanism, different copy
+# ─────────────────────────────────────────────────────────────────────
+
+def send_password_reset_otp_email(user, code: str, ttl_seconds: int = 60) -> bool:
+    if not user.email:
+        return False
+
+    name = (user.first_name or user.username or 'there').strip()
+    subject = f'Reset your Sellanto password — code: {code}'
+
+    text_body = '\n'.join([
+        f'Hi {name},',
+        '',
+        f'Your Sellanto password reset code is: {code}',
+        '',
+        f'This code expires in {ttl_seconds} seconds. Enter it on the',
+        'reset-password screen along with your new password to regain access.',
+        '',
+        'If you didn\'t request this, you can safely ignore this email —',
+        'your password will stay unchanged.',
+        '',
+        '— The Sellanto team',
+    ])
+
+    spaced = ' '.join(code)
+    content_html = f"""
+      <h1 style="margin:0 0 8px;font-size:24px;font-weight:800;letter-spacing:-0.3px;">Reset your password</h1>
+      <p style="margin:0 0 24px;color:#C7C7D1;font-size:14px;line-height:1.6;">
+        Hi {name}, enter this code on the reset-password screen together with your new password.
+      </p>
+
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px;">
+        <tr>
+          <td align="center" style="background:#0D0D14;border:1px solid rgba(232,54,79,0.35);border-radius:18px;padding:28px 16px;">
+            <div style="font-size:12px;color:#9CA3AF;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:10px;">Password reset code</div>
+            <div style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+                        font-size:38px;font-weight:800;color:#FF6B47;letter-spacing:14px;
+                        padding-left:14px;text-shadow:0 0 24px rgba(255,107,71,0.45);">
+              {spaced}
+            </div>
+            <div style="font-size:11px;color:#6B7280;margin-top:14px;letter-spacing:0.4px;">
+              Expires in {ttl_seconds} seconds
+            </div>
+          </td>
+        </tr>
+      </table>
+
+      <p style="margin:18px 0 0;color:#9CA3AF;font-size:12px;line-height:1.6;">
+        If you didn't request a password reset, you can safely ignore this email — your password won't be changed.
+      </p>
+    """
+
+    html_body = _wrap_html(
+        preheader=f'Your Sellanto password reset code is {code}.',
+        content_html=content_html,
+    )
+    return _send(subject, text_body, user.email, html_body)
+
+
+# ─────────────────────────────────────────────────────────────────────
 # Payment pending email — sent immediately after a payment claim is filed
 # ─────────────────────────────────────────────────────────────────────
 

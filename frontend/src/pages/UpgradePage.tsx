@@ -18,7 +18,7 @@ import { subscriptionService } from '../services';
 import { useAuthStore } from '../store';
 import { useDiamondStore } from '../store/diamondStore';
 import type { DiamondGrantResult } from '../services/subscriptionService';
-import { PaymentModal } from '../components/billing/PaymentModal';
+import { BillingChoiceModal } from '../components/billing/BillingChoiceModal';
 import type {
   BillingCycle,
   PlanCatalogEntry,
@@ -561,10 +561,11 @@ export function UpgradePage() {
       </Modal>
 
       {/*
-        Payment modal — opens for any paid plan. On submit, request goes
-        to admin queue; the user's plan only flips after admin approves.
+        Billing modal — opens for any paid plan.
+        Default tab: Stripe Checkout (redirects to checkout.stripe.com).
+        Secondary tab: manual bKash/Nagad/Bank claim (admin-verified).
       */}
-      <PaymentModal
+      <BillingChoiceModal
         isOpen={confirmPlan !== null && confirmPlan.id !== 'free'}
         onClose={() => setConfirmPlan(null)}
         plan={
@@ -580,7 +581,6 @@ export function UpgradePage() {
               : confirmPlan.price_yearly_usd
             : 0
         }
-        defaultPayerEmail={state.kind === 'ready' ? undefined : undefined}
       />
 
       {/* Success modal */}

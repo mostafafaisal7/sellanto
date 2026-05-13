@@ -324,8 +324,18 @@ class PostSerializer(serializers.ModelSerializer):
             'updated_at',
             'posted_at',
             'platform_results',
+            # Platform-specific post IDs — needed for features like Boost Ads
+            # which require knowing the external post ID on each platform.
+            'facebook_post_id',
+            'instagram_post_id',
+            'twitter_post_id',
+            'linkedin_post_id',
         ]
-        read_only_fields = ['id', 'ai_generated', 'created_at', 'updated_at', 'posted_at']
+        read_only_fields = [
+            'id', 'ai_generated', 'created_at', 'updated_at', 'posted_at',
+            'facebook_post_id', 'instagram_post_id',
+            'twitter_post_id', 'linkedin_post_id',
+        ]
 
     def get_platforms(self, obj):
         try:

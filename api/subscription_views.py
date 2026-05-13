@@ -189,10 +189,26 @@ class SubscriptionUpgradeView(APIView):
         profile = request.user.profile
         previous_plan = profile.subscription_plan
 
-        # No payment gateway yet — apply the plan directly.
-        # When Stripe/SSLCommerz/bKash is wired, branch here:
-        # paid plans should return a checkout URL and confirm via webhook,
-        # while downgrade-to-free can still apply directly.
+        # Paid plans must go through a payment gateway. Stripe is wired at
+        # /api/v1/billing/stripe/checkout/; manual bKash/Nagad claims go
+        # through /api/v1/payments/submit/ + admin approval.
+        # Only free-plan transitions (downgrade-to-free) apply directly here.
+        if plan_id != "free":
+            return Response(
+                {
+                    "error": "Paid plans require checkout.",
+                    "detail": (
+                        "Use POST /api/v1/billing/stripe/checkout/ for Stripe, "
+                        "or POST /api/v1/payments/submit/ for manual payment."
+                    ),
+                    "checkout_endpoints": {
+                        "stripe": "/api/v1/billing/stripe/checkout/",
+                        "manual": "/api/v1/payments/submit/",
+                    },
+                },
+                status=status.HTTP_402_PAYMENT_REQUIRED,
+            )
+
         profile.set_plan(plan_id, duration_months=duration_months)
 
         # Grant plan diamonds on upgrade (rank-up only, idempotent per cycle).

@@ -90,6 +90,54 @@ def list_user_ad_accounts(user_access_token):
 # ───────────────────────────── Boost Post flow (MVP) ────────────────────────
 
 
+def _resolve_object_story_id(
+    page_id: str,
+    fb_post_id: str,
+    user_token: str,
+    page_access_token: str = '',
+) -> str:
+    """Return the `<page_id>_<post_id>` form required by Meta's ad creatives.
+
+    Sellanto stores whatever the publish call returned. For photos, that's
+    a bare photo media ID (e.g. "122132552841070138") which Meta will reject
+    when used as object_story_id. We have to look up the photo's parent
+    feed post.
+
+    Lookup strategy (in order):
+      1. If already `<page>_<post>` format, return as-is.
+      2. Try Page Access Token -- under Meta's new Pages experience, only
+         Page tokens can read photo.post_id.
+      3. Fall back to user token (works on older pages or non-photo objects).
+      4. As last resort, return naive `<page_id>_<fb_post_id>` concat.
+    """
+    if '_' in fb_post_id:
+        return fb_post_id
+
+    # Try Page Access Token first (required for "new Pages experience").
+    if page_access_token:
+        try:
+            photo_info = _get(fb_post_id, page_access_token, fields='id,post_id')
+            if photo_info.get('post_id'):
+                return photo_info['post_id']
+        except MetaAdsError as e:
+            logger.warning(
+                f'[boost_post] page-token photo lookup failed for {fb_post_id}: {e}'
+            )
+
+    # Fall back to user token.
+    try:
+        photo_info = _get(fb_post_id, user_token, fields='id,post_id')
+        if photo_info.get('post_id'):
+            return photo_info['post_id']
+    except MetaAdsError as e:
+        logger.warning(
+            f'[boost_post] user-token photo lookup failed for {fb_post_id}: {e}. '
+            f'Falling back to naive concat.'
+        )
+
+    return f'{page_id}_{fb_post_id}'
+
+
 def boost_post(
     ad_account: AdAccount,
     page_id: str,
@@ -98,6 +146,7 @@ def boost_post(
     duration_days: int,
     targeting: dict,
     campaign_name: str = '',
+    page_access_token: str = '',
 ) -> dict:
     """Boost an existing organic Facebook post via 4 chained API calls.
 
@@ -106,7 +155,7 @@ def boost_post(
     }
 
     Raises MetaAdsError if any step fails. Caller is responsible for rolling
-    back partial state (we don't auto-delete on failure — caller decides since
+    back partial state (we don't auto-delete on failure -- caller decides since
     the user may want to retry the last failed step).
 
     Required `targeting` keys:
@@ -117,65 +166,120 @@ def boost_post(
         custom_audiences: [{id, name}]
         publisher_platforms: ['facebook', 'instagram']
         facebook_positions: ['feed', 'story', 'reels']
+
+    `page_access_token` (optional but recommended): the Page Access Token from
+    SocialAccount. Required when fb_post_id is a photo media ID (not yet in
+    <page_id>_<post_id> format) under Meta's new Pages experience -- user
+    tokens cannot read the photo's `post_id` field; only Page tokens can.
     """
     token = decrypt_token(ad_account.encrypted_token)
     if not token:
-        raise MetaAdsError('No token on AdAccount — re-authenticate.')
+        raise MetaAdsError('No token on AdAccount -- re-authenticate.')
 
     act_id = f'act_{ad_account.external_id}'
-    object_story_id = f'{page_id}_{fb_post_id}'
+
+    # Resolve fb_post_id -> proper object_story_id (`<page_id>_<post_id>`).
+    # When Sellanto publishes a photo via /<page>/photos, Meta returns the
+    # photo media ID (e.g. "122132552841070138"), not the feed post ID.
+    # Boosting requires the feed post ID. So if the stored value isn't already
+    # in <page>_<post> format, query Graph API for the photo's post_id field.
+    object_story_id = _resolve_object_story_id(
+        page_id=page_id,
+        fb_post_id=fb_post_id,
+        user_token=token,
+        page_access_token=page_access_token,
+    )
+
+    import json as _json
+    name = campaign_name or f'Sellanto Boost {fb_post_id}'
 
     # ---- 1. Create Campaign (PAUSED until ad is wired) -----------------
-    name = campaign_name or f'Sellanto Boost {fb_post_id}'
-    camp = _post(
-        f'{act_id}/campaigns', token,
-        name=name,
-        objective='OUTCOME_ENGAGEMENT',
-        status='PAUSED',
-        special_ad_categories='[]',
-        buying_type='AUCTION',
-    )
-    campaign_id = camp['id']
+    # `is_adset_budget_sharing_enabled` is required by Meta when not using
+    # Campaign Budget Optimization (CBO). We set ad-set-level daily_budget
+    # below, so this must be 'false' (string per Graph API conventions).
+    # Without it, Meta returns code=100 subcode=4834011 "Invalid parameter".
+    try:
+        logger.info(f'[boost_post] step 1/4 create campaign name={name!r}')
+        camp = _post(
+            f'{act_id}/campaigns', token,
+            name=name,
+            objective='OUTCOME_ENGAGEMENT',
+            status='PAUSED',
+            special_ad_categories='[]',
+            buying_type='AUCTION',
+            is_adset_budget_sharing_enabled='false',
+        )
+        campaign_id = camp['id']
+        logger.info(f'[boost_post] step 1 OK campaign_id={campaign_id}')
+    except MetaAdsError as e:
+        raise MetaAdsError(f'Step 1 (campaign): {e}', code=e.code, subcode=e.subcode, raw=e.raw)
 
     # ---- 2. Create Ad Set ----------------------------------------------
-    end_time = int(time.time()) + (duration_days * 86400)
-    import json as _json
-    adset = _post(
-        f'{act_id}/adsets', token,
-        name=f'{name} — Ad Set',
-        campaign_id=campaign_id,
-        daily_budget=daily_budget_cents,
-        billing_event='IMPRESSIONS',
-        optimization_goal='POST_ENGAGEMENT',
-        bid_strategy='LOWEST_COST_WITHOUT_CAP',
-        targeting=_json.dumps(targeting),
-        start_time=int(time.time()) + 300,  # 5 min from now
-        end_time=end_time,
-        status='PAUSED',
-    )
-    adset_id = adset['id']
+    # For POST_ENGAGEMENT optimization, Meta requires:
+    #   - promoted_object.page_id: the Page being promoted
+    #   - destination_type: 'ON_POST' for post engagement (vs ON_PAGE, etc.)
+    # Without these, Meta rejects with code=100 subcode=4834011 "Invalid parameter".
+    #
+    # Schedule must be >= 24 hours when using daily_budget (subcode 1487793).
+    # Compute end_time RELATIVE to start_time so duration is exactly N days.
+    start_time_ts = int(time.time()) + 300  # 5 min from now
+    end_time_ts = start_time_ts + (duration_days * 86400)
+    try:
+        logger.info(f'[boost_post] step 2/4 create adset campaign_id={campaign_id}')
+        adset = _post(
+            f'{act_id}/adsets', token,
+            name=f'{name} - Ad Set',
+            campaign_id=campaign_id,
+            daily_budget=daily_budget_cents,
+            billing_event='IMPRESSIONS',
+            optimization_goal='POST_ENGAGEMENT',
+            bid_strategy='LOWEST_COST_WITHOUT_CAP',
+            targeting=_json.dumps(targeting),
+            start_time=start_time_ts,
+            end_time=end_time_ts,
+            status='PAUSED',
+            destination_type='ON_POST',
+            promoted_object=_json.dumps({'page_id': page_id}),
+        )
+        adset_id = adset['id']
+        logger.info(f'[boost_post] step 2 OK adset_id={adset_id}')
+    except MetaAdsError as e:
+        raise MetaAdsError(f'Step 2 (adset): {e}', code=e.code, subcode=e.subcode, raw=e.raw)
 
     # ---- 3. Create Ad Creative referencing the organic post -----------
-    creative = _post(
-        f'{act_id}/adcreatives', token,
-        name=f'{name} — Creative',
-        object_story_id=object_story_id,
-    )
-    creative_id = creative['id']
+    try:
+        logger.info(f'[boost_post] step 3/4 create creative object_story_id={object_story_id}')
+        creative = _post(
+            f'{act_id}/adcreatives', token,
+            name=f'{name} - Creative',
+            object_story_id=object_story_id,
+        )
+        creative_id = creative['id']
+        logger.info(f'[boost_post] step 3 OK creative_id={creative_id}')
+    except MetaAdsError as e:
+        raise MetaAdsError(f'Step 3 (creative): {e}', code=e.code, subcode=e.subcode, raw=e.raw)
 
     # ---- 4. Create the Ad, ACTIVE so the chain goes live ---------------
-    ad = _post(
-        f'{act_id}/ads', token,
-        name=f'{name} — Ad',
-        adset_id=adset_id,
-        creative=_json.dumps({'creative_id': creative_id}),
-        status='ACTIVE',
-    )
-    ad_id = ad['id']
+    try:
+        logger.info(f'[boost_post] step 4/4 create ad adset_id={adset_id} creative_id={creative_id}')
+        ad = _post(
+            f'{act_id}/ads', token,
+            name=f'{name} - Ad',
+            adset_id=adset_id,
+            creative=_json.dumps({'creative_id': creative_id}),
+            status='ACTIVE',
+        )
+        ad_id = ad['id']
+        logger.info(f'[boost_post] step 4 OK ad_id={ad_id}')
+    except MetaAdsError as e:
+        raise MetaAdsError(f'Step 4 (ad): {e}', code=e.code, subcode=e.subcode, raw=e.raw)
 
     # Flip parents to ACTIVE so the ad actually serves
-    _post(f'{adset_id}', token, status='ACTIVE')
-    _post(f'{campaign_id}', token, status='ACTIVE')
+    try:
+        _post(f'{adset_id}', token, status='ACTIVE')
+        _post(f'{campaign_id}', token, status='ACTIVE')
+    except MetaAdsError as e:
+        logger.warning(f'[boost_post] flip-to-ACTIVE failed (non-fatal): {e}')
 
     return {
         'campaign_id': campaign_id,

@@ -16,6 +16,10 @@ import {
   CheckCircleIcon,
   ExclamationTriangleIcon,
   TrashIcon,
+  CreditCardIcon,
+  DocumentTextIcon,
+  SparklesIcon,
+  ChevronRightIcon,
 } from '@heroicons/react/24/outline';
 import { useTheme, type ThemeMode } from '../contexts/ThemeContext';
 import { Button, Card, Input, Modal } from '../components/ui';
@@ -433,6 +437,42 @@ export function SettingsPage() {
                 When your balance runs low, contact your administrator for a recharge.
               </p>
             </div>
+          </div>
+        </Card>
+
+        {/* Billing & Payments */}
+        <Card>
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 rounded-xl bg-coral/20 flex items-center justify-center">
+              <CreditCardIcon className="w-5 h-5 text-coral" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-text-primary">Billing & Payments</h3>
+              <p className="text-sm text-text-secondary">Manage cards, history, and diamonds</p>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            {([
+              { icon: CreditCardIcon, label: 'Payment methods', desc: 'Add or remove saved cards', href: '/settings/payment-methods' },
+              { icon: DocumentTextIcon, label: 'Payment history', desc: 'View past charges and request refunds', href: '/settings/payments' },
+              { icon: SparklesIcon, label: 'Buy diamonds', desc: 'Top up your diamond wallet', href: '/buy-diamonds' },
+            ] as const).map(({ icon: Icon, label, desc, href }) => (
+              <Link
+                key={href}
+                to={href}
+                className="flex items-center gap-4 p-4 bg-dark-700/50 rounded-xl hover:bg-dark-700/80 transition-colors group"
+              >
+                <div className="w-9 h-9 rounded-lg bg-white/[0.06] flex items-center justify-center flex-shrink-0">
+                  <Icon className="w-5 h-5 text-text-secondary group-hover:text-text-primary transition-colors" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-text-primary">{label}</p>
+                  <p className="text-xs text-text-muted">{desc}</p>
+                </div>
+                <ChevronRightIcon className="w-4 h-4 text-text-muted flex-shrink-0" />
+              </Link>
+            ))}
           </div>
         </Card>
 

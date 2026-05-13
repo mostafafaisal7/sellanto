@@ -322,8 +322,8 @@ export function LoginPage() {
             {!isRegister ? (
               <form onSubmit={loginForm.handleSubmit(onLogin)} className="space-y-5">
                 <Input
-                  label="Username"
-                  placeholder="Enter your username"
+                  label="Username or Email"
+                  placeholder="Enter your username or email"
                   error={loginForm.formState.errors.username?.message}
                   {...loginForm.register('username')}
                   onChange={(e) => {

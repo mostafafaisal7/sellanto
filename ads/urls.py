@@ -33,4 +33,9 @@ urlpatterns = [
     path('boost-post/',
          views.BoostPostView.as_view(),
          name='ads-boost-post'),
+
+    # Path A — One-click "Publish video + Boost" as a paid video ad
+    path('run-video-ad/',
+         views.RunVideoAdView.as_view(),
+         name='ads-run-video-ad'),
 ]

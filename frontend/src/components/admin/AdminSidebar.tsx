@@ -10,6 +10,8 @@ import {
   KeyIcon,
   CreditCardIcon,
   ScaleIcon,
+  BoltIcon,
+  ReceiptRefundIcon,
 } from '@heroicons/react/24/outline';
 
 interface AdminSidebarProps {
@@ -36,9 +38,11 @@ const mainNavItems: NavItem[] = [
   { name: 'Dashboard',          href: '/admin-panel',                  icon: HomeIcon },
   { name: 'Users',              href: '/admin-panel/users',            icon: UsersIcon },
   { name: 'Payments',           href: '/admin-panel/payments',         icon: CreditCardIcon },
+  { name: 'Refunds',            href: '/admin-panel/refunds',          icon: ReceiptRefundIcon },
   { name: 'Finance',            href: '/admin-panel/finance',          icon: ScaleIcon },
   { name: 'Global API Keys',    href: '/admin-panel/api-keys',         icon: KeyIcon },
   { name: 'Facebook Settings',  href: '/admin-panel/facebook-settings', icon: FacebookIcon },
+  { name: 'Stripe Settings',    href: '/admin-panel/stripe-settings',  icon: BoltIcon },
 ];
 
 const toolNavItems: NavItem[] = [

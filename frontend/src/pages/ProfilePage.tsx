@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -118,9 +118,24 @@ export function ProfilePage() {
         passwordForm.reset();
         toast.success('Password changed successfully!');
         setTimeout(() => setPasswordChanged(false), 3000);
+        return;
       }
+
+      const body = await response.json().catch(() => ({} as { error?: string; detail?: string }));
+      const message = body.error || body.detail || 'Failed to change password.';
+      const lower = message.toLowerCase();
+      if (lower.includes('current password')) {
+        passwordForm.setError('current_password', { message });
+      } else if (lower.includes('new password') || lower.includes('at least')) {
+        passwordForm.setError('new_password', { message });
+      } else {
+        passwordForm.setError('root', { message });
+      }
+      toast.error(message);
     } catch (error) {
-      console.error('Failed to change password:', error);
+      const message = error instanceof Error ? error.message : 'Failed to change password.';
+      passwordForm.setError('root', { message });
+      toast.error(message);
     }
   };
 
@@ -282,26 +297,42 @@ export function ProfilePage() {
 
             {isChangingPassword && (
               <form onSubmit={passwordForm.handleSubmit(onChangePassword)} className="space-y-4">
-                <Input
-                  label="Current Password"
-                  type={showCurrentPassword ? 'text' : 'password'}
-                  placeholder="Enter current password"
-                  error={passwordForm.formState.errors.current_password?.message}
-                  {...passwordForm.register('current_password')}
-                  rightIcon={
-                    <button
-                      type="button"
-                      onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                      className="text-text-muted hover:text-text-primary"
+                {passwordForm.formState.errors.root?.message && (
+                  <div className="rounded-xl border border-danger/30 bg-danger/10 p-3 text-sm text-danger">
+                    {passwordForm.formState.errors.root.message}
+                  </div>
+                )}
+
+                <div>
+                  <Input
+                    label="Current Password"
+                    type={showCurrentPassword ? 'text' : 'password'}
+                    placeholder="Enter current password"
+                    error={passwordForm.formState.errors.current_password?.message}
+                    {...passwordForm.register('current_password')}
+                    rightIcon={
+                      <button
+                        type="button"
+                        onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                        className="text-text-muted hover:text-text-primary"
+                      >
+                        {showCurrentPassword ? (
+                          <EyeSlashIcon className="w-5 h-5" />
+                        ) : (
+                          <EyeIcon className="w-5 h-5" />
+                        )}
+                      </button>
+                    }
+                  />
+                  <div className="mt-1.5 text-right">
+                    <Link
+                      to="/forgot-password"
+                      className="text-xs text-primary hover:text-primary-light transition-colors"
                     >
-                      {showCurrentPassword ? (
-                        <EyeSlashIcon className="w-5 h-5" />
-                      ) : (
-                        <EyeIcon className="w-5 h-5" />
-                      )}
-                    </button>
-                  }
-                />
+                      Forgot current password? Reset via email OTP
+                    </Link>
+                  </div>
+                </div>
 
                 <Input
                   label="New Password"

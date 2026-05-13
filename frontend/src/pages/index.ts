@@ -1,7 +1,13 @@
 export { DashboardPage } from './DashboardPage';
 export { LandingPage } from './LandingPage';
 export { LoginPage } from './LoginPage';
+export { ForgotPasswordPage } from './ForgotPasswordPage';
 export { UpgradePage } from './UpgradePage';
+export { SuccessPage } from './SuccessPage';
+export { CancelPage } from './CancelPage';
+export { BuyDiamondsPage } from './BuyDiamondsPage';
+export { PaymentMethodsPage } from './PaymentMethodsPage';
+export { PaymentHistoryPage } from './PaymentHistoryPage';
 export { DiamondAnalyticsPage } from './DiamondAnalyticsPage';
 export { MyPostsPage } from './MyPostsPage';
 export { CreatePostPage } from './CreatePostPage';

@@ -20,6 +20,7 @@ import { authFetch } from '../services/api';
 import { toast as showToast } from '../store/toastStore';
 
 import { FacebookConnect } from '../components/platforms/FacebookConnect';
+import { AdAccountsStatus } from '../components/platforms/AdAccountsStatus';
 // >>>>>>> chat-fay-v-1.0
 
 // PLATFORM CONSTANTS MAPPED FROM DJANGO TEMPLATE
@@ -133,6 +134,7 @@ export default function ConnectAccountsPage() {
   const [isValidating, setIsValidating] = useState<number | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [messengerEnabled, setMessengerEnabled] = useState(true);
+  const [adRefreshKey, setAdRefreshKey] = useState(0);
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -160,6 +162,8 @@ export default function ConnectAccountsPage() {
       if (statsRes.ok) {
         setStats(await statsRes.json());
       }
+      // Re-fetch ad accounts each time FB connection state changes
+      setAdRefreshKey((k) => k + 1);
     } catch (error) {
       console.error('Failed to fetch data:', error);
     } finally {
@@ -399,6 +403,16 @@ export default function ConnectAccountsPage() {
             );
           })}
         </div>
+      </section>
+
+      {/* META AD ACCOUNTS — auto-discovered from FB OAuth */}
+      <section>
+        {renderSectionHeader(
+          "📢",
+          "Meta Ad Accounts",
+          "Auto-discovered from your Facebook connection. Once you connect Facebook with ads permissions, your Meta Business Suite ad accounts appear here and become available for boost-post campaigns."
+        )}
+        <AdAccountsStatus refreshKey={adRefreshKey} />
       </section>
 
       {/* SECONDARY & ROADMAP ENGINES */}

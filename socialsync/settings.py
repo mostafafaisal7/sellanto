@@ -31,14 +31,18 @@ ALLOWED_HOSTS = [
     'localhost',
     'abedintechllc.com',
     'www.abedintechllc.com',
+    'yourbrandstar.com',
+    'www.yourbrandstar.com',
     'lorilee-neediest-zina.ngrok-free.dev',
     'frances-vegetative-vincent.ngrok-free.dev',
-     
+
 ]
 
 CSRF_TRUSTED_ORIGINS = [
     'https://abedintechllc.com',
     'https://www.abedintechllc.com',
+    'https://yourbrandstar.com',
+    'https://www.yourbrandstar.com',
     'https://lorilee-neediest-zina.ngrok-free.dev',
     'https://frances-vegetative-vincent.ngrok-free.dev'
 ]
@@ -284,6 +288,32 @@ ADMIN_NOTIFICATION_EMAIL = config(
 # (e.g. one-click payment-approval URLs). For local dev this points at
 # the Django runserver; in production set SITE_URL=https://yourdomain.com.
 SITE_URL = config('SITE_URL', default='http://127.0.0.1:8000')
+
+# ─── Stripe ───────────────────────────────────────────────────────────
+# Test mode keys live alongside live keys; toggle by swapping env values.
+# Webhook secret is per-endpoint and differs between Stripe CLI (dev) and
+# the live webhook registered in the Stripe dashboard.
+STRIPE_PUBLISHABLE_KEY = config('STRIPE_PUBLISHABLE_KEY', default='')
+STRIPE_SECRET_KEY      = config('STRIPE_SECRET_KEY', default='')
+STRIPE_WEBHOOK_SECRET  = config('STRIPE_WEBHOOK_SECRET', default='')
+STRIPE_API_VERSION     = '2024-10-28.acacia'
+
+# Recurring plan Price IDs (one Stripe Product per tier, two Prices each)
+STRIPE_PRICE_PRO_MONTHLY      = config('STRIPE_PRICE_PRO_MONTHLY',      default='')
+STRIPE_PRICE_PRO_YEARLY       = config('STRIPE_PRICE_PRO_YEARLY',       default='')
+STRIPE_PRICE_BUSINESS_MONTHLY = config('STRIPE_PRICE_BUSINESS_MONTHLY', default='')
+STRIPE_PRICE_BUSINESS_YEARLY  = config('STRIPE_PRICE_BUSINESS_YEARLY',  default='')
+
+# One-time diamond top-up Price IDs (mode='payment', NOT recurring)
+STRIPE_PRICE_TOPUP_1K  = config('STRIPE_PRICE_TOPUP_1K',  default='')
+STRIPE_PRICE_TOPUP_5K  = config('STRIPE_PRICE_TOPUP_5K',  default='')
+STRIPE_PRICE_TOPUP_10K = config('STRIPE_PRICE_TOPUP_10K', default='')
+STRIPE_PRICE_TOPUP_25K = config('STRIPE_PRICE_TOPUP_25K', default='')
+
+# Redirect URLs that Stripe Checkout sends users to after a session.
+# {CHECKOUT_SESSION_ID} is interpolated by Stripe on the success URL.
+STRIPE_SUCCESS_URL = f'{FRONTEND_URL}/billing/success?session_id={{CHECKOUT_SESSION_ID}}'
+STRIPE_CANCEL_URL  = f'{FRONTEND_URL}/billing/cancelled'
 
 # Django REST Framework settings
 REST_FRAMEWORK = {
