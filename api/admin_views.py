@@ -1809,7 +1809,7 @@ class AdminStripeSettingsTestView(APIView):
             'account_id':    account.id,
             'mode':          mode,
             'email':         getattr(account, 'email', '') or '',
-            'business_name': (getattr(account, 'business_profile', None) or {}).get('name', '') if hasattr(account, 'business_profile') else '',
+            'business_name': getattr(getattr(account, 'business_profile', None), 'name', '') or '',
             'country':       getattr(account, 'country', '') or '',
             'charges_enabled': getattr(account, 'charges_enabled', False),
             'payouts_enabled': getattr(account, 'payouts_enabled', False),
