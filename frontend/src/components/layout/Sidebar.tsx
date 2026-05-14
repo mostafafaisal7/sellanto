@@ -83,7 +83,9 @@ const mainNavItems: NavItem[] = [
 
 const settingsNavItems: NavItem[] = [
   { name: 'Upgrade Plan', href: '/upgrade', icon: ArrowUpCircleIcon, badge: 'Pro' },
+  { name: 'Buy Diamonds', href: '/buy-diamonds', icon: SparklesIcon },
   { name: 'Diamond Analytics', href: '/analytics/diamond', icon: ChartBarSquareIcon },
+
   { name: 'Profile', href: '/profile', icon: UserIcon },
   { name: 'Business Profile', href: '/business-profile', icon: BuildingOfficeIcon },
   { name: 'Settings', href: '/settings', icon: Cog6ToothIcon },
@@ -276,16 +278,34 @@ export function Sidebar({ isOpen, onClose, isImpersonating }: SidebarProps) {
               <span className="text-sm font-bold text-text-primary">Upgrade to Pro</span>
             </div>
             <p className="text-xs text-text-secondary mb-3">Unlock all AI features</p>
-            <button
-              type="button"
-              onClick={() => {
-                navigate('/upgrade');
-                onClose();
-              }}
-              className="btn-primary w-full py-2 text-xs"
-            >
-              Upgrade Now
-            </button>
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  navigate('/upgrade');
+                  onClose();
+                }}
+                className="btn-primary w-full py-2 text-xs"
+              >
+                Upgrade Now
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  navigate('/buy-diamonds');
+                  onClose();
+                }}
+                className="w-full py-2 text-xs font-bold rounded-lg transition-colors"
+                style={{
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  color: 'var(--text-primary)',
+                }}
+              >
+                Buy Diamonds
+              </button>
+            </div>
+
           </div>
         </div>
       )}

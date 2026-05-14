@@ -19,6 +19,8 @@ import { useAuthStore } from '../store';
 import { useDiamondStore } from '../store/diamondStore';
 import type { DiamondGrantResult } from '../services/subscriptionService';
 import { BillingChoiceModal } from '../components/billing/BillingChoiceModal';
+import { BuyDiamondsModal } from '../components/billing/BuyDiamondsModal';
+
 import type {
   BillingCycle,
   PlanCatalogEntry,
@@ -91,6 +93,8 @@ export function UpgradePage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [successPlan, setSuccessPlan] = useState<string | null>(null);
   const [successGrant, setSuccessGrant] = useState<DiamondGrantResult | null>(null);
+  const [isTopupOpen, setIsTopupOpen] = useState(false);
+
 
   const load = async () => {
     setState({ kind: 'loading' });
@@ -299,6 +303,38 @@ export function UpgradePage() {
           </div>
         </div>
       </motion.section>
+
+      {/* Diamond Top-up Card */}
+      <motion.section
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.08 }}
+        className="rounded-3xl border border-coral/20 bg-gradient-to-r from-coral/10 via-purple/10 to-amber/10 p-6 md:p-8 flex flex-col md:flex-row items-center justify-between gap-6"
+      >
+        <div className="flex items-center gap-5">
+          <div className="w-14 h-14 rounded-2xl bg-gradient-primary shadow-glow-coral flex items-center justify-center shrink-0">
+            <span className="text-3xl">💎</span>
+          </div>
+          <div>
+            <h2 className="text-xl font-bold font-heading text-text-primary tracking-tight">
+              Need more diamonds?
+            </h2>
+            <p className="text-sm text-text-secondary max-w-md">
+              Top up your wallet instantly to keep using AI features. No monthly commitment, diamonds never expire.
+            </p>
+          </div>
+        </div>
+        <Button
+          size="lg"
+          variant="primary"
+          onClick={() => setIsTopupOpen(true)}
+          className="shadow-glow-coral"
+          leftIcon={<SparklesIcon className="w-5 h-5" />}
+        >
+          Buy Diamonds
+        </Button>
+      </motion.section>
+
 
       {/* Billing toggle */}
       <div className="flex justify-center">
@@ -646,6 +682,17 @@ export function UpgradePage() {
           </div>
         </div>
       </Modal>
+
+      {/* Diamond Top-up Modal */}
+      <BuyDiamondsModal
+        isOpen={isTopupOpen}
+        onClose={() => setIsTopupOpen(false)}
+        onSuccess={() => {
+          setIsTopupOpen(false);
+          fetchWallet(); // Refresh balance
+        }}
+      />
+
     </div>
   );
 }

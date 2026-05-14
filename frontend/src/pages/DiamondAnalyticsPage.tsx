@@ -25,8 +25,11 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import { BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { Button, LoadingScreen } from '../components/ui';
+import { BuyDiamondsModal } from '../components/billing/BuyDiamondsModal';
 import { diamondService } from '../services/diamondService';
+
 import type {
   DiamondForecast,
   DiamondUsageTimeseries,
@@ -245,48 +248,48 @@ export function DiamondAnalyticsPage() {
   const [customTo, setCustomTo] = useState<string>('');
   const [series, setSeries] = useState<DiamondUsageTimeseries | null>(null);
   const [seriesLoading, setSeriesLoading] = useState(false);
+  const [isTopupOpen, setIsTopupOpen] = useState(false);
+
+
+  const load = async () => {
+    try {
+      const [wallet, forecast, usage, planHistRes, txnsRes] = await Promise.all([
+        diamondService.getBalance(),
+        diamondService.getForecast(14),
+        diamondService.getUsage(30),
+        diamondService.getPlanHistory(),
+        diamondService.getTransactions({ page: 1, page_size: 12 }),
+      ]);
+      setState({
+        kind: 'ready',
+        wallet,
+        forecast,
+        usage,
+        planHistory: planHistRes.history,
+        recentTxns: txnsRes.results,
+      });
+    } catch (err) {
+      const e = err as {
+        userMessage?: string;
+        response?: { data?: { error?: string; detail?: string } };
+        message?: string;
+      };
+      const message =
+        e?.response?.data?.error ||
+        e?.response?.data?.detail ||
+        e?.userMessage ||
+        e?.message ||
+        'Failed to load analytics';
+      setState({ kind: 'error', message });
+    }
+  };
 
   // ── Initial load (everything except timeseries) ────────────────
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const [wallet, forecast, usage, planHistRes, txnsRes] = await Promise.all([
-          diamondService.getBalance(),
-          diamondService.getForecast(14),
-          diamondService.getUsage(30),
-          diamondService.getPlanHistory(),
-          diamondService.getTransactions({ page: 1, page_size: 12 }),
-        ]);
-        if (cancelled) return;
-        setState({
-          kind: 'ready',
-          wallet,
-          forecast,
-          usage,
-          planHistory: planHistRes.history,
-          recentTxns: txnsRes.results,
-        });
-      } catch (err) {
-        if (cancelled) return;
-        const e = err as {
-          userMessage?: string;
-          response?: { data?: { error?: string; detail?: string } };
-          message?: string;
-        };
-        const message =
-          e?.response?.data?.error ||
-          e?.response?.data?.detail ||
-          e?.userMessage ||
-          e?.message ||
-          'Failed to load analytics';
-        setState({ kind: 'error', message });
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+    setState({ kind: 'loading' });
+    load();
   }, []);
+
 
   // ── Timeseries fetcher (re-runs on preset change) ──────────────
   useEffect(() => {
@@ -412,11 +415,13 @@ export function DiamondAnalyticsPage() {
           </Button>
           <Button
             size="sm"
-            onClick={() => navigate('/upgrade')}
-            leftIcon={<RocketLaunchIcon className="w-4 h-4" />}
+            onClick={() => setIsTopupOpen(true)}
+            leftIcon={<SparklesIcon className="w-4 h-4" />}
+            className="shadow-glow-coral"
           >
-            Top up plan
+            Top up diamonds
           </Button>
+
         </div>
       </motion.div>
 
@@ -499,13 +504,24 @@ export function DiamondAnalyticsPage() {
                 .
               </div>
             </div>
-            <Button
-              size="sm"
-              onClick={() => navigate('/upgrade')}
-              rightIcon={<RocketLaunchIcon className="w-4 h-4" />}
-            >
-              Upgrade
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setIsTopupOpen(true)}
+                leftIcon={<SparklesIcon className="w-4 h-4" />}
+              >
+                Top up
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => navigate('/upgrade')}
+                rightIcon={<RocketLaunchIcon className="w-4 h-4" />}
+              >
+                Upgrade
+              </Button>
+            </div>
+
           </div>
         </motion.div>
       )}
@@ -911,7 +927,18 @@ export function DiamondAnalyticsPage() {
           </div>
         )}
       </motion.section>
+
+      {/* Diamond Top-up Modal */}
+      <BuyDiamondsModal
+        isOpen={isTopupOpen}
+        onClose={() => setIsTopupOpen(false)}
+        onSuccess={() => {
+          setIsTopupOpen(false);
+          load(); // Refresh all stats
+        }}
+      />
     </div>
+
   );
 }
 
