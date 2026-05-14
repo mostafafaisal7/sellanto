@@ -25,8 +25,9 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { Button, LoadingScreen } from '../components/ui';
+
+
 import { BuyDiamondsModal } from '../components/billing/BuyDiamondsModal';
 import { diamondService } from '../services/diamondService';
 

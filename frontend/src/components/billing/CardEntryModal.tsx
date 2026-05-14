@@ -44,11 +44,11 @@ type LoadState =
 // Cache the stripe.js singleton across mounts.
 let stripePromise: Promise<Stripe | null> | null = null;
 function getStripe(publishableKey: string): Promise<Stripe | null> {
-  if (!stripePromise) {
-    stripePromise = loadStripe(publishableKey);
-  }
-  return stripePromise;
+  const p = stripePromise || loadStripe(publishableKey);
+  stripePromise = p;
+  return p;
 }
+
 
 function chargeTitle(charge: CardEntryModalProps['charge']): string {
   if (charge.kind === 'topup') return `${charge.diamonds.toLocaleString()} Diamonds`;
