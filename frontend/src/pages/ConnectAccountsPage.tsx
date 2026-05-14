@@ -16,12 +16,15 @@ import {
 import { Button, Modal, ConfirmModal, Spinner, PlatformIcon, platformColors, platformNames } from '../components/ui';
 import type { SocialAccount, PlatformType } from '../types';
 import { authFetch } from '../services/api';
-// <<<<<<< HEAD
 import { toast as showToast } from '../store/toastStore';
 
 import { FacebookConnect } from '../components/platforms/FacebookConnect';
 import { AdAccountsStatus } from '../components/platforms/AdAccountsStatus';
-// >>>>>>> chat-fay-v-1.0
+import { LinkedInConnect } from '../components/platforms/LinkedInConnect';
+import { PinterestConnect } from '../components/platforms/PinterestConnect';
+import { YouTubeConnect } from '../components/platforms/YouTubeConnect';
+import { RedditConnect } from '../components/platforms/RedditConnect';
+import { TikTokConnect } from '../components/platforms/TikTokConnect';
 
 // PLATFORM CONSTANTS MAPPED FROM DJANGO TEMPLATE
 const platformFeatures: Record<string, string[]> = {
@@ -64,8 +67,8 @@ const platformDescriptions: Record<string, string> = {
 };
 
 const postingPlatforms: PlatformType[] = ['facebook', 'instagram', 'twitter', 'linkedin'];
-const secondaryPlatforms: PlatformType[] = ['tiktok', 'youtube', 'pinterest', 'telegram'];
-const roadmapPlatforms: PlatformType[] = ['snapchat', 'reddit', 'medium', 'tumblr', 'mastodon', 'twitch'];
+const secondaryPlatforms: PlatformType[] = ['tiktok', 'youtube', 'pinterest', 'reddit', 'telegram'];
+const roadmapPlatforms: PlatformType[] = ['snapchat', 'medium', 'tumblr', 'mastodon', 'twitch'];
 
 const chatbotPlatforms = [
   { id: 'messenger', name: 'Facebook Messenger', icon: 'messenger', status: 'Available Now', desc: 'AI-powered chatbot for Facebook Messenger with RAG and custom knowledge base.', features: platformFeatures.messenger, canConnect: true },
@@ -99,25 +102,15 @@ const platformFieldLabels: Record<string, Record<string, { label: string; help: 
     instagram_business_account_id: { label: 'Instagram Business Account ID', help: 'Your Instagram Business Account ID (numeric)', type: 'text' },
     instagram_access_token: { label: 'Access Token', help: 'Facebook Page Access Token (same as above)', type: 'textarea' },
   },
-  linkedin: {
-    linkedin_access_token: { label: 'Access Token', help: 'LinkedIn OAuth 2.0 Access Token', type: 'textarea' },
-    linkedin_person_urn: { label: 'Person URN', help: "Your LinkedIn Person URN (from /v2/userinfo API 'sub' field)", type: 'text' },
-  },
+  linkedin: {}, // OAuth — handled by LinkedInConnect component
   telegram: {
     telegram_bot_token: { label: 'Bot Token', help: 'Your Telegram Bot Token from @BotFather', type: 'textarea' },
     telegram_channel_id: { label: 'Channel/Group ID', help: 'Your Telegram Channel or Group ID (e.g., -100xxxxxxxxxx)', type: 'text' },
   },
-  tiktok: {
-    tiktok_access_token: { label: 'Access Token', help: 'TikTok for Business API Access Token', type: 'textarea' },
-  },
-  youtube: {
-    youtube_channel_id: { label: 'Channel ID', help: 'Your YouTube Channel ID', type: 'text' },
-    youtube_access_token: { label: 'Access Token', help: 'Google OAuth 2.0 Access Token with YouTube Scopes', type: 'textarea' },
-  },
-  pinterest: {
-    pinterest_access_token: { label: 'Access Token', help: 'Pinterest API Access Token', type: 'textarea' },
-    pinterest_board_id: { label: 'Board ID', help: 'Target Pinterest Board ID', type: 'text' },
-  }
+  tiktok: {}, // OAuth — handled by TikTokConnect component
+  youtube: {}, // OAuth — handled by YouTubeConnect component
+  pinterest: {}, // OAuth — handled by PinterestConnect component
+  reddit: {}, // OAuth — handled by RedditConnect component
 };
 
 export default function ConnectAccountsPage() {
@@ -324,24 +317,73 @@ export default function ConnectAccountsPage() {
           {postingPlatforms.map(p => {
             const isConnected = connectedPlatforms.includes(p);
 
-            // Facebook uses OAuth flow — dedicated component handles everything
-            if (p === 'facebook') {
+            // ── OAuth Platforms: one-click connect with dedicated components ──
+            const oauthPlatformConfig: Record<string, { subtitle: string; Component: React.FC<{ onConnected?: () => void }> }> = {
+              facebook:  { subtitle: `Pages · Instagram${messengerEnabled ? ' · Messenger' : ''}`, Component: FacebookConnect },
+              linkedin:  { subtitle: 'Personal Profile · Company Pages', Component: LinkedInConnect },
+              pinterest: { subtitle: 'Pins · Boards · Video Pins',       Component: PinterestConnect },
+              youtube:   { subtitle: 'Videos · Shorts · Channel',        Component: YouTubeConnect },
+            };
+
+            if (p in oauthPlatformConfig) {
+              const { subtitle, Component } = oauthPlatformConfig[p];
+              const platformAccounts = accounts.filter(a => a.platform === p);
+              const activeCount = platformAccounts.filter(a => a.status === 'active').length;
+              const hasExpired = platformAccounts.some(a => a.status === 'expired');
+              const hasInvalid = platformAccounts.some(a => a.status === 'invalid');
+
               return (
                 <motion.div
                   key={p}
-                  className="group relative overflow-hidden rounded-2xl p-5 border border-white/10 bg-dark-800/60 flex flex-col"
+                  className={clsx(
+                    "group relative overflow-hidden rounded-2xl p-5 border flex flex-col",
+                    activeCount > 0
+                      ? "border-success/30 bg-success/5"
+                      : hasExpired || hasInvalid
+                        ? "border-amber-500/30 bg-amber-500/5"
+                        : "border-white/10 bg-dark-800/60"
+                  )}
                 >
                   {/* Platform header */}
                   <div className="flex items-center gap-3 mb-4">
                     <div className={clsx("w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0", platformColors[p]?.bg)}>
                       <PlatformIcon platform={p} className="text-white" size="md" />
                     </div>
-                    <div>
-                      <h3 className="text-lg font-bold text-text-primary">{platformNames[p]}</h3>
-                      <p className="text-[10px] text-text-muted">Pages · Instagram{messengerEnabled ? ' · Messenger' : ''}</p>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-lg font-bold text-text-primary">{platformNames[p]}</h3>
+                        {activeCount > 0 && (
+                          <span className="px-1.5 py-0.5 rounded-full bg-success/20 text-success text-[9px] font-bold">
+                            {activeCount} active
+                          </span>
+                        )}
+                        {hasExpired && (
+                          <span className="px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 text-[9px] font-bold">
+                            Expired
+                          </span>
+                        )}
+                        {hasInvalid && !hasExpired && (
+                          <span className="px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400 text-[9px] font-bold">
+                            Invalid
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-text-muted">{subtitle}</p>
                     </div>
                   </div>
-                  <FacebookConnect onConnected={fetchData} />
+
+                  {/* OAuth component handles connect button + status card */}
+                  <Component onConnected={fetchData} />
+
+                  {/* Show validation errors from existing accounts */}
+                  {platformAccounts
+                    .filter(a => a.validation_error && a.status !== 'active')
+                    .map(a => (
+                      <div key={`err-${a.id}`} className="mt-2 text-[10px] text-red-400/80 bg-red-500/5 rounded-lg px-3 py-1.5 border border-red-500/10">
+                        <span className="font-semibold">{a.account_name}:</span> {a.validation_error}
+                      </div>
+                    ))
+                  }
                 </motion.div>
               );
             }
@@ -421,6 +463,124 @@ export default function ConnectAccountsPage() {
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-4">
           {secondaryPlatforms.map(p => {
             const isConnected = connectedPlatforms.includes(p);
+
+            // Pinterest uses OAuth — render dedicated component
+            if (p === 'pinterest') {
+              const pinAccounts = accounts.filter(a => a.platform === 'pinterest');
+              const pinActive = pinAccounts.filter(a => a.status === 'active').length;
+              return (
+                <motion.div
+                  key={p}
+                  className={clsx(
+                    "group relative p-4 rounded-xl border transition-all flex flex-col gap-3",
+                    pinActive > 0 ? "border-success/30 bg-success/5" : "border-white/10 bg-dark-800/50"
+                  )}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={clsx("w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0", pinActive > 0 ? platformColors[p]?.bg : "bg-dark-700")}>
+                      <PlatformIcon platform={p} className={pinActive > 0 ? "text-white" : "text-text-muted"} size="md" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <h4 className="text-sm font-bold text-text-primary truncate">{platformNames[p]}</h4>
+                        {pinActive > 0 && <span className="px-1.5 py-0.5 rounded-full bg-success/20 text-success text-[8px] font-bold">{pinActive}</span>}
+                      </div>
+                      <p className="text-[10px] text-text-muted">Pins · Boards · Video</p>
+                    </div>
+                  </div>
+                  <PinterestConnect onConnected={fetchData} compact />
+                </motion.div>
+              );
+            }
+
+            // YouTube uses OAuth — render dedicated component
+            if (p === 'youtube') {
+              const ytAccounts = accounts.filter(a => a.platform === 'youtube');
+              const ytActive = ytAccounts.filter(a => a.status === 'active').length;
+              return (
+                <motion.div
+                  key={p}
+                  className={clsx(
+                    "group relative p-4 rounded-xl border transition-all flex flex-col gap-3",
+                    ytActive > 0 ? "border-success/30 bg-success/5" : "border-white/10 bg-dark-800/50"
+                  )}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={clsx("w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0", ytActive > 0 ? platformColors[p]?.bg : "bg-dark-700")}>
+                      <PlatformIcon platform={p} className={ytActive > 0 ? "text-white" : "text-text-muted"} size="md" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <h4 className="text-sm font-bold text-text-primary truncate">{platformNames[p]}</h4>
+                        {ytActive > 0 && <span className="px-1.5 py-0.5 rounded-full bg-success/20 text-success text-[8px] font-bold">{ytActive}</span>}
+                      </div>
+                      <p className="text-[10px] text-text-muted">Videos · Shorts · Channel</p>
+                    </div>
+                  </div>
+                  <YouTubeConnect onConnected={fetchData} compact />
+                </motion.div>
+              );
+            }
+
+            // Reddit uses OAuth — render dedicated component
+            if (p === 'reddit') {
+              const redditAccounts = accounts.filter(a => a.platform === 'reddit');
+              const redditActive = redditAccounts.filter(a => a.status === 'active').length;
+              return (
+                <motion.div
+                  key={p}
+                  className={clsx(
+                    "group relative p-4 rounded-xl border transition-all flex flex-col gap-3",
+                    redditActive > 0 ? "border-success/30 bg-success/5" : "border-white/10 bg-dark-800/50"
+                  )}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={clsx("w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0", redditActive > 0 ? platformColors[p]?.bg : "bg-dark-700")}>
+                      <PlatformIcon platform={p} className={redditActive > 0 ? "text-white" : "text-text-muted"} size="md" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <h4 className="text-sm font-bold text-text-primary truncate">{platformNames[p]}</h4>
+                        {redditActive > 0 && <span className="px-1.5 py-0.5 rounded-full bg-success/20 text-success text-[8px] font-bold">{redditActive}</span>}
+                      </div>
+                      <p className="text-[10px] text-text-muted">Posts · Links · Media</p>
+                    </div>
+                  </div>
+                  <RedditConnect onConnected={fetchData} compact />
+                </motion.div>
+              );
+            }
+
+            // TikTok uses OAuth — render dedicated component
+            if (p === 'tiktok') {
+              const ttAccounts = accounts.filter(a => a.platform === 'tiktok');
+              const ttActive = ttAccounts.filter(a => a.status === 'active').length;
+              return (
+                <motion.div
+                  key={p}
+                  className={clsx(
+                    "group relative p-4 rounded-xl border transition-all flex flex-col gap-3",
+                    ttActive > 0 ? "border-success/30 bg-success/5" : "border-white/10 bg-dark-800/50"
+                  )}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={clsx("w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0", ttActive > 0 ? platformColors[p]?.bg : "bg-dark-700")}>
+                      <PlatformIcon platform={p} className={ttActive > 0 ? "text-white" : "text-text-muted"} size="md" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <h4 className="text-sm font-bold text-text-primary truncate">{platformNames[p]}</h4>
+                        {ttActive > 0 && <span className="px-1.5 py-0.5 rounded-full bg-success/20 text-success text-[8px] font-bold">{ttActive}</span>}
+                      </div>
+                      <p className="text-[10px] text-text-muted">Videos · Photos · Duets</p>
+                    </div>
+                  </div>
+                  <TikTokConnect onConnected={fetchData} compact />
+                </motion.div>
+              );
+            }
+
+            // Other secondary platforms — manual connect
             return (
               <motion.div
                 key={p}

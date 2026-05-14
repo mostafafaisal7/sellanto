@@ -17,6 +17,7 @@ class SocialAccount(models.Model):
         ('tiktok', 'TikTok'),
         ('youtube', 'YouTube'),
         ('pinterest', 'Pinterest'),
+        ('reddit', 'Reddit'),
         ('telegram', 'Telegram'),
         ('messenger', 'Facebook Messenger'),
     ]
@@ -66,8 +67,12 @@ class SocialAccount(models.Model):
     # ========================================
     linkedin_access_token = models.TextField(blank=True, null=True,
         help_text='LinkedIn Access Token')
+    linkedin_refresh_token = models.TextField(blank=True, null=True,
+        help_text='LinkedIn Refresh Token (Community Management API only)')
     linkedin_person_urn = models.CharField(max_length=200, blank=True, null=True,
-        help_text='LinkedIn Person URN (from profile)')
+        help_text='LinkedIn Person URN (urn:li:person:xxx)')
+    linkedin_organization_urn = models.CharField(max_length=200, blank=True, null=True,
+        help_text='LinkedIn Organization URN (urn:li:organization:xxx) for Company Page posting')
     
     # ========================================
     # TIKTOK CREDENTIALS
@@ -92,9 +97,21 @@ class SocialAccount(models.Model):
     # ========================================
     pinterest_access_token = models.TextField(blank=True, null=True,
         help_text='Pinterest Access Token')
+    pinterest_refresh_token = models.TextField(blank=True, null=True,
+        help_text='Pinterest Refresh Token')
     pinterest_board_id = models.CharField(max_length=200, blank=True, null=True,
         help_text='Pinterest Board ID')
-    
+
+    # ========================================
+    # REDDIT CREDENTIALS
+    # ========================================
+    reddit_access_token = models.TextField(blank=True, null=True,
+        help_text='Reddit Access Token')
+    reddit_refresh_token = models.TextField(blank=True, null=True,
+        help_text='Reddit Refresh Token')
+    reddit_username = models.CharField(max_length=200, blank=True, null=True,
+        help_text='Reddit Username (u/username)')
+
     # ========================================
     # TELEGRAM CREDENTIALS
     # ========================================
@@ -157,7 +174,9 @@ class SocialAccount(models.Model):
         elif self.platform == 'linkedin':
             credentials = {
                 'access_token': self.linkedin_access_token,
+                'refresh_token': self.linkedin_refresh_token,
                 'person_urn': self.linkedin_person_urn,
+                'organization_urn': self.linkedin_organization_urn,
             }
         
         elif self.platform == 'tiktok':
@@ -176,9 +195,17 @@ class SocialAccount(models.Model):
         elif self.platform == 'pinterest':
             credentials = {
                 'access_token': self.pinterest_access_token,
+                'refresh_token': self.pinterest_refresh_token,
                 'board_id': self.pinterest_board_id,
             }
-        
+
+        elif self.platform == 'reddit':
+            credentials = {
+                'access_token': self.reddit_access_token,
+                'refresh_token': self.reddit_refresh_token,
+                'username': self.reddit_username,
+            }
+
         elif self.platform == 'telegram':
             credentials = {
                 'bot_token': self.telegram_bot_token,

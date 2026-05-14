@@ -8,6 +8,34 @@ from platforms.oauth_views import (
     facebook_setup_messenger,
     facebook_connection_status,
 )
+from platforms.linkedin_oauth_views import (
+    linkedin_oauth_initiate,
+    linkedin_oauth_callback,
+    linkedin_connection_status,
+    linkedin_community_oauth_initiate,
+    linkedin_community_oauth_callback,
+)
+from platforms.pinterest_oauth_views import (
+    pinterest_oauth_initiate,
+    pinterest_oauth_callback,
+    pinterest_connection_status,
+    pinterest_list_boards,
+)
+from platforms.youtube_oauth_views import (
+    youtube_oauth_initiate,
+    youtube_oauth_callback,
+    youtube_connection_status,
+)
+from platforms.reddit_oauth_views import (
+    reddit_oauth_initiate,
+    reddit_oauth_callback,
+    reddit_connection_status,
+)
+from platforms.tiktok_oauth_views import (
+    tiktok_oauth_initiate,
+    tiktok_oauth_callback,
+    tiktok_connection_status,
+)
 from . import admin_views
 from . import strategy_views
 from . import caption_views
@@ -55,6 +83,34 @@ urlpatterns = [
     path('platforms/facebook/callback/',        facebook_oauth_callback,    name='fb-oauth-callback'),
     path('platforms/facebook/setup-messenger/', facebook_setup_messenger,   name='fb-setup-messenger'),
     path('platforms/facebook/status/',          facebook_connection_status, name='fb-conn-status'),
+
+    # ── LinkedIn OAuth & Connection Status ──────────────────────────────────
+    path('platforms/linkedin/initiate/',            linkedin_oauth_initiate,            name='li-oauth-initiate'),
+    path('platforms/linkedin/callback/',            linkedin_oauth_callback,            name='li-oauth-callback'),
+    path('platforms/linkedin/status/',              linkedin_connection_status,         name='li-conn-status'),
+    path('platforms/linkedin/community/initiate/', linkedin_community_oauth_initiate,  name='li-community-initiate'),
+    path('platforms/linkedin/community/callback/', linkedin_community_oauth_callback,  name='li-community-callback'),
+
+    # ── YouTube OAuth & Connection Status ───────────────────────────────────
+    path('platforms/youtube/initiate/', youtube_oauth_initiate, name='yt-oauth-initiate'),
+    path('platforms/youtube/callback/', youtube_oauth_callback, name='yt-oauth-callback'),
+    path('platforms/youtube/status/',   youtube_connection_status, name='yt-conn-status'),
+
+    # ── Pinterest OAuth & Connection Status ──────────────────────────────────
+    path('platforms/pinterest/initiate/', pinterest_oauth_initiate, name='pin-oauth-initiate'),
+    path('platforms/pinterest/callback/', pinterest_oauth_callback, name='pin-oauth-callback'),
+    path('platforms/pinterest/status/',   pinterest_connection_status, name='pin-conn-status'),
+    path('platforms/pinterest/boards/',   pinterest_list_boards, name='pin-boards'),
+
+    # ── Reddit OAuth & Connection Status ──────────────────────────────────
+    path('platforms/reddit/initiate/', reddit_oauth_initiate, name='reddit-oauth-initiate'),
+    path('platforms/reddit/callback/', reddit_oauth_callback, name='reddit-oauth-callback'),
+    path('platforms/reddit/status/',   reddit_connection_status, name='reddit-conn-status'),
+
+    # ── TikTok OAuth & Connection Status ──────────────────────────────────
+    path('platforms/tiktok/initiate/', tiktok_oauth_initiate, name='tt-oauth-initiate'),
+    path('platforms/tiktok/callback/', tiktok_oauth_callback, name='tt-oauth-callback'),
+    path('platforms/tiktok/status/',   tiktok_connection_status, name='tt-conn-status'),
 
     # Auth endpoints
     path('auth/register/', views.RegisterView.as_view(), name='api-register'),
@@ -256,6 +312,16 @@ urlpatterns = [
     # Admin Panel API
     path('admin/facebook-settings/',    admin_views.FacebookSettingsView.as_view(),        name='api-admin-fb-settings'),
     path('admin/facebook-accounts/',    admin_views.AdminFacebookAccountsView.as_view(),   name='api-admin-facebook-accounts'),
+    path('admin/linkedin-settings/',    admin_views.LinkedInSettingsView.as_view(),        name='api-admin-li-settings'),
+    path('admin/linkedin-accounts/',    admin_views.AdminLinkedInAccountsView.as_view(),   name='api-admin-linkedin-accounts'),
+    path('admin/youtube-settings/',     admin_views.YouTubeSettingsView.as_view(),         name='api-admin-yt-settings'),
+    path('admin/youtube-accounts/',     admin_views.AdminYouTubeAccountsView.as_view(),    name='api-admin-youtube-accounts'),
+    path('admin/pinterest-settings/',   admin_views.PinterestSettingsView.as_view(),       name='api-admin-pin-settings'),
+    path('admin/pinterest-accounts/',   admin_views.AdminPinterestAccountsView.as_view(),  name='api-admin-pinterest-accounts'),
+    path('admin/reddit-settings/',      admin_views.RedditSettingsView.as_view(),          name='api-admin-reddit-settings'),
+    path('admin/reddit-accounts/',      admin_views.AdminRedditAccountsView.as_view(),     name='api-admin-reddit-accounts'),
+    path('admin/tiktok-settings/',      admin_views.TikTokSettingsView.as_view(),          name='api-admin-tiktok-settings'),
+    path('admin/tiktok-accounts/',      admin_views.AdminTikTokAccountsView.as_view(),     name='api-admin-tiktok-accounts'),
     path('admin/messenger-webhooks/',   admin_views.AdminMessengerWebhooksView.as_view(),  name='api-admin-messenger-webhooks'),
     path('admin/setup-messenger/',      admin_views.AdminSetupMessengerView.as_view(),     name='api-admin-setup-messenger'),
     path('admin/check-subscription/',   admin_views.AdminCheckSubscriptionView.as_view(),  name='api-admin-check-subscription'),

@@ -1936,3 +1936,571 @@ class AdminRefundActionView(APIView):
             **result,
             'item': _serialize_refund_for_admin(pr),
         })
+
+class LinkedInSettingsView(APIView):
+    """
+    GET  /api/v1/admin/linkedin-settings/  → read current LinkedIn OAuth config (both apps)
+    POST /api/v1/admin/linkedin-settings/  → save LinkedIn OAuth config to SiteConfiguration
+
+    Manages two independent LinkedIn apps:
+      Personal App  — Sign In with LinkedIn + Share on LinkedIn
+      Community App — Community Management API only (company page posting)
+    """
+    permission_classes = [IsAdminUser]
+
+    PERSONAL_KEYS = {
+        'linkedin_client_id':     'Personal App — Client ID (Sign In with LinkedIn + Share on LinkedIn)',
+        'linkedin_client_secret': 'Personal App — Client Secret (keep private)',
+        'linkedin_redirect_uri':  'Personal App — OAuth Redirect URI (must match LinkedIn portal exactly)',
+    }
+
+    COMMUNITY_KEYS = {
+        'linkedin_community_client_id':     'Community App — Client ID (Community Management API only)',
+        'linkedin_community_client_secret': 'Community App — Client Secret (keep private)',
+        'linkedin_community_redirect_uri':  'Community App — OAuth Redirect URI',
+    }
+
+    SHARED_KEYS = {
+        'frontend_url': 'Frontend URL (React app URL, used for popup security)',
+    }
+
+    SECRET_KEYS = {'linkedin_client_secret', 'linkedin_community_client_secret'}
+    URI_KEYS    = {'linkedin_redirect_uri', 'linkedin_community_redirect_uri', 'frontend_url'}
+
+    def _mask(self, key, raw):
+        if key in self.SECRET_KEYS and raw:
+            return '\u2022' * (len(raw) - 6) + raw[-6:] if len(raw) > 6 else '\u2022' * 6
+        return raw
+
+    def _build_section(self, keys):
+        data = {}
+        for key, description in keys.items():
+            raw = SiteConfiguration.get(key, '')
+            data[key] = {
+                'value':       self._mask(key, raw),
+                'is_set':      bool(raw),
+                'description': description,
+            }
+        return data
+
+    def get(self, request):
+        personal_data  = self._build_section(self.PERSONAL_KEYS)
+        community_data = self._build_section(self.COMMUNITY_KEYS)
+        shared_data    = self._build_section(self.SHARED_KEYS)
+
+        p_id  = SiteConfiguration.get('linkedin_client_id', '')
+        p_sec = SiteConfiguration.get('linkedin_client_secret', '')
+        p_uri = SiteConfiguration.get('linkedin_redirect_uri', '')
+        personal_configured = bool(p_id and p_sec and p_uri)
+
+        c_id  = SiteConfiguration.get('linkedin_community_client_id', '')
+        c_sec = SiteConfiguration.get('linkedin_community_client_secret', '')
+        c_uri = SiteConfiguration.get('linkedin_community_redirect_uri', '')
+        community_configured = bool(c_id and c_sec and c_uri)
+
+        personal_missing  = [k for k, v in {'Client ID': p_id, 'Client Secret': p_sec, 'Redirect URI': p_uri}.items() if not v]
+        community_missing = [k for k, v in {'Client ID': c_id, 'Client Secret': c_sec, 'Redirect URI': c_uri}.items() if not v]
+
+        return Response({
+            'personal': {
+                'settings':      personal_data,
+                'is_configured': personal_configured,
+                'missing':       personal_missing,
+            },
+            'community': {
+                'settings':      community_data,
+                'is_configured': community_configured,
+                'missing':       community_missing,
+            },
+            'shared': shared_data,
+            'help': {
+                'personal_note': (
+                    'Personal App needs "Sign In with LinkedIn using OpenID Connect" '
+                    'and "Share on LinkedIn" products. Redirect URI: '
+                    '.../api/v1/platforms/linkedin/callback/'
+                ),
+                'community_note': (
+                    'Community App needs ONLY "Community Management API" product — '
+                    'no other products or they conflict. Redirect URI: '
+                    '.../api/v1/platforms/linkedin/community/callback/'
+                ),
+                'frontend_url_note': (
+                    'Used to validate postMessage origin in popups. '
+                    'Set to your React app domain e.g. https://yourdomain.com'
+                ),
+            },
+        })
+
+    def post(self, request):
+        updated = []
+        errors  = []
+        all_keys = {**self.PERSONAL_KEYS, **self.COMMUNITY_KEYS, **self.SHARED_KEYS}
+
+        for key, description in all_keys.items():
+            if key not in request.data:
+                continue
+            value = str(request.data[key]).strip()
+            if not value:
+                continue
+
+            if key in self.URI_KEYS:
+                if not (value.startswith('http://') or value.startswith('https://')):
+                    errors.append(f'{key} must start with http:// or https://')
+                    continue
+
+            try:
+                SiteConfiguration.set(key, value, description)
+                updated.append(key)
+            except Exception as e:
+                errors.append(f'Could not save {key}: {str(e)}')
+
+        if errors and not updated:
+            return Response(
+                {'error': 'Failed to save settings.', 'details': errors},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        personal_configured  = bool(
+            SiteConfiguration.get('linkedin_client_id', '') and
+            SiteConfiguration.get('linkedin_client_secret', '') and
+            SiteConfiguration.get('linkedin_redirect_uri', '')
+        )
+        community_configured = bool(
+            SiteConfiguration.get('linkedin_community_client_id', '') and
+            SiteConfiguration.get('linkedin_community_client_secret', '') and
+            SiteConfiguration.get('linkedin_community_redirect_uri', '')
+        )
+
+        response = {
+            'success':              True,
+            'updated_keys':         updated,
+            'personal_configured':  personal_configured,
+            'community_configured': community_configured,
+            'message':              'Settings saved successfully.',
+        }
+        if errors:
+            response['warnings'] = errors
+
+        return Response(response)
+
+
+class AdminLinkedInAccountsView(APIView):
+    """
+    GET /api/v1/admin/linkedin-accounts/
+    Returns all users' LinkedIn SocialAccounts for admin overview.
+    """
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        from platforms.models import SocialAccount
+        accounts = SocialAccount.objects.filter(platform='linkedin').select_related('user').order_by('-connected_at')
+
+        rows = []
+        for acc in accounts:
+            rows.append({
+                'account_id':      acc.id,
+                'user_id':         acc.user_id,
+                'username':        acc.user.username,
+                'account_name':    acc.account_name,
+                'type':            'organization' if acc.linkedin_organization_urn else 'personal',
+                'person_urn':      acc.linkedin_person_urn,
+                'org_urn':         acc.linkedin_organization_urn,
+                'status':          acc.status,
+                'has_token':       bool(acc.linkedin_access_token),
+                'token_expires_at': acc.token_expires_at.isoformat() if acc.token_expires_at else None,
+                'connected_at':    acc.connected_at.isoformat() if acc.connected_at else None,
+                'last_validated_at': acc.last_validated_at.isoformat() if acc.last_validated_at else None,
+            })
+
+        return Response({'accounts': rows, 'total': len(rows)})
+
+
+class YouTubeSettingsView(APIView):
+    """GET/POST /api/v1/admin/youtube-settings/ — YouTube/Google OAuth config."""
+    permission_classes = [IsAdminUser]
+
+    KEYS = {
+        'youtube_client_id':     'Google Client ID (from Google Cloud Console → Credentials)',
+        'youtube_client_secret': 'Google Client Secret (keep this private)',
+        'youtube_redirect_uri':  'OAuth Redirect URI (must match Google Cloud Console exactly)',
+        'frontend_url':          'Frontend URL (your React app URL)',
+    }
+
+    def get(self, request):
+        data = {}
+        for key, description in self.KEYS.items():
+            raw = SiteConfiguration.get(key, '')
+            if key == 'youtube_client_secret' and raw:
+                display = '\u2022' * (len(raw) - 6) + raw[-6:] if len(raw) > 6 else '\u2022' * 6
+            else:
+                display = raw
+            data[key] = {'value': display, 'is_set': bool(raw), 'description': description}
+
+        client_id     = SiteConfiguration.get('youtube_client_id', '')
+        client_secret = SiteConfiguration.get('youtube_client_secret', '')
+        redirect_uri  = SiteConfiguration.get('youtube_redirect_uri', '')
+
+        is_configured = bool(client_id and client_secret and redirect_uri)
+        missing = []
+        if not client_id:      missing.append('Client ID')
+        if not client_secret:  missing.append('Client Secret')
+        if not redirect_uri:   missing.append('Redirect URI')
+
+        return Response({
+            'settings': data, 'is_configured': is_configured, 'missing': missing,
+            'help': {
+                'where_to_find': 'https://console.cloud.google.com → APIs & Services → Credentials',
+                'redirect_uri_note': 'Must match exactly what you set in Google Cloud Console → Authorized redirect URIs',
+                'frontend_url_note': 'Used for popup postMessage security.',
+                'quota_note': 'Default: 10,000 units/day. Upload = 1,600 units (~6 uploads/day). Request increase via Cloud Console.',
+            },
+        })
+
+    def post(self, request):
+        updated = []
+        errors  = []
+        for key in self.KEYS:
+            if key not in request.data:
+                continue
+            value = str(request.data[key]).strip()
+            if key in ('youtube_redirect_uri', 'frontend_url') and value:
+                if not (value.startswith('http://') or value.startswith('https://')):
+                    errors.append(f'{key} must start with http:// or https://')
+                    continue
+            try:
+                SiteConfiguration.set(key, value, self.KEYS[key])
+                updated.append(key)
+            except Exception as e:
+                errors.append(f'Could not save {key}: {str(e)}')
+
+        if errors and not updated:
+            return Response({'error': 'Failed to save.', 'details': errors}, status=status.HTTP_400_BAD_REQUEST)
+
+        client_id     = SiteConfiguration.get('youtube_client_id', '')
+        client_secret = SiteConfiguration.get('youtube_client_secret', '')
+        redirect_uri  = SiteConfiguration.get('youtube_redirect_uri', '')
+        is_configured = bool(client_id and client_secret and redirect_uri)
+
+        response = {
+            'success': True, 'updated_keys': updated, 'is_configured': is_configured,
+            'message': 'YouTube OAuth is now configured.' if is_configured else 'Settings saved. Some fields still missing.',
+        }
+        if errors:
+            response['warnings'] = errors
+        return Response(response)
+
+
+class AdminYouTubeAccountsView(APIView):
+    """GET /api/v1/admin/youtube-accounts/ — all users' YouTube accounts."""
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        from platforms.models import SocialAccount
+        accounts = SocialAccount.objects.filter(platform='youtube').select_related('user').order_by('-connected_at')
+        rows = []
+        for acc in accounts:
+            rows.append({
+                'account_id':   acc.id, 'user_id': acc.user_id, 'username': acc.user.username,
+                'account_name': acc.account_name, 'channel_id': acc.youtube_channel_id,
+                'status': acc.status, 'has_token': bool(acc.youtube_access_token),
+                'has_refresh': bool(acc.youtube_refresh_token),
+                'token_expires_at': acc.token_expires_at.isoformat() if acc.token_expires_at else None,
+                'connected_at': acc.connected_at.isoformat() if acc.connected_at else None,
+            })
+        return Response({'accounts': rows, 'total': len(rows)})
+
+
+class PinterestSettingsView(APIView):
+    """
+    GET  /api/v1/admin/pinterest-settings/  → read current Pinterest OAuth config
+    POST /api/v1/admin/pinterest-settings/  → save Pinterest OAuth config
+    """
+    permission_classes = [IsAdminUser]
+
+    KEYS = {
+        'pinterest_client_id':     'Pinterest App ID (from Pinterest Developer Portal)',
+        'pinterest_client_secret': 'Pinterest App Secret (keep this private)',
+        'pinterest_redirect_uri':  'OAuth Redirect URI (must match Pinterest Developer Portal exactly)',
+        'frontend_url':            'Frontend URL (your React app URL, used for popup security)',
+    }
+
+    def get(self, request):
+        data = {}
+        for key, description in self.KEYS.items():
+            raw = SiteConfiguration.get(key, '')
+            if key == 'pinterest_client_secret' and raw:
+                display = '\u2022' * (len(raw) - 6) + raw[-6:] if len(raw) > 6 else '\u2022' * 6
+            else:
+                display = raw
+            data[key] = {'value': display, 'is_set': bool(raw), 'description': description}
+
+        client_id     = SiteConfiguration.get('pinterest_client_id', '')
+        client_secret = SiteConfiguration.get('pinterest_client_secret', '')
+        redirect_uri  = SiteConfiguration.get('pinterest_redirect_uri', '')
+
+        is_configured = bool(client_id and client_secret and redirect_uri)
+        missing = []
+        if not client_id:      missing.append('App ID')
+        if not client_secret:  missing.append('App Secret')
+        if not redirect_uri:   missing.append('Redirect URI')
+
+        return Response({
+            'settings':       data,
+            'is_configured':  is_configured,
+            'missing':        missing,
+            'help': {
+                'where_to_find': 'https://developers.pinterest.com/apps/ → Your App',
+                'redirect_uri_note': 'Must match exactly what you set in Pinterest Developer Portal → Your App → Redirect URIs',
+                'frontend_url_note': 'Used for popup postMessage security. Set to your React app domain.',
+            },
+        })
+
+    def post(self, request):
+        updated = []
+        errors  = []
+
+        for key in self.KEYS:
+            if key not in request.data:
+                continue
+            value = str(request.data[key]).strip()
+            if key in ('pinterest_redirect_uri', 'frontend_url') and value:
+                if not (value.startswith('http://') or value.startswith('https://')):
+                    errors.append(f'{key} must start with http:// or https://')
+                    continue
+            try:
+                SiteConfiguration.set(key, value, self.KEYS[key])
+                updated.append(key)
+            except Exception as e:
+                errors.append(f'Could not save {key}: {str(e)}')
+
+        if errors and not updated:
+            return Response({'error': 'Failed to save.', 'details': errors}, status=status.HTTP_400_BAD_REQUEST)
+
+        client_id     = SiteConfiguration.get('pinterest_client_id', '')
+        client_secret = SiteConfiguration.get('pinterest_client_secret', '')
+        redirect_uri  = SiteConfiguration.get('pinterest_redirect_uri', '')
+        is_configured = bool(client_id and client_secret and redirect_uri)
+
+        response = {
+            'success': True, 'updated_keys': updated, 'is_configured': is_configured,
+            'message': 'Pinterest OAuth is now configured.' if is_configured else 'Settings saved. Some fields still missing.',
+        }
+        if errors:
+            response['warnings'] = errors
+        return Response(response)
+
+
+class AdminPinterestAccountsView(APIView):
+    """GET /api/v1/admin/pinterest-accounts/ — all users' Pinterest accounts."""
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        from platforms.models import SocialAccount
+        accounts = SocialAccount.objects.filter(platform='pinterest').select_related('user').order_by('-connected_at')
+        rows = []
+        for acc in accounts:
+            rows.append({
+                'account_id':   acc.id,
+                'user_id':      acc.user_id,
+                'username':     acc.user.username,
+                'account_name': acc.account_name,
+                'board_id':     acc.pinterest_board_id,
+                'status':       acc.status,
+                'has_token':    bool(acc.pinterest_access_token),
+                'token_expires_at': acc.token_expires_at.isoformat() if acc.token_expires_at else None,
+                'connected_at': acc.connected_at.isoformat() if acc.connected_at else None,
+            })
+        return Response({'accounts': rows, 'total': len(rows)})
+
+
+
+class RedditSettingsView(APIView):
+    """GET/POST /api/v1/admin/reddit-settings/ — Reddit OAuth config."""
+    permission_classes = [IsAdminUser]
+
+    KEYS = {
+        'reddit_client_id':     'Reddit App Client ID (under app name at reddit.com/prefs/apps)',
+        'reddit_client_secret': 'Reddit App Secret (keep this private)',
+        'reddit_redirect_uri':  'OAuth Redirect URI (must match Reddit app settings exactly)',
+        'frontend_url':         'Frontend URL (your React app URL)',
+    }
+
+    def get(self, request):
+        data = {}
+        for key, description in self.KEYS.items():
+            raw = SiteConfiguration.get(key, '')
+            if key == 'reddit_client_secret' and raw:
+                display = '\u2022' * (len(raw) - 6) + raw[-6:] if len(raw) > 6 else '\u2022' * 6
+            else:
+                display = raw
+            data[key] = {'value': display, 'is_set': bool(raw), 'description': description}
+
+        client_id     = SiteConfiguration.get('reddit_client_id', '')
+        client_secret = SiteConfiguration.get('reddit_client_secret', '')
+        redirect_uri  = SiteConfiguration.get('reddit_redirect_uri', '')
+
+        is_configured = bool(client_id and client_secret and redirect_uri)
+        missing = []
+        if not client_id:      missing.append('Client ID')
+        if not client_secret:  missing.append('Client Secret')
+        if not redirect_uri:   missing.append('Redirect URI')
+
+        return Response({
+            'settings': data, 'is_configured': is_configured, 'missing': missing,
+            'help': {
+                'where_to_find': 'https://www.reddit.com/prefs/apps → Create/Edit App',
+                'redirect_uri_note': 'Must match exactly what you set in your Reddit app settings.',
+                'frontend_url_note': 'Used for popup postMessage security.',
+            },
+        })
+
+    def post(self, request):
+        updated = []
+        errors  = []
+        for key in self.KEYS:
+            if key not in request.data:
+                continue
+            value = str(request.data[key]).strip()
+            if key in ('reddit_redirect_uri', 'frontend_url') and value:
+                if not (value.startswith('http://') or value.startswith('https://')):
+                    errors.append(f'{key} must start with http:// or https://')
+                    continue
+            try:
+                SiteConfiguration.set(key, value, self.KEYS[key])
+                updated.append(key)
+            except Exception as e:
+                errors.append(f'Could not save {key}: {str(e)}')
+
+        if errors and not updated:
+            return Response({'error': 'Failed to save.', 'details': errors}, status=status.HTTP_400_BAD_REQUEST)
+
+        client_id     = SiteConfiguration.get('reddit_client_id', '')
+        client_secret = SiteConfiguration.get('reddit_client_secret', '')
+        redirect_uri  = SiteConfiguration.get('reddit_redirect_uri', '')
+        is_configured = bool(client_id and client_secret and redirect_uri)
+
+        response = {
+            'success': True, 'updated_keys': updated, 'is_configured': is_configured,
+            'message': 'Reddit OAuth is now configured.' if is_configured else 'Settings saved. Some fields still missing.',
+        }
+        if errors:
+            response['warnings'] = errors
+        return Response(response)
+
+
+class AdminRedditAccountsView(APIView):
+    """GET /api/v1/admin/reddit-accounts/ — all users' Reddit accounts."""
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        from platforms.models import SocialAccount
+        accounts = SocialAccount.objects.filter(platform='reddit').select_related('user').order_by('-connected_at')
+        rows = []
+        for acc in accounts:
+            rows.append({
+                'account_id':   acc.id, 'user_id': acc.user_id, 'username': acc.user.username,
+                'account_name': acc.account_name, 'reddit_username': acc.reddit_username,
+                'status': acc.status, 'has_token': bool(acc.reddit_access_token),
+                'has_refresh': bool(acc.reddit_refresh_token),
+                'token_expires_at': acc.token_expires_at.isoformat() if acc.token_expires_at else None,
+                'connected_at': acc.connected_at.isoformat() if acc.connected_at else None,
+            })
+        return Response({'accounts': rows, 'total': len(rows)})
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TikTok OAuth Admin Settings
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TikTokSettingsView(APIView):
+    """GET/POST /api/v1/admin/tiktok-settings/ — TikTok OAuth config."""
+    permission_classes = [IsAdminUser]
+
+    KEYS = {
+        'tiktok_client_key':    'TikTok Client Key (from TikTok Developer Portal)',
+        'tiktok_client_secret': 'TikTok Client Secret (keep this private)',
+        'tiktok_redirect_uri':  'OAuth Redirect URI (must match TikTok app settings exactly)',
+        'frontend_url':         'Frontend URL (your React app URL)',
+    }
+
+    def get(self, request):
+        data = {}
+        for key, description in self.KEYS.items():
+            raw = SiteConfiguration.get(key, '')
+            if key == 'tiktok_client_secret' and raw:
+                display = '\u2022' * (len(raw) - 6) + raw[-6:] if len(raw) > 6 else '\u2022' * 6
+            else:
+                display = raw
+            data[key] = {'value': display, 'is_set': bool(raw), 'description': description}
+
+        client_key    = SiteConfiguration.get('tiktok_client_key', '')
+        client_secret = SiteConfiguration.get('tiktok_client_secret', '')
+        redirect_uri  = SiteConfiguration.get('tiktok_redirect_uri', '')
+
+        is_configured = bool(client_key and client_secret and redirect_uri)
+        missing = []
+        if not client_key:     missing.append('Client Key')
+        if not client_secret:  missing.append('Client Secret')
+        if not redirect_uri:   missing.append('Redirect URI')
+
+        return Response({
+            'settings': data, 'is_configured': is_configured, 'missing': missing,
+            'help': {
+                'where_to_find': 'https://developers.tiktok.com/ → Manage Apps',
+                'redirect_uri_note': 'Must match exactly what you set in TikTok Developer Portal.',
+                'frontend_url_note': 'Used for popup postMessage security.',
+            },
+        })
+
+    def post(self, request):
+        updated = []
+        errors  = []
+        for key in self.KEYS:
+            if key not in request.data:
+                continue
+            value = str(request.data[key]).strip()
+            if key in ('tiktok_redirect_uri', 'frontend_url') and value:
+                if not (value.startswith('http://') or value.startswith('https://')):
+                    errors.append(f'{key} must start with http:// or https://')
+                    continue
+            try:
+                SiteConfiguration.set(key, value, self.KEYS[key])
+                updated.append(key)
+            except Exception as e:
+                errors.append(f'Could not save {key}: {str(e)}')
+
+        if errors and not updated:
+            return Response({'error': 'Failed to save.', 'details': errors}, status=status.HTTP_400_BAD_REQUEST)
+
+        client_key    = SiteConfiguration.get('tiktok_client_key', '')
+        client_secret = SiteConfiguration.get('tiktok_client_secret', '')
+        redirect_uri  = SiteConfiguration.get('tiktok_redirect_uri', '')
+        is_configured = bool(client_key and client_secret and redirect_uri)
+
+        response = {
+            'success': True, 'updated_keys': updated, 'is_configured': is_configured,
+            'message': 'TikTok OAuth is now configured.' if is_configured else 'Settings saved. Some fields still missing.',
+        }
+        if errors:
+            response['warnings'] = errors
+        return Response(response)
+
+
+class AdminTikTokAccountsView(APIView):
+    """GET /api/v1/admin/tiktok-accounts/ — all users' TikTok accounts."""
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        from platforms.models import SocialAccount
+        accounts = SocialAccount.objects.filter(platform='tiktok').select_related('user').order_by('-connected_at')
+        rows = []
+        for acc in accounts:
+            rows.append({
+                'account_id':   acc.id, 'user_id': acc.user_id, 'username': acc.user.username,
+                'account_name': acc.account_name,
+                'status': acc.status, 'has_token': bool(acc.tiktok_access_token),
+                'has_refresh': bool(acc.tiktok_refresh_token),
+                'token_expires_at': acc.token_expires_at.isoformat() if acc.token_expires_at else None,
+                'connected_at': acc.connected_at.isoformat() if acc.connected_at else None,
+            })
+        return Response({'accounts': rows, 'total': len(rows)})

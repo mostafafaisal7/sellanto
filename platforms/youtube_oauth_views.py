@@ -1,0 +1,446 @@
+"""
+YouTube / Google OAuth 2.0 — Connection System
+================================================
+Endpoints:
+  GET  /api/v1/platforms/youtube/initiate/   → returns Google auth URL for popup
+  GET  /api/v1/platforms/youtube/callback/   → Google redirects here (no JWT)
+  GET  /api/v1/platforms/youtube/status/     → real-time connection health
+
+Flow:
+  1. User clicks "Connect YouTube" → popup opens Google consent screen
+  2. User authorizes → redirected to callback
+  3. Callback: code → access_token + refresh_token
+  4. Fetches channel info (channel ID, title)
+  5. Saves SocialAccount with refresh_token (for 1-hour token refresh)
+  6. Popup closes via localStorage + postMessage
+
+CRITICAL: access_type=offline + prompt=consent to get refresh_token.
+          Google only sends refresh_token on FIRST auth or when prompt=consent.
+"""
+
+import html as html_lib
+import json
+import logging
+import requests
+from datetime import timedelta
+from urllib.parse import urlencode
+
+from django.conf import settings
+from django.http import HttpResponse
+from django.utils import timezone
+
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.response import Response
+from rest_framework import status
+
+from platforms.models import SocialAccount, OAuthState
+from platforms.services.youtube import YouTubeService
+from accounts.models import SiteConfiguration
+
+logger = logging.getLogger(__name__)
+
+# ─── Google/YouTube OAuth Constants ──────────────────────────────────────────
+
+GOOGLE_AUTH_URL  = 'https://accounts.google.com/o/oauth2/v2/auth'
+GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'
+
+# Scopes: upload + readonly (sensitive, not restricted — no expensive audit needed)
+YT_SCOPES = 'https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly'
+
+
+# ─── DB Config Helpers ───────────────────────────────────────────────────────
+
+def _get_yt_config():
+    client_id     = SiteConfiguration.get('youtube_client_id',     getattr(settings, 'YOUTUBE_CLIENT_ID', ''))
+    client_secret = SiteConfiguration.get('youtube_client_secret', getattr(settings, 'YOUTUBE_CLIENT_SECRET', ''))
+    redirect_uri  = SiteConfiguration.get('youtube_redirect_uri',  getattr(settings, 'YOUTUBE_REDIRECT_URI', ''))
+    frontend_url  = SiteConfiguration.get('frontend_url',          getattr(settings, 'FRONTEND_URL', ''))
+    return {
+        'client_id':     client_id.strip() if client_id else '',
+        'client_secret': client_secret.strip() if client_secret else '',
+        'redirect_uri':  redirect_uri.strip() if redirect_uri else '',
+        'frontend_url':  frontend_url.strip() if frontend_url else '',
+    }
+
+
+def _config_is_complete(cfg):
+    return bool(cfg['client_id'] and cfg['client_secret'] and cfg['redirect_uri'])
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# VIEW 1 — Initiate OAuth
+# ══════════════════════════════════════════════════════════════════════════════
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def youtube_oauth_initiate(request):
+    """Returns Google OAuth URL → React opens it in a popup."""
+
+    cfg = _get_yt_config()
+
+    if not _config_is_complete(cfg):
+        return Response(
+            {
+                'error': 'YouTube connection is not configured.',
+                'detail': 'The admin has not set up Google/YouTube App credentials yet. Go to Admin Panel → YouTube Settings.',
+                'config_missing': True,
+            },
+            status=status.HTTP_503_SERVICE_UNAVAILABLE
+        )
+
+    try:
+        if not request.user.profile.can_add_account():
+            limit = request.user.profile.max_social_accounts
+            return Response(
+                {'error': 'Account limit reached.', 'detail': f'Your plan allows {limit} account(s).'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+    except Exception:
+        pass
+
+    state_obj = OAuthState.objects.create(
+        user=request.user,
+        platform='youtube',
+        expires_at=timezone.now() + timedelta(minutes=10),
+    )
+
+    params = {
+        'client_id':              cfg['client_id'],
+        'redirect_uri':           cfg['redirect_uri'],
+        'response_type':          'code',
+        'scope':                  YT_SCOPES,
+        'access_type':            'offline',     # CRITICAL: get refresh_token
+        'prompt':                 'consent',     # CRITICAL: force consent to always get refresh_token
+        'state':                  str(state_obj.state),
+        'include_granted_scopes': 'true',
+    }
+
+    auth_url = f'{GOOGLE_AUTH_URL}?{urlencode(params)}'
+    logger.info(f'[YT OAuth] Initiate for user {request.user.username}')
+    return Response({'auth_url': auth_url})
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# VIEW 2 — OAuth Callback
+# ══════════════════════════════════════════════════════════════════════════════
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def youtube_oauth_callback(request):
+    """
+    Google redirects here after authorization.
+    Pipeline: code → tokens → channel info → save SocialAccount
+    """
+
+    code  = request.GET.get('code', '').strip()
+    state = request.GET.get('state', '').strip()
+    error = request.GET.get('error', '')
+
+    if error:
+        if error in ('access_denied', 'consent_required'):
+            return _popup_error(
+                'Connection Cancelled',
+                'You cancelled the YouTube login or denied permissions. Click "Connect YouTube" again.'
+            )
+        return _popup_error('YouTube Login Failed', f'Google error: {error}')
+
+    if not code or not state:
+        return _popup_error('Invalid Response from Google', 'Missing required data. Please try again.')
+
+    cfg = _get_yt_config()
+    if not _config_is_complete(cfg):
+        return _popup_error('YouTube Not Configured', 'Please contact the administrator.')
+
+    # Validate CSRF state
+    try:
+        state_obj = OAuthState.objects.get(
+            state=state, platform='youtube', used=False, expires_at__gt=timezone.now(),
+        )
+    except OAuthState.DoesNotExist:
+        existing = OAuthState.objects.filter(state=state, platform='youtube').first()
+        if existing and existing.used:
+            detail = 'This login link has already been used. Please start again.'
+        elif existing and existing.expires_at < timezone.now():
+            detail = 'Session expired (10-minute limit). Please try again.'
+        else:
+            detail = 'Invalid session token. Please try again.'
+        return _popup_error('Session Validation Failed', detail)
+
+    state_obj.used = True
+    state_obj.save(update_fields=['used'])
+    user = state_obj.user
+    logger.info(f'[YT OAuth] Callback for user {user.username} — state validated')
+
+    # ── Step 1: code → tokens ────────────────────────────────────────────────
+    try:
+        resp = requests.post(GOOGLE_TOKEN_URL, data={
+            'grant_type':    'authorization_code',
+            'code':          code,
+            'client_id':     cfg['client_id'],
+            'client_secret': cfg['client_secret'],
+            'redirect_uri':  cfg['redirect_uri'],
+        }, headers={'Content-Type': 'application/x-www-form-urlencoded'}, timeout=15)
+
+        try:
+            token_data = resp.json()
+        except ValueError:
+            return _popup_error('Login Failed', f'Google returned invalid response (HTTP {resp.status_code}).')
+
+    except requests.Timeout:
+        return _popup_error('Connection Timed Out', 'Google took too long. Please try again.')
+    except requests.ConnectionError:
+        return _popup_error('Could Not Reach Google', 'Network error. Check your internet connection.')
+    except Exception as e:
+        logger.error(f'[YT OAuth] Step 1 failed: {e}')
+        return _popup_error('Could Not Reach Google', 'Please try again.')
+
+    if 'error' in token_data:
+        err = token_data.get('error_description', token_data.get('error', 'Unknown error'))
+        logger.error(f'[YT OAuth] Step 1 error: {token_data}')
+        return _popup_error('Login Failed', f'Google error: {err}')
+
+    access_token  = token_data.get('access_token')
+    refresh_token = token_data.get('refresh_token', '')
+    expires_in    = token_data.get('expires_in', 3600)  # Default 1 hour
+
+    if not access_token:
+        return _popup_error('No Token Received', 'Google did not return a token.')
+
+    if not refresh_token:
+        logger.warning('[YT OAuth] No refresh_token received — user may need to re-authorize')
+
+    token_expires_at = timezone.now() + timedelta(seconds=expires_in)
+    logger.info(f'[YT OAuth] Token obtained, expires in {expires_in}s, refresh={"yes" if refresh_token else "NO"}')
+
+    # ── Step 2: fetch channel info ───────────────────────────────────────────
+    valid, result = YouTubeService.validate_credentials(access_token)
+
+    if not valid:
+        logger.error(f'[YT OAuth] Channel fetch failed: {result}')
+        return _popup_error('Channel Not Found', result if isinstance(result, str) else 'Could not find your YouTube channel.')
+
+    channel_id = result['channel_id']
+    channel_title = result['channel_title']
+
+    # ── Step 3: save SocialAccount ───────────────────────────────────────────
+    try:
+        existing = SocialAccount.objects.filter(
+            user=user, platform='youtube', youtube_channel_id=channel_id
+        ).first()
+
+        if existing:
+            existing.account_name = channel_title
+            existing.youtube_access_token = access_token
+            # Only update refresh_token if we got a new one (Google doesn't always send it)
+            if refresh_token:
+                existing.youtube_refresh_token = refresh_token
+            existing.token_expires_at = token_expires_at
+            existing.validation_error = ''
+            existing.save(update_fields=[
+                'account_name', 'youtube_access_token', 'youtube_refresh_token',
+                'token_expires_at', 'validation_error',
+            ])
+            account = existing
+        else:
+            account, _ = SocialAccount.objects.update_or_create(
+                user=user,
+                platform='youtube',
+                account_name=channel_title,
+                defaults={
+                    'youtube_access_token':  access_token,
+                    'youtube_refresh_token': refresh_token,
+                    'youtube_channel_id':    channel_id,
+                    'token_expires_at':      token_expires_at,
+                    'validation_error':      '',
+                }
+            )
+
+        account.mark_as_active()
+        logger.info(f'[YT OAuth] Channel saved: {channel_title} ({channel_id})')
+
+    except Exception as e:
+        logger.error(f'[YT OAuth] Account save failed: {e}')
+        return _popup_error('Could Not Save Account', 'Database error. Please try again.')
+
+    account_info = {
+        'id': account.id,
+        'name': channel_title,
+        'channel_id': channel_id,
+        'has_refresh_token': bool(refresh_token or (existing and existing.youtube_refresh_token)),
+        'status': 'active',
+    }
+
+    # Warn if no refresh token (testing mode tokens expire in 7 days)
+    warning = None
+    if not refresh_token and not (existing and existing.youtube_refresh_token):
+        warning = (
+            'No refresh token received. Your access will expire in 1 hour and cannot be auto-renewed. '
+            'This usually means your Google app is in Testing mode. Get it verified for persistent access.'
+        )
+
+    logger.info(f'[YT OAuth] Success for {user.username}: {channel_title}')
+    return _popup_success(account_info, warning=warning)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# VIEW 3 — Connection Status
+# ══════════════════════════════════════════════════════════════════════════════
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def youtube_connection_status(request):
+    """Returns real-time YouTube connection health."""
+    user = request.user
+    force_refresh = request.GET.get('refresh') == '1'
+
+    accounts = SocialAccount.objects.filter(
+        user=user, platform='youtube'
+    ).order_by('-connected_at')
+
+    if not accounts.exists():
+        return Response({
+            'overall_status': 'not_connected',
+            'accounts': [],
+            'total_accounts': 0,
+            'active_accounts': 0,
+        })
+
+    if force_refresh:
+        for acc in accounts:
+            if not acc.youtube_access_token:
+                continue
+
+            # YouTube tokens expire every hour — try refresh first
+            if acc.is_token_expired() and acc.youtube_refresh_token:
+                cfg = _get_yt_config()
+                success, result = YouTubeService.refresh_access_token(
+                    acc.youtube_refresh_token, cfg['client_id'], cfg['client_secret']
+                )
+                if success:
+                    acc.youtube_access_token = result['access_token']
+                    acc.token_expires_at = timezone.now() + timedelta(seconds=result.get('expires_in', 3600))
+                    # Google sometimes returns a new refresh token
+                    if result.get('refresh_token'):
+                        acc.youtube_refresh_token = result['refresh_token']
+                    acc.save(update_fields=['youtube_access_token', 'youtube_refresh_token', 'token_expires_at'])
+                    acc.mark_as_active()
+                    continue
+                else:
+                    acc.mark_as_invalid(f'Token refresh failed: {result}')
+                    continue
+            elif acc.is_token_expired():
+                acc.mark_as_expired()
+                continue
+
+            valid, result = YouTubeService.validate_credentials(acc.youtube_access_token)
+            if valid:
+                acc.mark_as_active()
+            else:
+                acc.mark_as_invalid(result if isinstance(result, str) else 'Validation failed')
+
+    account_list = []
+    for acc in accounts:
+        account_list.append({
+            'account_id': acc.id,
+            'name': acc.account_name,
+            'channel_id': acc.youtube_channel_id,
+            'has_refresh_token': bool(acc.youtube_refresh_token),
+            'status': acc.status,
+            'status_display': acc.get_status_display(),
+            'is_active': acc.is_active,
+            'is_validated': acc.is_validated,
+            'token_expires_at': acc.token_expires_at.isoformat() if acc.token_expires_at else None,
+            'error_message': acc.validation_error,
+            'connected_at': acc.connected_at.isoformat() if acc.connected_at else None,
+            'last_validated_at': acc.last_validated_at.isoformat() if acc.last_validated_at else None,
+        })
+
+    active_count = sum(1 for a in account_list if a['status'] == 'active')
+    total_count = len(account_list)
+
+    if active_count == total_count:
+        overall = 'fully_connected'
+    elif active_count > 0:
+        overall = 'partially_connected'
+    elif total_count > 0:
+        overall = 'needs_attention'
+    else:
+        overall = 'not_connected'
+
+    return Response({
+        'overall_status': overall,
+        'accounts': account_list,
+        'total_accounts': total_count,
+        'active_accounts': active_count,
+    })
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# HELPERS — Popup HTML
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _popup_success(account_info, warning=None):
+    data = json.dumps({'type': 'YT_OAUTH_SUCCESS', 'account': account_info, 'warning': warning})
+    return _render_popup_html(data, success=True, warning=warning)
+
+
+def _popup_error(title, detail=''):
+    data = json.dumps({'type': 'YT_OAUTH_ERROR', 'title': title, 'detail': detail})
+    return _render_popup_html(data, success=False, title=title, detail=detail)
+
+
+def _render_popup_html(json_data, success=True, warning=None, title=None, detail=None):
+    frontend_url = SiteConfiguration.get('frontend_url', getattr(settings, 'FRONTEND_URL', '*')) or '*'
+
+    if success:
+        icon = '&#10004;'
+        heading = 'YouTube Connected!'
+        body = '<p>Your YouTube channel is now connected.</p>'
+        if warning:
+            body += f'<p class="warn">&#9888; {html_lib.escape(str(warning))}</p>'
+        heading_color = '#FF0000'
+    else:
+        icon = '&#10060;'
+        heading = html_lib.escape(str(title or 'Connection Failed'))
+        safe_detail = html_lib.escape(str(detail or 'An error occurred. Please try again.'))
+        body = f'<p class="detail">{safe_detail}</p>'
+        heading_color = '#c62828'
+
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>YouTube Connection</title>
+  <style>
+    *{{box-sizing:border-box;margin:0;padding:0}}
+    body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f0f2f5;display:flex;align-items:center;justify-content:center;min-height:100vh}}
+    .card{{background:#fff;border-radius:16px;padding:48px 36px;max-width:400px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.12);text-align:center}}
+    .icon{{font-size:56px;margin-bottom:20px}}
+    h2{{color:{heading_color};font-size:20px;font-weight:700;margin-bottom:12px}}
+    p{{color:#555;font-size:14px;line-height:1.6;margin-top:8px}}
+    .detail{{color:#777;font-size:13px}}
+    .warn{{color:#e65100;background:#fff8e1;border:1px solid #ffe082;border-radius:8px;padding:10px 14px;margin-top:14px;font-size:13px;text-align:left}}
+    .closing{{color:#bbb;font-size:12px;margin-top:24px}}
+    .progress{{height:3px;background:#e0e0e0;border-radius:3px;margin-top:20px;overflow:hidden}}
+    .progress-bar{{height:100%;background:{heading_color};animation:fill 2.5s linear forwards}}
+    @keyframes fill{{from{{width:0%}}to{{width:100%}}}}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">{icon}</div><h2>{heading}</h2>{body}
+    <p class="closing">This window will close automatically...</p>
+    <div class="progress"><div class="progress-bar"></div></div>
+  </div>
+  <script>
+    (function(){{
+      var payload={json_data};
+      try{{localStorage.setItem('yt_oauth_result',JSON.stringify(payload))}}catch(e){{}}
+      try{{if(window.opener&&!window.opener.closed){{window.opener.postMessage(payload,'{frontend_url}')}}}}catch(e){{}}
+      setTimeout(function(){{window.close()}},2500);
+    }})();
+  </script>
+</body>
+</html>"""
+    return HttpResponse(html, content_type='text/html')

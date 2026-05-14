@@ -7,3 +7,8 @@ export { AdminPaymentsPage } from './AdminPaymentsPage';
 export { AdminFinancePage } from './AdminFinancePage';
 export { AdminStripeSettingsPage } from './AdminStripeSettingsPage';
 export { AdminRefundsPage } from './AdminRefundsPage';
+export { AdminLinkedInSettingsPage } from './AdminLinkedInSettingsPage';
+export { AdminPinterestSettingsPage } from './AdminPinterestSettingsPage';
+export { AdminYouTubeSettingsPage } from './AdminYouTubeSettingsPage';
+export { AdminRedditSettingsPage } from './AdminRedditSettingsPage';
+export { AdminTikTokSettingsPage } from './AdminTikTokSettingsPage';

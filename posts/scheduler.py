@@ -10,6 +10,7 @@ from platforms.services.facebook import FacebookService
 from platforms.services.twitter import TwitterService
 from platforms.services.linkedin import LinkedInService
 from platforms.services.instagram import InstagramService  # <- ADD THIS LINE!
+from platforms.services.tiktok import TikTokService
 from apscheduler.schedulers.background import BackgroundScheduler
 from django.conf import settings
 import os
@@ -429,6 +430,66 @@ def post_instagram(post, account, caption, media_files):
         post.save()
         return False, error_msg
 
+def post_tiktok(post, account, caption, media_files=None):
+    """Post video to TikTok via Content Posting API (FILE_UPLOAD)."""
+    import logging
+    logger = logging.getLogger(__name__)
+
+    access_token = account.tiktok_access_token
+    if not access_token:
+        err = 'No TikTok access token'
+        post.tiktok_error = err
+        post.save(update_fields=['tiktok_error'])
+        return False, err
+
+    # Find first valid video file
+    video_path = None
+    if media_files:
+        for mf in media_files:
+            ext = os.path.splitext(mf)[1].lower()
+            if ext in ('.mp4', '.mov', '.avi', '.webm'):
+                full_path = os.path.join(settings.MEDIA_ROOT, mf)
+                if os.path.exists(full_path):
+                    video_path = full_path
+                    break
+
+    if not video_path:
+        err = 'TikTok requires a video file (.mp4, .mov, .avi). No valid video found in this post.'
+        post.tiktok_error = err
+        post.save(update_fields=['tiktok_error'])
+        return False, err
+
+    post_info = {
+        'title': (caption[:150] if caption else 'Posted via Sellanto').strip(),
+        'privacy_level': 'SELF_ONLY',   # SELF_ONLY until app passes TikTok review
+        'disable_duet': True,
+        'disable_comment': False,
+        'disable_stitch': True,
+        'brand_content_toggle': False,
+        'brand_organic_toggle': False,
+    }
+
+    try:
+        success, result = TikTokService.post_video_file_upload(access_token, post_info, video_path)
+        if success:
+            post.tiktok_post_id = result
+            post.tiktok_error = None
+            post.save(update_fields=['tiktok_post_id', 'tiktok_error'])
+            logger.info(f'[TikTok] Post #{post.id} published: publish_id={result}')
+            return True, result
+        else:
+            post.tiktok_error = result
+            post.save(update_fields=['tiktok_error'])
+            logger.error(f'[TikTok] Post #{post.id} failed: {result}')
+            return False, result
+    except Exception as e:
+        err = str(e)
+        post.tiktok_error = err
+        post.save(update_fields=['tiktok_error'])
+        logger.error(f'[TikTok] Post #{post.id} exception: {e}')
+        return False, err
+
+
 def publish_post(post):
     """Publish single post with detailed error logging"""
     
@@ -469,6 +530,8 @@ def publish_post(post):
                 result, error_msg = post_linkedin(post, account, caption, media_files)  # <- ADD media_files!
             elif platform == 'instagram':
                 result, error_msg = post_instagram(post, account, caption, media_files)
+            elif platform == 'tiktok':
+                result, error_msg = post_tiktok(post, account, caption, media_files)
             
             if result:
                 success += 1
@@ -606,6 +669,8 @@ def process_v121_scheduled_posts():
                 result_ok, error_msg = post_linkedin(post, account, caption_text, media_files)
             elif platform == 'instagram':
                 result_ok, error_msg = post_instagram(post, account, caption_text, media_files)
+            elif platform == 'tiktok':
+                result_ok, error_msg = post_tiktok(post, account, caption_text, media_files)
             else:
                 error_msg = f"Unsupported platform: {platform}"
                 logger.warning(f"[V1.2.1] {error_msg}")

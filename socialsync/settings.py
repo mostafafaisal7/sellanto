@@ -20,6 +20,54 @@ FACEBOOK_REDIRECT_URI = config(
     default='http://localhost:8000/api/v1/platforms/facebook/callback/'
 )
 FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:3000')
+
+# ─── LinkedIn OAuth — Personal App (Sign In with LinkedIn + Share on LinkedIn) ─
+LINKEDIN_CLIENT_ID     = config('LINKEDIN_CLIENT_ID', default='')
+LINKEDIN_CLIENT_SECRET = config('LINKEDIN_CLIENT_SECRET', default='')
+LINKEDIN_REDIRECT_URI  = config(
+    'LINKEDIN_REDIRECT_URI',
+    default='http://localhost:8000/api/v1/platforms/linkedin/callback/'
+)
+
+# ─── LinkedIn OAuth — Community App (Community Management API only) ───────────
+LINKEDIN_COMMUNITY_CLIENT_ID     = config('LINKEDIN_COMMUNITY_CLIENT_ID', default='')
+LINKEDIN_COMMUNITY_CLIENT_SECRET = config('LINKEDIN_COMMUNITY_CLIENT_SECRET', default='')
+LINKEDIN_COMMUNITY_REDIRECT_URI  = config(
+    'LINKEDIN_COMMUNITY_REDIRECT_URI',
+    default='http://localhost:8000/api/v1/platforms/linkedin/community/callback/'
+)
+
+# ─── TikTok OAuth ────────────────────────────────────────────────────────────
+TIKTOK_CLIENT_KEY    = config('TIKTOK_CLIENT_KEY', default='')
+TIKTOK_CLIENT_SECRET = config('TIKTOK_CLIENT_SECRET', default='')
+TIKTOK_REDIRECT_URI  = config(
+    'TIKTOK_REDIRECT_URI',
+    default='http://localhost:8000/api/v1/platforms/tiktok/callback/'
+)
+
+# ─── YouTube / Google OAuth ──────────────────────────────────────────────────
+YOUTUBE_CLIENT_ID     = config('YOUTUBE_CLIENT_ID', default='')
+YOUTUBE_CLIENT_SECRET = config('YOUTUBE_CLIENT_SECRET', default='')
+YOUTUBE_REDIRECT_URI  = config(
+    'YOUTUBE_REDIRECT_URI',
+    default='http://localhost:8000/api/v1/platforms/youtube/callback/'
+)
+
+# ──��� Pinterest OAuth ─────────────────────────────────────────────────────────
+PINTEREST_CLIENT_ID     = config('PINTEREST_CLIENT_ID', default='')
+PINTEREST_CLIENT_SECRET = config('PINTEREST_CLIENT_SECRET', default='')
+PINTEREST_REDIRECT_URI  = config(
+    'PINTEREST_REDIRECT_URI',
+    default='http://localhost:8000/api/v1/platforms/pinterest/callback/'
+)
+
+# ─── Reddit OAuth ────────────────────────────────────────────────────────────
+REDDIT_CLIENT_ID     = config('REDDIT_CLIENT_ID', default='')
+REDDIT_CLIENT_SECRET = config('REDDIT_CLIENT_SECRET', default='')
+REDDIT_REDIRECT_URI  = config(
+    'REDDIT_REDIRECT_URI',
+    default='http://localhost:8000/api/v1/platforms/reddit/callback/'
+)
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = config('DJANGO_SECRET_KEY', default='django-insecure-rf#m85xc6pefl#85gx(-g)%w)2_*_eg5*26ovyanr!7n%8vhm=')
 

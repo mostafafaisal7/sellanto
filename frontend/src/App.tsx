@@ -59,6 +59,11 @@ import {
   AdminFinancePage,
   AdminStripeSettingsPage,
   AdminRefundsPage,
+  AdminLinkedInSettingsPage,
+  AdminPinterestSettingsPage,
+  AdminYouTubeSettingsPage,
+  AdminRedditSettingsPage,
+  AdminTikTokSettingsPage,
 } from './pages/admin';
 import { LoadingScreen } from './components/ui';
 import { useAuthStore } from './store';
@@ -282,6 +287,11 @@ function App() {
           <Route path="/admin-panel/finance" element={<AdminFinancePage />} />
           <Route path="/admin-panel/stripe-settings" element={<AdminStripeSettingsPage />} />
           <Route path="/admin-panel/refunds" element={<AdminRefundsPage />} />
+          <Route path="/admin-panel/linkedin-settings" element={<AdminLinkedInSettingsPage />} />
+          <Route path="/admin-panel/pinterest-settings" element={<AdminPinterestSettingsPage />} />
+          <Route path="/admin-panel/youtube-settings" element={<AdminYouTubeSettingsPage />} />
+          <Route path="/admin-panel/reddit-settings" element={<AdminRedditSettingsPage />} />
+          <Route path="/admin-panel/tiktok-settings" element={<AdminTikTokSettingsPage />} />
         </Route>
 
         {/* Catch all - redirect to root (which routes to landing or dashboard) */}
