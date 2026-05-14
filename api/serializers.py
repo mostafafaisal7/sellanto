@@ -1494,4 +1494,3 @@ class ProductListSerializer(serializers.ModelSerializer):
         if obj.images and len(obj.images) > 0:
             return obj.images[0].get('src', '')
         return ''
-    add_text_shadow = serializers.BooleanField(default=True)
