@@ -64,6 +64,7 @@ import {
   AdminYouTubeSettingsPage,
   AdminRedditSettingsPage,
   AdminTikTokSettingsPage,
+  AdminEmailSettingsPage,
 } from './pages/admin';
 import { LoadingScreen } from './components/ui';
 import { useAuthStore } from './store';
@@ -292,6 +293,7 @@ function App() {
           <Route path="/admin-panel/youtube-settings" element={<AdminYouTubeSettingsPage />} />
           <Route path="/admin-panel/reddit-settings" element={<AdminRedditSettingsPage />} />
           <Route path="/admin-panel/tiktok-settings" element={<AdminTikTokSettingsPage />} />
+          <Route path="/admin-panel/email-settings" element={<AdminEmailSettingsPage />} />
         </Route>
 
         {/* Catch all - redirect to root (which routes to landing or dashboard) */}

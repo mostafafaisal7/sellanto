@@ -283,7 +283,13 @@ def _notify_admin_refund_requested(pr: PaymentRequest) -> None:
     try:
         from django.conf import settings
         from django.core.mail import send_mail
-        admin_email = getattr(settings, 'ADMIN_NOTIFICATION_EMAIL', '')
+        from accounts.models import SiteConfiguration
+        from accounts.services.email_service import get_email_connection, get_from_email
+
+        admin_email = (
+            SiteConfiguration.get('email_admin_notification')
+            or getattr(settings, 'ADMIN_NOTIFICATION_EMAIL', '')
+        )
         if not admin_email:
             return
         send_mail(
@@ -295,9 +301,10 @@ def _notify_admin_refund_requested(pr: PaymentRequest) -> None:
                 f'Reason: {pr.refund_reason}\n\n'
                 f'Review in admin panel: {settings.FRONTEND_URL}/admin-panel/refunds'
             ),
-            from_email=settings.DEFAULT_FROM_EMAIL,
+            from_email=get_from_email(),
             recipient_list=[admin_email],
             fail_silently=True,
+            connection=get_email_connection(),
         )
     except Exception:  # noqa: BLE001
         log.exception('refund_service: admin notification failed for PR#%s', pr.id)
@@ -305,8 +312,9 @@ def _notify_admin_refund_requested(pr: PaymentRequest) -> None:
 
 def _notify_user_refund_rejected(pr: PaymentRequest) -> None:
     try:
-        from django.conf import settings
         from django.core.mail import send_mail
+        from accounts.services.email_service import get_email_connection, get_from_email
+
         if not pr.user.email:
             return
         send_mail(
@@ -320,9 +328,10 @@ def _notify_user_refund_rejected(pr: PaymentRequest) -> None:
                 f'If you have questions, reply to this email.\n\n'
                 f'— Sellanto Billing'
             ),
-            from_email=settings.DEFAULT_FROM_EMAIL,
+            from_email=get_from_email(),
             recipient_list=[pr.user.email],
             fail_silently=True,
+            connection=get_email_connection(),
         )
     except Exception:  # noqa: BLE001
         log.exception('refund_service: user rejection email failed for PR#%s', pr.id)

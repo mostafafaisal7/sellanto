@@ -456,6 +456,11 @@ urlpatterns = [
          admin_views.AdminStripeSettingsView.as_view(),
          name='api-admin-stripe-settings'),
 
+    # Admin Email Settings (DB-stored SMTP config)
+    path('admin/email-settings/',        admin_views.AdminEmailSettingsView.as_view(),     name='api-admin-email-settings'),
+    path('admin/email-settings/update/', admin_views.AdminEmailSettingsView.as_view(),     name='api-admin-email-settings-update'),
+    path('admin/email-settings/test/',   admin_views.AdminEmailSettingsTestView.as_view(), name='api-admin-email-settings-test'),
+
     # Admin Finance / Accounting
     path('admin/finance/summary/', finance_views.FinanceSummaryView.as_view(), name='api-admin-finance-summary'),
     path('admin/finance/revenue/', finance_views.RevenueListView.as_view(), name='api-admin-finance-revenue'),

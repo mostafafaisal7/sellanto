@@ -1,4 +1,4 @@
-# May 14 Changes — branch `features/swapnil-v2.8`
+# May 14 Changes — branch `features/swapnil-v2.9`
 
 ---
 
@@ -293,6 +293,58 @@ Methods: `hasCardOnFile()`, `getDiamondRate()`, `createChargeIntent()`, `chargeS
 | `frontend/src/components/admin/AdminNavbar.tsx` | Modified | Refunds menu item |
 | `frontend/src/components/admin/AdminSidebar.tsx` | Modified | Refunds menu item |
 | `frontend/src/App.tsx` | Modified | New billing routes wired in |
+
+---
+
+## Additions (missed in first pass)
+
+A few pieces shipped today that didn't make the original write-up:
+
+### Frontend additions
+
+#### `pages/admin/AdminStripeSettingsPage.tsx` — NEW
+Admin-only page (mounted under `/admin-panel/stripe-settings`) for managing every Stripe key, Price ID, and the diamond rate from a single UI. Fields are grouped into three sections:
+1. **API keys** — Publishable Key, Secret Key, Webhook Signing Secret (secret fields are masked with eye/eye-slash toggle).
+2. **Plan Price IDs** — Pro/Business × Monthly/Yearly (4 fields).
+3. **Pricing** — `diamonds_per_dollar` rate.
+
+Each field shows whether the value comes from `db` (admin-edited) or `env` (settings.STRIPE_*) so admins know which take precedence. Includes a **Test connection** button that hits `/admin/stripe/test/` to verify the secret key actually works against Stripe's API. Copy-to-clipboard buttons next to each value. This page is what makes the DB-first `stripe_config.py` accessor actually useful — without it, the only way to set keys would be via env files.
+
+#### `services/adminStripeService.ts` — NEW
+Typed wrappers for the admin-only Stripe config endpoints (`GET /admin/stripe/config/`, `POST /admin/stripe/config/`, `POST /admin/stripe/test/`).
+
+#### `components/layout/Sidebar.tsx` — Modified
+Added **"Buy Diamonds"** nav item between "Upgrade Plan" and "Diamond Analytics". The "Upgrade to Pro" promo card at the bottom now has a secondary "Buy Diamonds" button under "Upgrade Now" so users can top up without leaving the sidebar.
+
+#### `pages/DiamondAnalyticsPage.tsx` — Modified
+Replaced "Top up plan" CTA with **"Top up diamonds"** that opens `BuyDiamondsModal` inline. Same swap on the low-balance warning banner — now shows both "Top up" (modal) and "Upgrade" (navigate) side by side. Refactored the data fetch into a reusable `load()` function so the modal's `onSuccess` can refresh all stats (wallet balance, forecast, usage chart, plan history, recent transactions) in place without a page reload.
+
+#### `pages/UpgradePage.tsx` — Modified (additional)
+Added a **"Need more diamonds?"** card section between the page header and the billing cycle toggle, with a "Buy Diamonds" CTA that opens `BuyDiamondsModal`. Refreshes wallet balance on success. Pitches diamonds as a no-commitment alternative to upgrading the plan tier.
+
+#### `pages/ProfilePage.tsx` — Modified
+Added a billing summary row showing current plan, diamonds balance, and a link to Payment Methods / Payment History. ~73 lines added.
+
+#### `pages/MyPostsPage.tsx` — Modified
+Small add: 23 lines for boost-from-post-card affordance (the "Boost this post" button on a post card now opens `BoostPostModal` with the post preselected, which calls into the May 12 boost flow).
+
+### Backend additions
+
+#### `accounts/services/email_service.py` — Modified (+60 lines)
+Added refund + password-reset email templates: `send_refund_requested_admin_email`, `send_refund_rejected_user_email`, `send_password_reset_otp_email`. These are called from `refund_service.py` and the new forgot-password views.
+
+#### `api/admin_views.py` — Modified (+298 lines)
+Added the admin-side refund management views (`AdminRefundListView`, `AdminRefundApproveView`, `AdminRefundRejectView`) and the Stripe config admin views (`AdminStripeConfigView`, `AdminStripeTestConnectionView`).
+
+#### `platforms/oauth_views.py` — Modified (+70 lines)
+Touched while wiring the boost-from-newly-published-post flow — small fixes to ad account auto-discovery error handling.
+
+### Commit history for May 14
+| Commit | Summary |
+|---|---|
+| `d8ffe3f9` | feat: Stripe payment integration, billing UI, refund management & video ads (main commit, ~10,277 insertions) |
+| `7abf930a` | feat: update requirements.txt and fix diamond top-up flow (Sidebar + DiamondAnalytics + UpgradePage top-up integration) |
+| `a8efaf8a` | Fix Stripe dependency conflict and TS build errors (`@stripe/react-stripe-js` version pin + CardEntryModal type fixes) |
 
 ---
 

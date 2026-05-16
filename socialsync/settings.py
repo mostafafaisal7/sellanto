@@ -368,7 +368,6 @@ STRIPE_CANCEL_URL  = f'{FRONTEND_URL}/billing/cancelled'
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'api.authentication.ImpersonatingJWTAuthentication',
-        'rest_framework.authentication.SessionAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',

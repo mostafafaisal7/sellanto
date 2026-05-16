@@ -16,10 +16,48 @@ import logging
 from typing import Optional
 
 from django.conf import settings
-from django.core.mail import EmailMultiAlternatives
+from django.core.mail import EmailMultiAlternatives, get_connection
 
 
 log = logging.getLogger(__name__)
+
+
+def get_email_connection():
+    """Return an SMTP connection built from DB config (SiteConfiguration).
+    Falls back to Django settings / .env values if DB has nothing set.
+    Returns None when no credentials are configured at all."""
+    from accounts.models import SiteConfiguration
+
+    host = SiteConfiguration.get('email_host') or getattr(settings, 'EMAIL_HOST', 'smtp.gmail.com')
+    port = SiteConfiguration.get('email_port') or str(getattr(settings, 'EMAIL_PORT', 587))
+    user = SiteConfiguration.get('email_host_user') or getattr(settings, 'EMAIL_HOST_USER', '')
+    password = SiteConfiguration.get('email_host_password') or getattr(settings, 'EMAIL_HOST_PASSWORD', '')
+    use_tls_raw = SiteConfiguration.get('email_use_tls') or str(getattr(settings, 'EMAIL_USE_TLS', True))
+    use_tls = use_tls_raw.lower() not in ('false', '0', 'no')
+
+    if not user or not password:
+        return None  # let Django use its default connection
+
+    return get_connection(
+        backend='django.core.mail.backends.smtp.EmailBackend',
+        host=host,
+        port=int(port),
+        username=user,
+        password=password,
+        use_tls=use_tls,
+    )
+
+
+def get_from_email() -> str:
+    """Return the configured from-address, preferring DB over settings."""
+    from accounts.models import SiteConfiguration
+
+    return (
+        SiteConfiguration.get('email_default_from')
+        or getattr(settings, 'DEFAULT_FROM_EMAIL', None)
+        or getattr(settings, 'EMAIL_HOST_USER', None)
+        or 'noreply@sellanto.app'
+    )
 
 
 def _send(subject: str, text_body: str, recipient: str,
@@ -28,16 +66,12 @@ def _send(subject: str, text_body: str, recipient: str,
         log.warning('email_service: skipped send, recipient is empty')
         return False
     try:
-        from_addr = (
-            getattr(settings, 'DEFAULT_FROM_EMAIL', None)
-            or getattr(settings, 'EMAIL_HOST_USER', None)
-            or 'noreply@sellanto.app'
-        )
         msg = EmailMultiAlternatives(
             subject=subject,
             body=text_body,
-            from_email=from_addr,
+            from_email=get_from_email(),
             to=[recipient],
+            connection=get_email_connection(),
         )
         if html_body:
             msg.attach_alternative(html_body, 'text/html')

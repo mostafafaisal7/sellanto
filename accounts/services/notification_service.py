@@ -297,7 +297,7 @@ def _send_email_notification(user, title, message):
 
     try:
         from django.core.mail import send_mail
-        from django.conf import settings
+        from accounts.services.email_service import get_email_connection, get_from_email
 
         html_body = f"""
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -315,15 +315,14 @@ def _send_email_notification(user, title, message):
         </div>
         """
 
-        from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', 'noreply@saleanto.com')
-
         send_mail(
             subject=f'[SaleAnto] {title}',
             message=message,
-            from_email=from_email,
+            from_email=get_from_email(),
             recipient_list=[user.email],
             html_message=html_body,
             fail_silently=True,
+            connection=get_email_connection(),
         )
         logger.info(f"Email notification sent: {title} to {user.email}")
     except Exception as e:

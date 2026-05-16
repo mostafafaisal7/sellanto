@@ -2503,4 +2503,90 @@ class AdminTikTokAccountsView(APIView):
                 'token_expires_at': acc.token_expires_at.isoformat() if acc.token_expires_at else None,
                 'connected_at': acc.connected_at.isoformat() if acc.connected_at else None,
             })
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Admin Email Settings  (GET /api/v1/admin/email-settings/)
+#                       (POST /api/v1/admin/email-settings/update/)
+#                       (POST /api/v1/admin/email-settings/test/)
+# ─────────────────────────────────────────────────────────────────────────────
+
+_EMAIL_KEYS = [
+    'email_host', 'email_port', 'email_use_tls',
+    'email_host_user', 'email_host_password',
+    'email_default_from', 'email_admin_notification',
+]
+
+_EMAIL_DESCRIPTIONS = {
+    'email_host':               'SMTP server hostname',
+    'email_port':               'SMTP server port',
+    'email_use_tls':            'Use TLS encryption (True/False)',
+    'email_host_user':          'Gmail/SMTP username (email address)',
+    'email_host_password':      'Gmail app password or SMTP password',
+    'email_default_from':       'Default from address shown to recipients',
+    'email_admin_notification': 'Admin email for system notifications',
+}
+
+
+class AdminEmailSettingsView(APIView):
+    """GET → read current SMTP config (password masked).
+    POST → save fields to SiteConfiguration."""
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        from django.conf import settings as dj_settings
+
+        has_pw = bool(
+            SiteConfiguration.get('email_host_password')
+            or getattr(dj_settings, 'EMAIL_HOST_PASSWORD', '')
+        )
+        return Response({
+            'email_host':               SiteConfiguration.get('email_host') or getattr(dj_settings, 'EMAIL_HOST', 'smtp.gmail.com'),
+            'email_port':               SiteConfiguration.get('email_port') or str(getattr(dj_settings, 'EMAIL_PORT', 587)),
+            'email_use_tls':            SiteConfiguration.get('email_use_tls') or str(getattr(dj_settings, 'EMAIL_USE_TLS', True)),
+            'email_host_user':          SiteConfiguration.get('email_host_user') or getattr(dj_settings, 'EMAIL_HOST_USER', ''),
+            'email_host_password':      '••••••••' if has_pw else '',
+            'email_default_from':       SiteConfiguration.get('email_default_from') or getattr(dj_settings, 'DEFAULT_FROM_EMAIL', ''),
+            'email_admin_notification': SiteConfiguration.get('email_admin_notification') or getattr(dj_settings, 'ADMIN_NOTIFICATION_EMAIL', ''),
+        })
+
+    def post(self, request):
+        for key in _EMAIL_KEYS:
+            if key not in request.data:
+                continue
+            value = str(request.data[key]).strip()
+            if key == 'email_host_password' and value == '••••••••':
+                continue
+            SiteConfiguration.set(key, value, _EMAIL_DESCRIPTIONS.get(key, ''))
+        return Response({'success': True})
+
+
+class AdminEmailSettingsTestView(APIView):
+    """POST → send a test email using currently saved SMTP settings."""
+    permission_classes = [IsAdminUser]
+
+    def post(self, request):
+        from accounts.services.email_service import get_email_connection, get_from_email
+        from django.core.mail import send_mail
+
+        recipient = (
+            request.data.get('test_recipient')
+            or SiteConfiguration.get('email_host_user')
+            or request.user.email
+        )
+        if not recipient:
+            return Response({'success': False, 'error': 'No recipient address configured'}, status=400)
+
+        try:
+            send_mail(
+                subject='[Sellanto] Test email — SMTP settings OK',
+                message='This is a test email sent from the Sellanto admin panel to verify your SMTP settings.',
+                from_email=get_from_email(),
+                recipient_list=[recipient],
+                fail_silently=False,
+                connection=get_email_connection(),
+            )
+            return Response({'success': True, 'sent_to': recipient})
+        except Exception as e:
+            return Response({'success': False, 'error': str(e)}, status=500)
         return Response({'accounts': rows, 'total': len(rows)})

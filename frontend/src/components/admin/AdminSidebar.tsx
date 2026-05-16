@@ -12,6 +12,7 @@ import {
   ScaleIcon,
   BoltIcon,
   ReceiptRefundIcon,
+  EnvelopeIcon,
 } from '@heroicons/react/24/outline';
 
 interface AdminSidebarProps {
@@ -83,6 +84,7 @@ const mainNavItems: NavItem[] = [
   { name: 'YouTube Settings',   href: '/admin-panel/youtube-settings',   icon: YouTubeIcon },
   { name: 'Reddit Settings',    href: '/admin-panel/reddit-settings',    icon: RedditIcon },
   { name: 'TikTok Settings',    href: '/admin-panel/tiktok-settings',    icon: TikTokIcon },
+  { name: 'Email Settings',    href: '/admin-panel/email-settings',    icon: EnvelopeIcon },
 ];
 
 const toolNavItems: NavItem[] = [

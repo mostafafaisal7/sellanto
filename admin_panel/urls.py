@@ -37,4 +37,5 @@ urlpatterns = [
     
     # Public API for user settings pages
     path('api/check-admin-managed/', views.check_admin_managed, name='check_admin_managed'),
+
 ]
