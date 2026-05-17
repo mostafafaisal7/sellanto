@@ -119,7 +119,6 @@ class RegisterSerializer(serializers.Serializer):
         # Update profile (signal already creates it via post_save)
         profile, _ = UserProfile.objects.get_or_create(user=user)
         profile.phone = validated_data.get('phone', '')
-        profile.is_approved = True
         profile.save()
         return user
 

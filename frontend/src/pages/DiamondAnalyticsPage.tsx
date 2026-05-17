@@ -368,11 +368,16 @@ export function DiamondAnalyticsPage() {
       ? '<1'
       : Math.floor(forecast.days_remaining).toLocaleString();
 
+  const effectiveWindow = forecast.effective_lookback_days ?? forecast.lookback_days;
   const daysRemainingSub =
     forecast.days_remaining == null
-      ? 'No usage in last ' + forecast.lookback_days + 'd'
+      ? 'No usage yet — generate something to see runway'
       : forecast.depletion_date
-      ? `Empty by ${fmtFullDate(forecast.depletion_date)}`
+      ? forecast.fallback_used === 'lifetime_average'
+        ? `Empty by ${fmtFullDate(forecast.depletion_date)} · all-time avg`
+        : forecast.fallback_used === 'expanded_window'
+        ? `Empty by ${fmtFullDate(forecast.depletion_date)} · last ${effectiveWindow}d avg`
+        : `Empty by ${fmtFullDate(forecast.depletion_date)}`
       : '';
 
   // Top 8 features by spend, sorted desc.

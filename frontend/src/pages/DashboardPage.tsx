@@ -88,6 +88,7 @@ export function DashboardPage() {
           icon={<UsersIcon className="w-6 h-6" />}
           trend={{ value: 12, isPositive: true, label: 'vs last month' }}
           delay={0}
+          href="/platforms"
         />
         <StatsCard
           title="Total Posts"
@@ -95,12 +96,14 @@ export function DashboardPage() {
           icon={<DocumentTextIcon className="w-6 h-6" />}
           trend={{ value: 8, isPositive: true, label: 'vs last month' }}
           delay={100}
+          href="/posts"
         />
         <StatsCard
           title="Scheduled Posts"
           value={mockStats.scheduled_posts}
           icon={<CalendarIcon className="w-6 h-6" />}
           delay={200}
+          href="/posts?status=scheduled"
         />
         <StatsCard
           title="Posts This Month"
@@ -111,6 +114,7 @@ export function DashboardPage() {
             max: mockStats.max_posts_per_month,
           }}
           delay={300}
+          href="/posts"
         />
       </div>
 

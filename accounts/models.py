@@ -1342,3 +1342,104 @@ class StripeWebhookEvent(models.Model):
 
     def __str__(self):
         return f'{self.event_type} · {self.stripe_event_id} · {self.processing_status}'
+
+
+class FeatureCostConfig(models.Model):
+    """Per-feature diamond cost configuration — admin-tunable without deploys.
+
+    Replaces the previously hard-coded `DIAMOND_COSTS` dict in
+    `accounts/services/diamond_service.py`. The dict still exists as
+    seed/fallback data, but live billing reads this table.
+
+    Resolution order for `get_diamond_cost(feature, **kwargs)`:
+      1. If a row exists and `flat_override_diamonds` is set → use that.
+      2. Else compute raw API cost via `cost_calculator` and multiply by
+         `(1 + markup_pct / 100)`.
+      3. If no row exists, fall back to the seed dict at 200% markup.
+    """
+
+    CATEGORY_CHOICES = [
+        ('text',  'Text / LLM'),
+        ('image', 'Image generation'),
+        ('video', 'Video generation'),
+        ('voice', 'Voice / TTS'),
+        ('ads',   'Ads automation'),
+        ('misc',  'Miscellaneous'),
+    ]
+
+    feature = models.CharField(
+        max_length=64,
+        unique=True,
+        help_text='Feature key, e.g. "caption", "video_5s", "image_standard".',
+    )
+    category = models.CharField(
+        max_length=10,
+        choices=CATEGORY_CHOICES,
+        default='misc',
+        help_text='UI grouping; does not affect billing.',
+    )
+    provider = models.CharField(
+        max_length=32,
+        blank=True,
+        default='',
+        help_text='Default provider used for this feature (informational).',
+    )
+    model_used = models.CharField(
+        max_length=64,
+        blank=True,
+        default='',
+        help_text='Default model ID used for this feature (informational).',
+    )
+
+    markup_pct = models.DecimalField(
+        max_digits=7,
+        decimal_places=2,
+        default=200,
+        help_text=(
+            'Markup over raw API cost, in percent. 200 = 3× cost basis. '
+            'Ignored when flat_override_diamonds is set.'
+        ),
+    )
+    flat_override_diamonds = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            'If set, bypasses the formula and charges this exact number of '
+            'diamonds. Use for hand-tuned features or emergency price floors.'
+        ),
+    )
+
+    is_active = models.BooleanField(
+        default=True,
+        help_text='If false, falls back to seed dict (DIAMOND_COSTS).',
+    )
+    notes = models.TextField(
+        blank=True,
+        default='',
+        help_text='Admin annotations — visible only in admin UI.',
+    )
+
+    updated_by = models.ForeignKey(
+        User,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='feature_cost_updates',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'feature_cost_configs'
+        ordering = ['category', 'feature']
+        verbose_name = 'Feature Cost Config'
+        verbose_name_plural = 'Feature Cost Configs'
+        indexes = [
+            models.Index(fields=['category', 'feature']),
+            models.Index(fields=['is_active']),
+        ]
+
+    def __str__(self):
+        if self.flat_override_diamonds is not None:
+            return f'{self.feature} · flat={self.flat_override_diamonds}💎'
+        return f'{self.feature} · {self.markup_pct}% markup'

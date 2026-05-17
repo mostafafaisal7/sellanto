@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowTrendingUpIcon, ArrowTrendingDownIcon } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
@@ -17,9 +18,11 @@ interface StatsCardProps {
     max: number;
   };
   delay?: number;
+  href?: string;
 }
 
-export function StatsCard({ title, value, icon, trend, progress, delay = 0 }: StatsCardProps) {
+export function StatsCard({ title, value, icon, trend, progress, delay = 0, href }: StatsCardProps) {
+  const navigate = useNavigate();
   const [animatedValue, setAnimatedValue] = useState(0);
   const [progressWidth, setProgressWidth] = useState(0);
 
@@ -55,7 +58,11 @@ export function StatsCard({ title, value, icon, trend, progress, delay = 0 }: St
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: delay / 1000, duration: 0.5 }}
       whileHover={{ y: -12 }}
-      className="relative p-6 rounded-2xl bg-gradient-to-br from-dark-700/80 to-dark-800/80 border border-white/5 overflow-hidden transition-all duration-500 group shadow-[0_10px_40px_rgba(0,0,0,0.3)] hover:border-primary/20 hover:shadow-[0_25px_60px_rgb(var(--c-primary)_/_0.25)]"
+      onClick={href ? () => navigate(href) : undefined}
+      className={clsx(
+        "relative p-6 rounded-2xl bg-gradient-to-br from-dark-700/80 to-dark-800/80 border border-white/5 overflow-hidden transition-all duration-500 group shadow-[0_10px_40px_rgba(0,0,0,0.3)] hover:border-primary/20 hover:shadow-[0_25px_60px_rgb(var(--c-primary)_/_0.25)]",
+        href && "cursor-pointer"
+      )}
     >
       {/* Hover glow effect */}
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgb(var(--c-primary)_/_0.1),transparent_70%)] opacity-0 group-hover:opacity-100 transition-opacity duration-500" />

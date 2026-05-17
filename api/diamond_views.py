@@ -270,13 +270,23 @@ class DiamondForecastView(APIView):
     """GET /api/v1/diamond/forecast/?lookback=14
 
     Estimates how many days of runway the user has based on their average
-    daily spend over the last `lookback` days (default 14, max 90).
+    daily spend.
+
+    Resolution order:
+      1. Try the requested `lookback` window (default 14, max 90).
+      2. If zero usage there, auto-expand to 30 → 60 → 90 days until usage found.
+      3. Still nothing? Fall back to all-time average using
+         (lifetime_spent / days_since_first_deduction).
+      4. Truly zero usage ever → `days_remaining=null` (infinite runway).
+
+    Returns an `effective_lookback_days` field so the UI can show which
+    window actually drove the estimate (vs the requested one).
     """
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
         from datetime import timedelta
-        from django.db.models import Sum
+        from django.db.models import Sum, Min
         from django.utils import timezone
 
         try:
@@ -285,37 +295,67 @@ class DiamondForecastView(APIView):
             lookback = 14
         lookback = max(1, min(lookback, 90))
 
-        cutoff = timezone.now() - timedelta(days=lookback)
-
         wallet, _ = DiamondWallet.objects.get_or_create(user=request.user)
+        now = timezone.now()
 
-        # Sum negative deduction amounts → positive number for display.
-        spent_window = abs(
-            DiamondTransaction.objects.filter(
-                user=request.user,
-                transaction_type='deduction',
-                created_at__gte=cutoff,
-            ).aggregate(total=Sum('amount'))['total'] or 0
+        deductions = DiamondTransaction.objects.filter(
+            user=request.user,
+            transaction_type='deduction',
         )
 
-        avg_daily = spent_window / lookback if lookback > 0 else 0
+        # Step 1 & 2: try requested window, then progressively expand
+        spent_window = 0
+        effective_lookback = lookback
+        fallback_used = ''
+
+        for try_window in [lookback, 30, 60, 90]:
+            if try_window < lookback:
+                continue
+            cutoff = now - timedelta(days=try_window)
+            total = abs(
+                deductions.filter(created_at__gte=cutoff)
+                .aggregate(total=Sum('amount'))['total'] or 0
+            )
+            if total > 0:
+                spent_window = total
+                effective_lookback = try_window
+                if try_window != lookback:
+                    fallback_used = 'expanded_window'
+                break
+
+        # Step 3: fall back to all-time if still zero but lifetime spend exists
+        if spent_window <= 0:
+            lifetime_spent = abs(
+                deductions.aggregate(total=Sum('amount'))['total'] or 0
+            )
+            if lifetime_spent > 0:
+                first_deduction = deductions.aggregate(first=Min('created_at'))['first']
+                if first_deduction:
+                    days_active = max(1, (now - first_deduction).days or 1)
+                    spent_window = lifetime_spent
+                    effective_lookback = days_active
+                    fallback_used = 'lifetime_average'
+
+        avg_daily = spent_window / effective_lookback if effective_lookback > 0 else 0
 
         if avg_daily <= 0:
-            days_remaining = None  # null = infinite / no usage
+            days_remaining = None  # truly no usage ever
             depletion_date = None
         else:
             days_remaining = round(wallet.balance / avg_daily, 1)
             depletion_date = (
-                timezone.now() + timedelta(days=days_remaining)
+                now + timedelta(days=days_remaining)
             ).date().isoformat()
 
         return Response({
             'balance': wallet.balance,
-            'lookback_days': lookback,
+            'lookback_days': lookback,                  # what was requested
+            'effective_lookback_days': effective_lookback,  # what actually drove the calc
             'spent_in_window': spent_window,
             'avg_daily_spend': round(avg_daily, 2),
             'days_remaining': days_remaining,
             'depletion_date': depletion_date,
+            'fallback_used': fallback_used,             # '' | 'expanded_window' | 'lifetime_average'
         })
 
 

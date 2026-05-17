@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -13,6 +13,8 @@ import {
   GlobeAltIcon,
   ExclamationTriangleIcon,
   XMarkIcon,
+  ArrowRightIcon,
+  ArrowPathIcon,
 } from '@heroicons/react/24/outline';
 import { Button, Input } from '../components/ui';
 import { useAuthStore } from '../store';
@@ -35,6 +37,12 @@ const registerSchema = z.object({
 
 type LoginFormData = z.infer<typeof loginSchema>;
 type RegisterFormData = z.infer<typeof registerSchema>;
+
+type OtpPending = {
+  user_id: number;
+  email: string;
+  otp_ttl_seconds: number;
+};
 
 function getAuthErrorTitle(message: string): string {
   const m = message.toLowerCase();
@@ -108,8 +116,31 @@ export function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const navigate = useNavigate();
-  const { login, isLoading, error, clearError } = useAuthStore();
+  const { error, clearError } = useAuthStore();
+  const [loginLoading, setLoginLoading] = useState(false);
   const [registerSuccess, setRegisterSuccess] = useState(false);
+
+  const [otpPending, setOtpPending] = useState<OtpPending | null>(null);
+  const [otpCode, setOtpCode] = useState('');
+  const [otpError, setOtpError] = useState<string | null>(null);
+  const [otpSubmitting, setOtpSubmitting] = useState(false);
+  const [otpResending, setOtpResending] = useState(false);
+  const [secondsLeft, setSecondsLeft] = useState(0);
+  const otpInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (!otpPending) return;
+    setSecondsLeft(otpPending.otp_ttl_seconds);
+    const id = window.setInterval(() => setSecondsLeft((s) => (s > 0 ? s - 1 : 0)), 1000);
+    return () => window.clearInterval(id);
+  }, [otpPending]);
+
+  useEffect(() => {
+    if (otpPending) {
+      const t = window.setTimeout(() => otpInputRef.current?.focus(), 80);
+      return () => window.clearTimeout(t);
+    }
+  }, [otpPending]);
 
   const loginForm = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
@@ -120,17 +151,37 @@ export function LoginPage() {
   });
 
   const onLogin = async (data: LoginFormData) => {
+    setLoginLoading(true);
     try {
-      await login(data);
-      // After login, check if user is staff from the store state
-      const currentUser = useAuthStore.getState().user;
-      if (currentUser?.is_staff) {
-        navigate('/admin-panel');
-      } else {
-        navigate('/dashboard');
+      const res = await fetch('/api/v1/auth/login/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (res.status === 403 && body?.requires_verification) {
+        setOtpPending({
+          user_id: body.user_id,
+          email: body.email,
+          otp_ttl_seconds: body.otp_ttl_seconds ?? 60,
+        });
+        return;
       }
-    } catch {
-      // Error handled by store
+      if (!res.ok) {
+        throw new Error(body?.error || body?.detail || 'Login failed');
+      }
+      if (body?.tokens) {
+        localStorage.setItem('access_token', body.tokens.access);
+        localStorage.setItem('refresh_token', body.tokens.refresh);
+        await useAuthStore.getState().fetchUser();
+        const currentUser = useAuthStore.getState().user;
+        navigate(currentUser?.is_staff ? '/admin-panel' : '/dashboard');
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Login failed';
+      useAuthStore.setState({ error: message });
+    } finally {
+      setLoginLoading(false);
     }
   };
 
@@ -147,7 +198,14 @@ export function LoginPage() {
         throw new Error(typeof msg === 'string' ? msg : 'Registration failed');
       }
       const result = await response.json();
-      // Auto-login with the returned tokens
+      if (result.requires_verification && result.user_id) {
+        setOtpPending({
+          user_id: result.user_id,
+          email: result.email || data.email,
+          otp_ttl_seconds: result.otp_ttl_seconds ?? 60,
+        });
+        return;
+      }
       if (result.tokens) {
         localStorage.setItem('access_token', result.tokens.access);
         localStorage.setItem('refresh_token', result.tokens.refresh);
@@ -160,6 +218,56 @@ export function LoginPage() {
       registerForm.setError('root', {
         message: err instanceof Error ? err.message : 'Registration failed',
       });
+    }
+  };
+
+  const onVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!otpPending) return;
+    const code = otpCode.trim();
+    if (code.length !== 6) { setOtpError('Enter all 6 digits.'); return; }
+    setOtpSubmitting(true);
+    setOtpError(null);
+    try {
+      const res = await fetch('/api/v1/auth/verify-otp/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: otpPending.user_id, code }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error || 'Verification failed');
+      if (body?.tokens) {
+        localStorage.setItem('access_token', body.tokens.access);
+        localStorage.setItem('refresh_token', body.tokens.refresh);
+        await useAuthStore.getState().fetchUser();
+        const currentUser = useAuthStore.getState().user;
+        navigate(currentUser?.is_staff ? '/admin-panel' : '/dashboard');
+      }
+    } catch (err) {
+      setOtpError(err instanceof Error ? err.message : 'Verification failed');
+    } finally {
+      setOtpSubmitting(false);
+    }
+  };
+
+  const onResendOtp = async () => {
+    if (!otpPending || secondsLeft > 0 || otpResending) return;
+    setOtpResending(true);
+    setOtpError(null);
+    try {
+      const res = await fetch('/api/v1/auth/resend-otp/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: otpPending.user_id }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body?.error || 'Could not resend code');
+      setOtpPending({ ...otpPending, otp_ttl_seconds: body?.otp_ttl_seconds ?? 60 });
+      setOtpCode('');
+    } catch (err) {
+      setOtpError(err instanceof Error ? err.message : 'Could not resend code');
+    } finally {
+      setOtpResending(false);
     }
   };
 
@@ -280,18 +388,98 @@ export function LoginPage() {
           </div>
 
           {/* Form Card */}
-          <div className="bg-dark-700/50 backdrop-blur-xl rounded-3xl p-8 border border-white/10 shadow-2xl">
-            <div className="text-center mb-8">
-              <h2 className="text-2xl font-bold text-text-primary mb-2">
-                {isRegister ? 'Create Account' : 'Welcome Back'}
-              </h2>
-              <p className="text-text-secondary">
-                {isRegister
-                  ? 'Join thousands of social media managers'
-                  : 'Sign in to manage your social media'}
-              </p>
-            </div>
+          <div className="bg-dark-700/50 backdrop-blur-xl rounded-3xl p-6 sm:p-8 border border-white/10 shadow-2xl">
+            {!otpPending && (
+              <div className="text-center mb-8">
+                <h2 className="text-2xl font-bold text-text-primary mb-2">
+                  {isRegister ? 'Create Account' : 'Welcome Back'}
+                </h2>
+                <p className="text-text-secondary">
+                  {isRegister
+                    ? 'Join thousands of social media managers'
+                    : 'Sign in to manage your social media'}
+                </p>
+              </div>
+            )}
 
+            {/* OTP Verification Screen */}
+            {otpPending ? (
+              <motion.form
+                key="otp"
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.2 }}
+                onSubmit={onVerifyOtp}
+                className="space-y-4"
+              >
+                <div className="text-center mb-6">
+                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center mx-auto mb-4">
+                    <ShieldCheckIcon className="w-8 h-8 text-white" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-text-primary mb-2">Verify your email</h2>
+                  <p className="text-text-secondary text-sm">
+                    Enter the 6-digit code we sent to <span className="text-text-primary font-medium break-all">{otpPending.email}</span>
+                  </p>
+                </div>
+
+                <div className="flex items-end gap-3">
+                  <div className="flex-1 min-w-0">
+                    <label className="block text-xs font-medium text-text-secondary mb-1.5">6-digit code</label>
+                    <input
+                      ref={otpInputRef}
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      pattern="\d{6}"
+                      maxLength={6}
+                      placeholder="• • • • • •"
+                      value={otpCode}
+                      onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      className="w-full px-4 py-3 rounded-xl bg-white/[0.04] border border-white/[0.08] text-text-primary text-center text-2xl font-mono tracking-[0.6em] focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/30 placeholder:text-text-muted/40"
+                    />
+                  </div>
+                  <div className={`shrink-0 w-20 h-[50px] rounded-xl border flex flex-col items-center justify-center font-mono ${secondsLeft > 0 ? 'border-primary/30 bg-primary/5 text-primary' : 'border-white/[0.06] bg-white/[0.02] text-text-muted'}`}>
+                    <span className="text-[10px] uppercase tracking-[0.15em] opacity-70">{secondsLeft > 0 ? 'expires' : 'expired'}</span>
+                    <span className="text-lg font-bold leading-none mt-0.5">{secondsLeft > 0 ? `0:${secondsLeft.toString().padStart(2, '0')}` : '0:00'}</span>
+                  </div>
+                </div>
+
+                <AnimatePresence>
+                  {otpError && <AuthAlert message={otpError} onDismiss={() => setOtpError(null)} />}
+                </AnimatePresence>
+
+                <Button
+                  type="submit"
+                  fullWidth
+                  size="lg"
+                  isLoading={otpSubmitting}
+                  disabled={otpCode.length !== 6}
+                  rightIcon={<ArrowRightIcon className="w-4 h-4" />}
+                >
+                  Verify &amp; continue
+                </Button>
+
+                <div className="flex items-center justify-between text-xs">
+                  <button
+                    type="button"
+                    onClick={() => { setOtpPending(null); setOtpCode(''); setOtpError(null); }}
+                    className="text-text-muted hover:text-text-primary transition-colors"
+                  >
+                    ← Use a different account
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onResendOtp}
+                    disabled={secondsLeft > 0 || otpResending}
+                    className={`flex items-center gap-1.5 font-medium transition-colors ${secondsLeft > 0 || otpResending ? 'text-text-muted cursor-not-allowed' : 'text-primary hover:underline'}`}
+                  >
+                    <ArrowPathIcon className={`w-3.5 h-3.5 ${otpResending ? 'animate-spin' : ''}`} />
+                    {secondsLeft > 0 ? `Resend in 0:${secondsLeft.toString().padStart(2, '0')}` : otpResending ? 'Sending…' : 'Resend code'}
+                  </button>
+                </div>
+              </motion.form>
+            ) : (
+              <>
             {/* Success Message */}
             {registerSuccess && (
               <motion.div
@@ -375,7 +563,7 @@ export function LoginPage() {
                   </Link>
                 </div>
 
-                <Button type="submit" fullWidth size="lg" isLoading={isLoading}>
+                <Button type="submit" fullWidth size="lg" isLoading={loginLoading}>
                   Sign In
                 </Button>
               </form>
@@ -467,6 +655,8 @@ export function LoginPage() {
                 {isRegister ? 'Sign In Instead' : 'Create Account'}
               </Button>
             </Link>
+              </>
+            )}
           </div>
 
           {/* Footer */}

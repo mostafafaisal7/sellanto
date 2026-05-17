@@ -2503,6 +2503,7 @@ class AdminTikTokAccountsView(APIView):
                 'token_expires_at': acc.token_expires_at.isoformat() if acc.token_expires_at else None,
                 'connected_at': acc.connected_at.isoformat() if acc.connected_at else None,
             })
+        return Response({'accounts': rows, 'total': len(rows)})
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -2557,6 +2558,9 @@ class AdminEmailSettingsView(APIView):
             value = str(request.data[key]).strip()
             if key == 'email_host_password' and value == '••••••••':
                 continue
+            if key == 'email_port':
+                if not value.isdigit() or not (1 <= int(value) <= 65535):
+                    return Response({'error': 'Invalid port number (must be 1–65535)'}, status=400)
             SiteConfiguration.set(key, value, _EMAIL_DESCRIPTIONS.get(key, ''))
         return Response({'success': True})
 
@@ -2577,6 +2581,13 @@ class AdminEmailSettingsTestView(APIView):
         if not recipient:
             return Response({'success': False, 'error': 'No recipient address configured'}, status=400)
 
+        connection = get_email_connection()
+        if connection is None:
+            return Response({
+                'success': False,
+                'error': 'No SMTP credentials configured. Set Gmail address and App Password in Email Settings first.',
+            }, status=400)
+
         try:
             send_mail(
                 subject='[Sellanto] Test email — SMTP settings OK',
@@ -2584,9 +2595,389 @@ class AdminEmailSettingsTestView(APIView):
                 from_email=get_from_email(),
                 recipient_list=[recipient],
                 fail_silently=False,
-                connection=get_email_connection(),
+                connection=connection,
             )
             return Response({'success': True, 'sent_to': recipient})
         except Exception as e:
             return Response({'success': False, 'error': str(e)}, status=500)
-        return Response({'accounts': rows, 'total': len(rows)})
+
+
+# ============================================================
+# FEATURE COST CONFIG — admin tunable per-feature diamond pricing
+# ============================================================
+
+def _serialize_feature_cost(cfg):
+    """Build the per-row payload used by the admin UI."""
+    from accounts.services import diamond_service
+    from accounts.services.cost_calculator import (
+        estimate_feature_raw_cost_usd,
+        cost_type_for_feature,
+    )
+    from decimal import Decimal
+
+    raw_usd = estimate_feature_raw_cost_usd(cfg.feature, model=cfg.model_used)
+    raw_diamonds_decimal = (raw_usd / diamond_service.DIAMOND_USD_RATE) if raw_usd > 0 else Decimal('0')
+    raw_diamonds = float(raw_diamonds_decimal)
+
+    target_3x = float((raw_diamonds_decimal * Decimal('3')).quantize(Decimal('1')))
+
+    if cfg.flat_override_diamonds is not None:
+        current_diamonds = int(cfg.flat_override_diamonds)
+    else:
+        formula = diamond_service._formula_diamond_cost(
+            cfg.feature, cfg.markup_pct, model=cfg.model_used,
+        )
+        current_diamonds = int(formula) if formula is not None else int(
+            diamond_service.DIAMOND_COSTS.get(cfg.feature, 5)
+        )
+
+    gap_pct = None
+    if target_3x > 0:
+        gap_pct = round((current_diamonds - target_3x) / target_3x * 100, 1)
+
+    return {
+        'feature':                 cfg.feature,
+        'category':                cfg.category,
+        'cost_type':               cost_type_for_feature(cfg.feature),
+        'provider':                cfg.provider,
+        'model_used':              cfg.model_used,
+        'markup_pct':              str(cfg.markup_pct),
+        'flat_override_diamonds':  cfg.flat_override_diamonds,
+        'is_active':               cfg.is_active,
+        'notes':                   cfg.notes,
+        'raw_cost_usd':            f'{raw_usd:.6f}',
+        'raw_cost_diamonds':       round(raw_diamonds, 2),
+        'target_3x_diamonds':      int(target_3x),
+        'current_diamonds':        current_diamonds,
+        'gap_vs_target_pct':       gap_pct,
+        'updated_at':              cfg.updated_at.isoformat() if cfg.updated_at else None,
+        'updated_by':              cfg.updated_by.username if cfg.updated_by_id else None,
+    }
+
+
+class AdminFeatureCostListView(APIView):
+    """
+    GET /api/v1/admin/feature-costs/
+
+    List every FeatureCostConfig row with the live diamond cost the
+    diamond_service would compute right now, plus the 3× target and the
+    gap percentage. Used to populate the admin tuning UI.
+
+    Optional `?category=text|image|video|voice|ads|misc` filter.
+    """
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        from accounts.models import FeatureCostConfig
+
+        qs = FeatureCostConfig.objects.all().order_by('category', 'feature')
+        category = request.query_params.get('category', '').strip()
+        if category:
+            qs = qs.filter(category=category)
+
+        rows = [_serialize_feature_cost(cfg) for cfg in qs]
+
+        # Summary cards for the page header
+        total_raw_usd = sum(float(r['raw_cost_usd']) for r in rows)
+        total_current = sum(int(r['current_diamonds']) for r in rows)
+        total_target = sum(int(r['target_3x_diamonds']) for r in rows)
+
+        return Response({
+            'rows':    rows,
+            'summary': {
+                'row_count':            len(rows),
+                'avg_raw_cost_usd':     round(total_raw_usd / len(rows), 6) if rows else 0,
+                'total_current_diamonds': total_current,
+                'total_target_diamonds':  total_target,
+                'avg_gap_pct': (
+                    round(sum(r['gap_vs_target_pct'] or 0 for r in rows) / len(rows), 1)
+                    if rows else 0
+                ),
+            },
+            'categories': [c[0] for c in FeatureCostConfig.CATEGORY_CHOICES],
+        })
+
+
+class AdminFeatureCostDetailView(APIView):
+    """
+    PATCH /api/v1/admin/feature-costs/<str:feature>/
+
+    Update markup_pct, flat_override_diamonds, is_active, or notes for a
+    single feature. Any subset of fields may be sent.
+
+    Body example:
+        {"markup_pct": 250}
+        {"flat_override_diamonds": 50}
+        {"flat_override_diamonds": null}    # switch back to formula
+        {"is_active": false}
+    """
+    permission_classes = [IsAdminUser]
+
+    def patch(self, request, feature):
+        from accounts.models import FeatureCostConfig
+        from decimal import Decimal, InvalidOperation
+
+        try:
+            cfg = FeatureCostConfig.objects.get(feature=feature)
+        except FeatureCostConfig.DoesNotExist:
+            return Response(
+                {'error': f'No FeatureCostConfig for feature "{feature}"'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        data = request.data or {}
+
+        if 'markup_pct' in data:
+            try:
+                value = Decimal(str(data['markup_pct']))
+            except (InvalidOperation, TypeError):
+                return Response({'error': 'markup_pct must be a number'}, status=400)
+            if value < 0 or value > 10000:
+                return Response({'error': 'markup_pct must be 0–10000'}, status=400)
+            cfg.markup_pct = value
+
+        if 'flat_override_diamonds' in data:
+            value = data['flat_override_diamonds']
+            if value in (None, '', 'null'):
+                cfg.flat_override_diamonds = None
+            else:
+                try:
+                    intval = int(value)
+                except (TypeError, ValueError):
+                    return Response({'error': 'flat_override_diamonds must be an integer or null'}, status=400)
+                if intval < 0:
+                    return Response({'error': 'flat_override_diamonds must be ≥ 0'}, status=400)
+                cfg.flat_override_diamonds = intval
+
+        if 'is_active' in data:
+            cfg.is_active = bool(data['is_active'])
+
+        if 'notes' in data:
+            cfg.notes = str(data['notes'] or '')
+
+        cfg.updated_by = request.user
+        cfg.save()
+
+        return Response(_serialize_feature_cost(cfg))
+
+
+class AdminFeatureCostPreviewView(APIView):
+    """
+    POST /api/v1/admin/feature-costs/preview/
+
+    Compute what the diamond cost *would* be without saving — used to
+    drive the slider preview in the admin UI.
+
+    Body:
+        {
+            "feature": "caption",
+            "markup_pct": 250,           # optional, defaults to row's value
+            "flat_override_diamonds": null,  # optional
+            "modifiers": {               # optional, for video/voice/image
+                "duration_seconds": 8,
+                "characters": 1500,
+                "media_count": 1,
+                "model": "claude-haiku-4-5"
+            }
+        }
+    """
+    permission_classes = [IsAdminUser]
+
+    def post(self, request):
+        from accounts.models import FeatureCostConfig
+        from accounts.services import diamond_service
+        from accounts.services.cost_calculator import estimate_feature_raw_cost_usd
+        from decimal import Decimal, InvalidOperation
+
+        data = request.data or {}
+        feature = data.get('feature', '').strip()
+        if not feature:
+            return Response({'error': 'feature is required'}, status=400)
+
+        try:
+            cfg = FeatureCostConfig.objects.get(feature=feature)
+        except FeatureCostConfig.DoesNotExist:
+            return Response({'error': f'No FeatureCostConfig for "{feature}"'}, status=404)
+
+        modifiers = data.get('modifiers') or {}
+        model = modifiers.get('model') or cfg.model_used
+        duration_seconds = int(modifiers.get('duration_seconds') or 0)
+        characters = int(modifiers.get('characters') or 0)
+        media_count = int(modifiers.get('media_count') or 1)
+
+        # Determine markup vs flat override from payload (falling back to row)
+        flat_override = data.get('flat_override_diamonds', '__not_provided__')
+        if flat_override == '__not_provided__':
+            flat_override = cfg.flat_override_diamonds
+        elif flat_override in (None, '', 'null'):
+            flat_override = None
+
+        if flat_override is not None:
+            try:
+                preview_diamonds = int(flat_override)
+            except (TypeError, ValueError):
+                return Response({'error': 'flat_override_diamonds must be int or null'}, status=400)
+        else:
+            try:
+                markup_pct = Decimal(str(data.get('markup_pct', cfg.markup_pct)))
+            except (InvalidOperation, TypeError):
+                return Response({'error': 'markup_pct must be a number'}, status=400)
+            formula = diamond_service._formula_diamond_cost(
+                feature, markup_pct, model=model,
+                duration_seconds=duration_seconds,
+                characters=characters,
+                media_count=media_count,
+            )
+            preview_diamonds = formula if formula is not None else diamond_service.DIAMOND_COSTS.get(feature, 5)
+
+        raw_usd = estimate_feature_raw_cost_usd(
+            feature, model=model,
+            duration_seconds=duration_seconds,
+            characters=characters,
+            media_count=media_count,
+        )
+        raw_diamonds = float(raw_usd / diamond_service.DIAMOND_USD_RATE) if raw_usd > 0 else 0
+
+        return Response({
+            'feature':           feature,
+            'preview_diamonds':  int(preview_diamonds),
+            'raw_cost_usd':      f'{raw_usd:.6f}',
+            'raw_cost_diamonds': round(raw_diamonds, 2),
+            'target_3x_diamonds': int(round(raw_diamonds * 3)),
+            'gap_vs_target_pct': (
+                round((int(preview_diamonds) - raw_diamonds * 3) / (raw_diamonds * 3) * 100, 1)
+                if raw_diamonds > 0 else None
+            ),
+            'used_flat_override': flat_override is not None,
+        })
+
+
+class AdminFeatureCostHistoryView(APIView):
+    """
+    GET /api/v1/admin/feature-costs/history/?days=30&category=text
+
+    Per-feature historical breakdown from `DiamondTransaction` rows.
+    Each row includes the real $ cost we paid, the diamonds we charged,
+    the cost-basis gap, and a recommended `flat_override_diamonds`
+    grounded in actual usage.
+
+    Used by the admin Feature-Costs page (Historical Audit tab).
+    """
+    permission_classes = [IsAdminUser]
+
+    def get(self, request):
+        from accounts.services.feature_cost_recommender import aggregate_historical_costs
+
+        try:
+            days = max(1, min(int(request.query_params.get('days', 30)), 365))
+        except (TypeError, ValueError):
+            days = 30
+        category = request.query_params.get('category', '').strip() or ''
+
+        payload = aggregate_historical_costs(lookback_days=days, category=category)
+        return Response(payload)
+
+
+class AdminFeatureCostRecommendView(APIView):
+    """
+    POST /api/v1/admin/feature-costs/<str:feature>/recommend-from-history/
+
+    Body: {"days": 30}  (optional)
+
+    Returns the recommendation dict for one feature, used to pre-fill the
+    `flat_override_diamonds` field in the edit modal.
+    """
+    permission_classes = [IsAdminUser]
+
+    def post(self, request, feature):
+        from accounts.services.feature_cost_recommender import recommend_price
+
+        try:
+            days = max(1, min(int(request.data.get('days', 30)), 365))
+        except (TypeError, ValueError):
+            days = 30
+
+        try:
+            rec = recommend_price(feature, lookback_days=days)
+        except Exception as exc:  # noqa: BLE001
+            return Response(
+                {'error': f'Failed to compute recommendation: {exc}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+        return Response(rec)
+
+
+class AdminFeatureCostApplyRecommendationsView(APIView):
+    """
+    POST /api/v1/admin/feature-costs/apply-recommendations/
+
+    Body:
+      {
+        "features": ["caption", "video_5s", ...],   # required, non-empty
+        "days":      30                              # optional, default 30
+      }
+
+    Bulk-applies the recommended `flat_override_diamonds` for every named
+    feature. Skips any feature with insufficient history (< 5 calls in
+    window) — its current price is left untouched.
+    """
+    permission_classes = [IsAdminUser]
+
+    def post(self, request):
+        from accounts.services.feature_cost_recommender import apply_recommendations
+
+        features = request.data.get('features') or []
+        if not isinstance(features, list) or not features:
+            return Response(
+                {'error': 'features must be a non-empty list of feature keys.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            days = max(1, min(int(request.data.get('days', 30)), 365))
+        except (TypeError, ValueError):
+            days = 30
+
+        result = apply_recommendations(
+            features=[str(f) for f in features],
+            lookback_days=days,
+            actor=request.user,
+        )
+        return Response(result)
+
+
+class AdminFeatureCostReseedView(APIView):
+    """
+    POST /api/v1/admin/feature-costs/reseed-from-code/
+
+    Emergency rollback — restore every row's `flat_override_diamonds` to
+    the value in `diamond_service.DIAMOND_COSTS`, set markup back to
+    200%, and mark every row active. Useful if a tuning session goes
+    wrong and the admin wants to recover original behaviour without a
+    deploy or DB rollback.
+
+    Returns the refreshed list payload.
+    """
+    permission_classes = [IsAdminUser]
+
+    def post(self, request):
+        from accounts.models import FeatureCostConfig
+        from accounts.services import diamond_service
+
+        updated_rows = []
+        for cfg in FeatureCostConfig.objects.all():
+            seed_value = diamond_service.DIAMOND_COSTS.get(cfg.feature)
+            if seed_value is None:
+                continue
+            cfg.flat_override_diamonds = seed_value
+            cfg.markup_pct = diamond_service.DEFAULT_MARKUP_PCT
+            cfg.is_active = True
+            cfg.updated_by = request.user
+            cfg.save()
+            updated_rows.append(cfg.feature)
+
+        return Response({
+            'ok':            True,
+            'reseeded_count': len(updated_rows),
+            'features':       updated_rows,
+        })

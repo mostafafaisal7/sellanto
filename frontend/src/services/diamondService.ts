@@ -44,10 +44,18 @@ export interface PlanHistoryEntry {
 export interface DiamondForecast {
   balance: number;
   lookback_days: number;
+  /**
+   * Window the forecast actually used. May differ from `lookback_days`
+   * when the requested window had zero usage and the backend auto-expanded
+   * (up to 90d) or fell back to lifetime average.
+   */
+  effective_lookback_days?: number;
   spent_in_window: number;
   avg_daily_spend: number;
   days_remaining: number | null;
   depletion_date: string | null;
+  /** '' | 'expanded_window' | 'lifetime_average' */
+  fallback_used?: string;
 }
 
 export const diamondService = {

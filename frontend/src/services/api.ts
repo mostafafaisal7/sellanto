@@ -28,6 +28,11 @@ const clearTokens = (): void => {
   localStorage.removeItem('refresh_token');
 };
 
+const getCsrfToken = (): string | null => {
+  const match = document.cookie.match(/csrftoken=([^;]+)/);
+  return match ? decodeURIComponent(match[1]) : null;
+};
+
 // Request interceptor - add auth header and handle Content-Type
 api.interceptors.request.use(
   (config) => {
@@ -40,6 +45,15 @@ api.interceptors.request.use(
     const impersonateId = localStorage.getItem('impersonate_user_id');
     if (impersonateId && config.headers) {
       config.headers['X-Impersonate-User'] = impersonateId;
+    }
+
+    // Attach Django CSRF token for all mutating requests
+    const method = (config.method || '').toUpperCase();
+    if (!['GET', 'HEAD', 'OPTIONS', 'TRACE'].includes(method)) {
+      const csrfToken = getCsrfToken();
+      if (csrfToken && config.headers) {
+        config.headers['X-CSRFToken'] = csrfToken;
+      }
     }
 
     // Set Content-Type based on data type

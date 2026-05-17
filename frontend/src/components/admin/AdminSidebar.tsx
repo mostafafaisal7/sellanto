@@ -13,6 +13,7 @@ import {
   BoltIcon,
   ReceiptRefundIcon,
   EnvelopeIcon,
+  AdjustmentsHorizontalIcon,
 } from '@heroicons/react/24/outline';
 
 interface AdminSidebarProps {
@@ -76,6 +77,7 @@ const mainNavItems: NavItem[] = [
   { name: 'Payments',           href: '/admin-panel/payments',           icon: CreditCardIcon },
   { name: 'Refunds',            href: '/admin-panel/refunds',            icon: ReceiptRefundIcon },
   { name: 'Finance',            href: '/admin-panel/finance',            icon: ScaleIcon },
+  { name: 'Feature Costs',      href: '/admin-panel/feature-costs',      icon: AdjustmentsHorizontalIcon },
   { name: 'Global API Keys',    href: '/admin-panel/api-keys',           icon: KeyIcon },
   { name: 'Facebook Settings',  href: '/admin-panel/facebook-settings',  icon: FacebookIcon },
   { name: 'Stripe Settings',    href: '/admin-panel/stripe-settings',    icon: BoltIcon },

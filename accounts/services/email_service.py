@@ -33,7 +33,7 @@ def get_email_connection():
     user = SiteConfiguration.get('email_host_user') or getattr(settings, 'EMAIL_HOST_USER', '')
     password = SiteConfiguration.get('email_host_password') or getattr(settings, 'EMAIL_HOST_PASSWORD', '')
     use_tls_raw = SiteConfiguration.get('email_use_tls') or str(getattr(settings, 'EMAIL_USE_TLS', True))
-    use_tls = use_tls_raw.lower() not in ('false', '0', 'no')
+    use_tls = str(use_tls_raw).lower() not in ('false', '0', 'no')
 
     if not user or not password:
         return None  # let Django use its default connection
@@ -41,7 +41,7 @@ def get_email_connection():
     return get_connection(
         backend='django.core.mail.backends.smtp.EmailBackend',
         host=host,
-        port=int(port),
+        port=int(port) if port and str(port).isdigit() else 587,
         username=user,
         password=password,
         use_tls=use_tls,

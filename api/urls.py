@@ -461,6 +461,32 @@ urlpatterns = [
     path('admin/email-settings/update/', admin_views.AdminEmailSettingsView.as_view(),     name='api-admin-email-settings-update'),
     path('admin/email-settings/test/',   admin_views.AdminEmailSettingsTestView.as_view(), name='api-admin-email-settings-test'),
 
+    # Admin — Feature Cost Tuner (per-feature diamond pricing)
+    # NOTE: static-suffix routes (history/, preview/, reseed-from-code/,
+    # apply-recommendations/) MUST appear before the <str:feature>/ catch-all
+    # so Django doesn't route /history/ into AdminFeatureCostDetailView.
+    path('admin/feature-costs/',
+         admin_views.AdminFeatureCostListView.as_view(),
+         name='api-admin-feature-costs'),
+    path('admin/feature-costs/preview/',
+         admin_views.AdminFeatureCostPreviewView.as_view(),
+         name='api-admin-feature-costs-preview'),
+    path('admin/feature-costs/reseed-from-code/',
+         admin_views.AdminFeatureCostReseedView.as_view(),
+         name='api-admin-feature-costs-reseed'),
+    path('admin/feature-costs/history/',
+         admin_views.AdminFeatureCostHistoryView.as_view(),
+         name='api-admin-feature-costs-history'),
+    path('admin/feature-costs/apply-recommendations/',
+         admin_views.AdminFeatureCostApplyRecommendationsView.as_view(),
+         name='api-admin-feature-costs-apply-recommendations'),
+    path('admin/feature-costs/<str:feature>/recommend-from-history/',
+         admin_views.AdminFeatureCostRecommendView.as_view(),
+         name='api-admin-feature-cost-recommend'),
+    path('admin/feature-costs/<str:feature>/',
+         admin_views.AdminFeatureCostDetailView.as_view(),
+         name='api-admin-feature-cost-detail'),
+
     # Admin Finance / Accounting
     path('admin/finance/summary/', finance_views.FinanceSummaryView.as_view(), name='api-admin-finance-summary'),
     path('admin/finance/revenue/', finance_views.RevenueListView.as_view(), name='api-admin-finance-revenue'),

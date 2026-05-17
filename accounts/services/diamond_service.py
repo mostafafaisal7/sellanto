@@ -1,13 +1,29 @@
 # accounts/services/diamond_service.py
 # Diamond Token — Unified AI Credit System
 
+import math
+from decimal import Decimal
+
 from django.utils import timezone
 
 
 # ══════════════════════════════════════════════════════════════════════════
-# DIAMOND COST TABLE
-# 1 Diamond = $0.001 USD | 3x SaaS markup on raw API costs
+# DIAMOND COST TABLE — SEED / FALLBACK
+# 1 Diamond = $0.001 USD | 3x SaaS markup target on raw API costs
+#
+# Live pricing now reads from the `FeatureCostConfig` table — see
+# `get_diamond_cost()` below for resolution order. This dict is kept as:
+#   • seed data for migration 0024
+#   • fallback when the DB row is missing or `is_active=False`
+#   • emergency rollback target ("Reseed from code" button in admin UI)
 # ══════════════════════════════════════════════════════════════════════════
+
+# Diamond cost basis: 1 diamond corresponds to this many USD of raw API spend.
+DIAMOND_USD_RATE = Decimal('0.001')
+
+# Default markup percentage when no FeatureCostConfig row exists.
+# 200 = 3× cost basis (matches the "3x SaaS markup" intent documented above).
+DEFAULT_MARKUP_PCT = Decimal('200')
 
 DIAMOND_COSTS = {
     # Text generation (Claude/OpenAI/Gemini)
@@ -97,41 +113,115 @@ class InsufficientDiamondsError(Exception):
         )
 
 
-def get_diamond_cost(feature, **kwargs):
-    """Calculate diamond cost for a given feature with modifiers.
-
-    Args:
-        feature: Feature key from DIAMOND_COSTS
-        **kwargs: Modifiers like duration, characters, quality
-
-    Returns:
-        int: Diamond token cost
-    """
-    # Video — cost depends on duration
+def _normalise_feature_key(feature, **kwargs):
+    """Resolve generic 'video' / 'voice' / 'image' aliases to concrete keys."""
     if feature == 'video':
         duration = kwargs.get('duration', 5)
-        key = f'video_{duration}s'
-        return DIAMOND_COSTS.get(key, DIAMOND_COSTS.get('video_5s', 500))
+        return f'video_{duration}s'
 
-    # Voice — cost depends on text length
     if feature == 'voice':
         chars = kwargs.get('characters', 500)
         if chars <= 500:
-            return DIAMOND_COSTS['voice_short']
+            return 'voice_short'
         if chars <= 1000:
-            return DIAMOND_COSTS['voice_medium']
+            return 'voice_medium'
         if chars <= 2000:
-            return DIAMOND_COSTS['voice_long']
-        return DIAMOND_COSTS['voice_extra_long']
+            return 'voice_long'
+        return 'voice_extra_long'
 
-    # Image — cost depends on quality
     if feature == 'image':
         quality = kwargs.get('quality', 'standard')
         if quality in ('hd', 'ultra', 'HD'):
-            return DIAMOND_COSTS['image_hd']
-        return DIAMOND_COSTS['image_standard']
+            return 'image_hd'
+        return 'image_standard'
 
-    return DIAMOND_COSTS.get(feature, 5)
+    return feature
+
+
+def _formula_diamond_cost(feature, markup_pct, model='', **kwargs):
+    """Compute diamond cost from raw API cost × (1 + markup_pct / 100)."""
+    from accounts.services.cost_calculator import estimate_feature_raw_cost_usd
+
+    duration_seconds = kwargs.get('duration_seconds') or kwargs.get('duration') or 0
+    characters = kwargs.get('characters', 0)
+    media_count = kwargs.get('media_count', 1)
+
+    raw_usd = estimate_feature_raw_cost_usd(
+        feature,
+        model=model,
+        duration_seconds=duration_seconds,
+        characters=characters,
+        media_count=media_count,
+    )
+    if raw_usd <= 0:
+        return None
+
+    multiplier = Decimal('1') + (Decimal(markup_pct) / Decimal('100'))
+    diamonds = (raw_usd / DIAMOND_USD_RATE) * multiplier
+    return int(math.ceil(diamonds))
+
+
+def get_diamond_cost(feature, **kwargs):
+    """Calculate diamond cost for a given feature.
+
+    Resolution order:
+        1. Normalise generic aliases ('video' → 'video_8s' etc.).
+        2. Look up `FeatureCostConfig(feature=key, is_active=True)`.
+           - If `flat_override_diamonds` is set, return it.
+           - Otherwise compute from `cost_calculator` × markup_pct.
+        3. If no config row, use `DIAMOND_COSTS` seed dict.
+        4. Final fallback: 5 diamonds.
+
+    Args:
+        feature: feature key (e.g. 'caption', 'video_5s') or alias
+                 ('video', 'voice', 'image').
+        **kwargs:
+            duration / duration_seconds: video duration in seconds.
+            characters: voice character count.
+            quality: 'standard' | 'hd' for generic 'image' alias.
+            model: override model id for the cost estimate.
+            media_count: number of images for batch image generation.
+
+    Returns:
+        int: diamond token cost.
+    """
+    key = _normalise_feature_key(feature, **kwargs)
+
+    # Try DB-backed config first
+    cfg = _load_feature_config(key)
+    if cfg is not None:
+        if cfg.flat_override_diamonds is not None:
+            return int(cfg.flat_override_diamonds)
+        model = kwargs.get('model') or cfg.model_used
+        formula_cost = _formula_diamond_cost(key, cfg.markup_pct, model=model, **kwargs)
+        if formula_cost is not None:
+            return formula_cost
+
+    # No DB row (or formula returned 0) — fall back to seed dict.
+    if key in DIAMOND_COSTS:
+        return DIAMOND_COSTS[key]
+
+    # Final fallback for unknown features
+    return 5
+
+
+def _load_feature_config(feature_key):
+    """Load FeatureCostConfig row; returns None if the table/row is missing.
+
+    Wrapped in try/except so this works during migrations and in tests
+    that don't run the seed migration.
+    """
+    try:
+        from accounts.models import FeatureCostConfig
+        return FeatureCostConfig.objects.filter(
+            feature=feature_key,
+            is_active=True,
+        ).only(
+            'feature', 'flat_override_diamonds', 'markup_pct',
+            'model_used', 'provider', 'category',
+        ).first()
+    except Exception:
+        return None
 
 
 def pre_check(user, feature, **kwargs):

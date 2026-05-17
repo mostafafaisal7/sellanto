@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   PlusIcon,
@@ -33,6 +33,7 @@ const statusFilters: { value: PostStatus | 'all'; label: string; icon: typeof Do
 
 export function MyPostsPage() {
   const { posts, totalCount, isLoading, statusFilter, fetchPosts, setStatusFilter, deletePost, cancelPost } = usePostStore();
+  const [searchParams] = useSearchParams();
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [boostingPost, setBoostingPost] = useState<Post | null>(null);
   const [deleteModalPost, setDeleteModalPost] = useState<Post | null>(null);
@@ -41,6 +42,13 @@ export function MyPostsPage() {
   const [isCancelling, setIsCancelling] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [_viewMode, _setViewMode] = useState<'list' | 'grid'>('list');
+
+  useEffect(() => {
+    const statusParam = searchParams.get('status') as PostStatus | null;
+    if (statusParam && statusParam !== statusFilter) {
+      setStatusFilter(statusParam);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     fetchPosts();

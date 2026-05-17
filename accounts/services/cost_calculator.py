@@ -161,6 +161,94 @@ FEATURE_INPUT_RATIO: dict[str, Decimal] = {
 
 
 # ─────────────────────────────────────────────────────────────────────
+# Typical token volumes per text feature
+# Used by `diamond_service.get_diamond_cost()` when computing diamond cost
+# from a markup percentage. Numbers reflect upper-bound prompt sizes used
+# in the live views and were the basis for `docs/AI_COST_AUDIT.md`.
+# ─────────────────────────────────────────────────────────────────────
+
+FEATURE_TYPICAL_TOKENS: dict[str, tuple[int, int]] = {
+    # text feature -> (input_tokens, output_tokens)
+    'caption':                  (2000, 800),
+    'caption_adapt':            (1500, 600),
+    'caption_regenerate':       (2500, 800),
+    'brand_dna':                (3000, 2000),
+    'strategy_ideas':           (3000, 1500),
+    'idea_regenerate':          (3000, 1500),
+    'ai_reply_comment':         (500, 200),
+    'hashtag_generation':       (500, 200),
+    'competitor_analysis':      (5000, 2000),
+    'competitor_suggest':       (1500, 600),
+    'trending_generation':      (1500, 500),
+    'weekly_report':            (3000, 1500),
+    'pillar_generation':        (2500, 1500),
+    'pillar_compliance':        (1000, 400),
+    'support_chat':             (1500, 400),
+    'refine_prompt':            (800, 300),
+    'alt_text':                 (1000, 200),
+    'copy_overlay_text':        (1000, 400),
+    'compute_times':            (1500, 500),
+    'repurpose_post':           (2500, 1500),
+    'messenger_reply':          (1000, 300),
+    'prompt_engineer_generate': (800, 400),
+    'prompt_engineer_diagnose': (800, 400),
+    'prompt_engineer_reprompt': (800, 400),
+    'ai_styles':                (600, 400),
+    # Ads features run via Claude too
+    'ads_boost_post':           (1500, 600),
+    'ads_campaign_create':      (3000, 1500),
+    'ads_audience_create':      (1000, 500),
+    'ads_ai_targeting_suggest': (1000, 500),
+    'ads_insights_pull':        (500, 200),
+}
+
+
+def estimate_feature_raw_cost_usd(
+    feature: str,
+    model: str = '',
+    duration_seconds: int = 0,
+    characters: int = 0,
+    media_count: int = 1,
+) -> Decimal:
+    """Estimate the raw provider USD cost for a single call to `feature`.
+
+    Used by `diamond_service.get_diamond_cost()` when computing the
+    diamond cost from a markup percentage instead of a flat override.
+
+    Routing:
+        - feature in IMAGE_FEATURES → calculate_image_cost × media_count
+        - feature starts with 'video_' → calculate_video_cost
+        - feature in VOICE_FEATURES → calculate_voice_cost
+        - otherwise → calculate_text_cost using FEATURE_TYPICAL_TOKENS
+          (falls back to (1500, 600) when feature is unknown)
+    """
+    f = (feature or '').strip().lower()
+
+    if f in IMAGE_FEATURES:
+        per_image = calculate_image_cost(f, model=model)
+        return (per_image * max(1, media_count)).quantize(Decimal('0.000001'))
+
+    if _is_video_feature(f):
+        return calculate_video_cost(f, model=model, duration_override=duration_seconds or None)
+
+    if f in VOICE_FEATURES:
+        if characters > 0:
+            return (Decimal(characters) * TTS_RATE_PER_MILLION_CHARS / Decimal('1000000')).quantize(Decimal('0.000001'))
+        return calculate_voice_cost(f)
+
+    # Text / LLM path
+    in_tokens, out_tokens = FEATURE_TYPICAL_TOKENS.get(f, (1500, 600))
+    chosen_model = model or DEFAULT_LLM_MODEL
+    return calculate_text_cost(
+        raw_tokens=in_tokens + out_tokens,
+        model=chosen_model,
+        feature=f,
+        input_tokens=in_tokens,
+        output_tokens=out_tokens,
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────
 # Cost type classification
 # ─────────────────────────────────────────────────────────────────────
 

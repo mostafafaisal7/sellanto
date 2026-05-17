@@ -8,6 +8,7 @@ interface Question {
   question: string;
   subtext: string;
   options: string[];
+  singleSelect?: boolean;
 }
 
 const QUESTIONS: Question[] = [
@@ -34,12 +35,14 @@ const QUESTIONS: Question[] = [
     question: 'What do you want to create?',
     subtext: 'Choose the content type for your posts',
     options: ['📷 Image posts', '🎬 Video content'],
+    singleSelect: true,
   },
   {
     id: 'product_mode', emoji: '📦',
     question: 'Do you want to feature your real products in posts?',
     subtext: "Upload product images and we'll create posts featuring them",
     options: ['Yes - I have product images', 'No - AI generates everything'],
+    singleSelect: true,
   },
   {
     id: 'platforms', emoji: '📱',
@@ -182,9 +185,14 @@ export function AIQuestionsScreen({ onComplete, onNext, onBack, onProductUpload,
     if (animating) return;
 
     const qId = question.id;
-    const next = new Set(multiSel);
-    if (next.has(option)) next.delete(option);
-    else next.add(option);
+    let next: Set<string>;
+    if (question.singleSelect) {
+      next = new Set([option]);
+    } else {
+      next = new Set(multiSel);
+      if (next.has(option)) next.delete(option);
+      else next.add(option);
+    }
     setMultiSel(next);
 
     const newValue = Array.from(next);
@@ -275,21 +283,36 @@ export function AIQuestionsScreen({ onComplete, onNext, onBack, onProductUpload,
                     background: isSelected ? 'rgba(232,54,79,0.1)' : 'rgba(255,255,255,0.03)',
                   }}
                 >
-                  {/* Checkbox */}
-                  <div
-                    className="w-6 h-6 flex-shrink-0 flex items-center justify-center transition-all duration-200"
-                    style={{
-                      borderRadius: 7,
-                      border: `2px solid ${isSelected ? 'rgb(var(--c-coral))' : 'rgba(255,255,255,0.15)'}`,
-                      background: isSelected ? 'rgb(var(--c-coral))' : 'transparent',
-                    }}
-                  >
-                    {isSelected && (
-                      <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                        <path d="M2.5 6L5 8.5L9.5 3.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    )}
-                  </div>
+                  {/* Checkbox / Radio */}
+                  {question.singleSelect ? (
+                    <div
+                      className="w-6 h-6 flex-shrink-0 flex items-center justify-center transition-all duration-200"
+                      style={{
+                        borderRadius: '50%',
+                        border: `2px solid ${isSelected ? 'rgb(var(--c-coral))' : 'rgba(255,255,255,0.15)'}`,
+                        background: 'transparent',
+                      }}
+                    >
+                      {isSelected && (
+                        <div style={{ width: 10, height: 10, borderRadius: '50%', background: 'rgb(var(--c-coral))' }} />
+                      )}
+                    </div>
+                  ) : (
+                    <div
+                      className="w-6 h-6 flex-shrink-0 flex items-center justify-center transition-all duration-200"
+                      style={{
+                        borderRadius: 7,
+                        border: `2px solid ${isSelected ? 'rgb(var(--c-coral))' : 'rgba(255,255,255,0.15)'}`,
+                        background: isSelected ? 'rgb(var(--c-coral))' : 'transparent',
+                      }}
+                    >
+                      {isSelected && (
+                        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                          <path d="M2.5 6L5 8.5L9.5 3.5" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      )}
+                    </div>
+                  )}
                   <span
                     className="text-[15px] font-semibold transition-colors duration-200"
                     style={{ color: isSelected ? 'rgb(var(--c-coral))' : 'rgb(var(--c-text-primary))' }}

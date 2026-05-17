@@ -57,6 +57,7 @@ import {
   AdminFacebookSettingsPage,
   AdminPaymentsPage,
   AdminFinancePage,
+  AdminFeatureCostsPage,
   AdminStripeSettingsPage,
   AdminRefundsPage,
   AdminLinkedInSettingsPage,
@@ -286,6 +287,7 @@ function App() {
           <Route path="/admin-panel/facebook-settings" element={<AdminFacebookSettingsPage />} />
           <Route path="/admin-panel/payments" element={<AdminPaymentsPage />} />
           <Route path="/admin-panel/finance" element={<AdminFinancePage />} />
+          <Route path="/admin-panel/feature-costs" element={<AdminFeatureCostsPage />} />
           <Route path="/admin-panel/stripe-settings" element={<AdminStripeSettingsPage />} />
           <Route path="/admin-panel/refunds" element={<AdminRefundsPage />} />
           <Route path="/admin-panel/linkedin-settings" element={<AdminLinkedInSettingsPage />} />

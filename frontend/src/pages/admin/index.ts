@@ -5,6 +5,7 @@ export { AdminAPIKeysPage } from './AdminAPIKeysPage';
 export { AdminFacebookSettingsPage } from './AdminFacebookSettingsPage';
 export { AdminPaymentsPage } from './AdminPaymentsPage';
 export { AdminFinancePage } from './AdminFinancePage';
+export { AdminFeatureCostsPage } from './AdminFeatureCostsPage';
 export { AdminStripeSettingsPage } from './AdminStripeSettingsPage';
 export { AdminRefundsPage } from './AdminRefundsPage';
 export { AdminLinkedInSettingsPage } from './AdminLinkedInSettingsPage';
