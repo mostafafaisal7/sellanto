@@ -502,6 +502,7 @@ urlpatterns = [
 
     # Video AI (React-accessible JWT endpoints)
     path('video/generate/', views.VideoGenerateAPIView.as_view(), name='api-video-generate'),
+    path('video/status/<int:generation_id>/', views.VideoStatusAPIView.as_view(), name='api-video-status'),
     path('video/history/', views.VideoHistoryAPIView.as_view(), name='api-video-history'),
 
     # Magic Mode History

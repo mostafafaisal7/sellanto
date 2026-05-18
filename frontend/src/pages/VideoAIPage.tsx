@@ -68,17 +68,30 @@ export function VideoAIPage() {
 
     try {
       const res = await api.post('/video/generate/', { prompt: prompt.trim(), style, duration });
-      const data = res.data;
-      if (data.success && data.video_url) {
-        setVideoUrl(data.video_url);
-        setStatus('done');
-        setTimeout(() => videoRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 200);
-      } else {
-        setError(data.error || 'Generation failed. Please try again.');
-        setStatus('error');
+      const { generation_id } = res.data;
+      if (!generation_id) throw new Error('Failed to start video generation.');
+
+      // Poll until done (async backend to avoid Cloudflare 504)
+      const deadline = Date.now() + 10 * 60 * 1000;
+      let done = false;
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 5000));
+        const statusRes = await api.get(`/video/status/${generation_id}/`);
+        const d = statusRes.data;
+        if (d.status === 'completed' && d.video_url) {
+          setVideoUrl(d.video_url);
+          setStatus('done');
+          setTimeout(() => videoRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 200);
+          done = true;
+          break;
+        }
+        if (d.status === 'failed') {
+          throw new Error(d.error || 'Generation failed. Please try again.');
+        }
       }
+      if (!done) throw new Error('Video generation timed out. Please try again.');
     } catch (err: any) {
-      setError(err?.response?.data?.error || 'Something went wrong. Please try again.');
+      setError(err?.response?.data?.error || err?.message || 'Something went wrong. Please try again.');
       setStatus('error');
     }
   };

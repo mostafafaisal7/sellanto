@@ -155,19 +155,37 @@ export function VideoWorkingScreen({ onComplete, onStop }: VideoWorkingScreenPro
 
       const response = await api.post('/video/generate/', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 300000,
+        timeout: 30000,
       });
 
       if (cancelledRef.current) return;
 
-      const data = response.data;
-      if (!data.success || !data.video_url) {
-        throw new Error(data.error || 'Video generation failed. Please try again.');
+      const { generation_id } = response.data;
+      if (!generation_id) throw new Error('Failed to start video generation.');
+
+      // Poll for completion (Cloudflare times out sync requests; backend runs async)
+      type PollData = { status: string; video_url?: string; error?: string; enhanced_prompt?: string };
+      const pollDeadline = Date.now() + 10 * 60 * 1000;
+      let pollData: PollData = { status: 'processing' };
+      while (Date.now() < pollDeadline) {
+        if (cancelledRef.current) return;
+        await new Promise((r) => setTimeout(r, 5000));
+        if (cancelledRef.current) return;
+        const statusRes = await api.get(`/video/status/${generation_id}/`);
+        pollData = statusRes.data as PollData;
+        if (pollData.status === 'completed' && pollData.video_url) break;
+        if (pollData.status === 'failed') {
+          throw new Error(pollData.error || 'Video generation failed. Please try again.');
+        }
+      }
+
+      if (pollData.status !== 'completed' || !pollData.video_url) {
+        throw new Error('Video generation timed out. Please try again.');
       }
 
       store.setVideoResult({
-        videoUrl: data.video_url,
-        generationId: data.generation_id,
+        videoUrl: pollData.video_url,
+        generationId: generation_id,
         prompt: pending.prompt,
         style: pending.style,
       });

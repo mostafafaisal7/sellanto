@@ -4043,14 +4043,108 @@ class ProductListView(MessengerGateMixin, generics.ListAPIView):
 
 # ── Video AI (JWT-authenticated, callable from React) ────────────────────────
 
+def _video_generation_worker(video_gen_id, api_key, reference_image_bytes, product_position, product_scale):
+    """Background thread: runs Veo generation and updates VideoGeneration status."""
+    import threading
+    import os
+    import tempfile
+    from django.db import close_old_connections
+    from django.core.files.base import ContentFile
+    from ai_video.models import VideoGeneration
+    from ai_video.gemini_service import GeminiVideoService
+
+    close_old_connections()
+    try:
+        video_gen = VideoGeneration.objects.get(id=video_gen_id)
+        service = GeminiVideoService(api_key=api_key)
+
+        result = service.generate_video(
+            prompt=video_gen.prompt,
+            style=video_gen.style,
+            duration=video_gen.duration,
+            aspect_ratio=video_gen.aspect_ratio,
+            resolution='',
+            reference_image=reference_image_bytes,
+            brand=video_gen.brand,
+        )
+
+        if result.get('success'):
+            video_bytes = result.get('video_bytes') or result.get('video_data')
+            if video_bytes:
+                video_gen.generated_video.save(
+                    f'video_{video_gen.id}.mp4',
+                    ContentFile(video_bytes),
+                    save=True,
+                )
+
+            if reference_image_bytes and video_gen.generated_video:
+                try:
+                    input_path = video_gen.generated_video.path
+                    temp_dir = tempfile.gettempdir()
+                    output_filename = f"comp_{video_gen.id}_{int(time.time())}.mp4"
+                    output_path = os.path.join(temp_dir, output_filename)
+                    comp_success = service.add_product_to_video(
+                        video_path=input_path,
+                        product_image_data=reference_image_bytes,
+                        output_path=output_path,
+                        position=product_position,
+                        scale=product_scale,
+                    )
+                    if comp_success:
+                        with open(output_path, 'rb') as f:
+                            video_gen.generated_video.save(
+                                f'video_{video_gen.id}_final.mp4',
+                                ContentFile(f.read()),
+                                save=False,
+                            )
+                    if os.path.exists(output_path):
+                        try: os.unlink(output_path)
+                        except: pass
+                except Exception as e:
+                    print(f"Video product compositing failed: {e}")
+
+            video_gen.brand_enhanced_prompt = result.get('enhanced_prompt', '')
+            video_gen.status = 'completed'
+            video_gen.save()
+
+            actual_model = result.get('model_used', '') or 'veo-3.1-generate-preview'
+            try:
+                from accounts.services.diamond_service import deduct_diamonds
+                deduct_diamonds(
+                    user=video_gen.user,
+                    feature=f'video_{video_gen.duration}s',
+                    provider='gemini',
+                    model_used=actual_model,
+                    media_count=1,
+                    duration_seconds=video_gen.duration,
+                )
+            except Exception:
+                pass
+        else:
+            video_gen.status = 'failed'
+            video_gen.error_message = result.get('error', 'Generation failed')
+            video_gen.save()
+
+    except Exception as exc:
+        try:
+            vg = VideoGeneration.objects.get(id=video_gen_id)
+            vg.status = 'failed'
+            vg.error_message = str(exc)
+            vg.save()
+        except Exception:
+            pass
+    finally:
+        close_old_connections()
+
+
 class VideoGenerateAPIView(APIView):
-    """Generate a video via Gemini/Veo from the React frontend."""
+    """Start async video generation via Gemini/Veo. Returns generation_id immediately."""
     permission_classes = [IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser, JSONParser]
 
     def post(self, request):
+        import threading
         from ai_video.models import VideoGeneration
-        from ai_video.gemini_service import GeminiVideoService
         from accounts.api_keys import get_gemini_key
 
         prompt = (request.data.get('prompt') or '').strip()
@@ -4078,6 +4172,11 @@ class VideoGenerateAPIView(APIView):
             except Brand.DoesNotExist:
                 pass
 
+        reference_image_bytes = None
+        ref_file = request.FILES.get('reference_image')
+        if ref_file:
+            reference_image_bytes = ref_file.read()
+
         title = prompt[:60] + ('…' if len(prompt) > 60 else '')
         video_gen = VideoGeneration.objects.create(
             user=request.user,
@@ -4090,118 +4189,44 @@ class VideoGenerateAPIView(APIView):
             brand=brand,
         )
 
+        thread = threading.Thread(
+            target=_video_generation_worker,
+            args=(video_gen.id, api_key, reference_image_bytes, product_position, product_scale),
+            daemon=True,
+        )
+        thread.start()
+
+        return Response({
+            'generation_id': video_gen.id,
+            'status': 'processing',
+        }, status=status.HTTP_202_ACCEPTED)
+
+
+class VideoStatusAPIView(APIView):
+    """Poll the status of an async video generation job."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, generation_id):
+        from ai_video.models import VideoGeneration
         try:
-            service = GeminiVideoService(api_key=api_key)
-            # Optional reference image for image-to-video
-            reference_image_bytes = None
-            ref_file = request.FILES.get('reference_image')
-            if ref_file:
-                reference_image_bytes = ref_file.read()
+            video_gen = VideoGeneration.objects.get(id=generation_id, user=request.user)
+        except VideoGeneration.DoesNotExist:
+            return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
 
-            result = service.generate_video(
-                prompt=prompt,
-                style=style,
-                duration=duration,
-                aspect_ratio=aspect_ratio,
-                resolution='',  # let Veo use its own default; '1080p' is rejected
-                reference_image=reference_image_bytes,
-                brand=brand,
-            )
+        video_url = None
+        if video_gen.status == 'completed' and video_gen.generated_video:
+            try:
+                video_url = request.build_absolute_uri(video_gen.generated_video.url)
+            except Exception:
+                video_url = video_gen.generated_video.url
 
-            if result.get('success'):
-                video_bytes = result.get('video_bytes') or result.get('video_data')
-                if video_bytes:
-                    from django.core.files.base import ContentFile
-                    video_gen.generated_video.save(
-                        f'video_{video_gen.id}.mp4',
-                        ContentFile(video_bytes),
-                        save=True,
-                    )
-                
-                # 🆕 NEW: Composite product if reference image was provided
-                if reference_image_bytes and video_gen.generated_video:
-                    try:
-                        input_path = video_gen.generated_video.path
-                        # Create unique temp output path
-                        import os, tempfile
-                        temp_dir = tempfile.gettempdir()
-                        output_filename = f"comp_{video_gen.id}_{int(time.time())}.mp4"
-                        output_path = os.path.join(temp_dir, output_filename)
-                        
-                        comp_success = service.add_product_to_video(
-                            video_path=input_path,
-                            product_image_data=reference_image_bytes,
-                            output_path=output_path,
-                            position=product_position,
-                            scale=product_scale
-                        )
-                        
-                        if comp_success:
-                            with open(output_path, 'rb') as f:
-                                from django.core.files.base import ContentFile
-                                video_gen.generated_video.save(
-                                    f'video_{video_gen.id}_final.mp4',
-                                    ContentFile(f.read()),
-                                    save=False
-                                )
-                            # Cleanup temp output
-                            if os.path.exists(output_path):
-                                try: os.unlink(output_path)
-                                except: pass
-                    except Exception as e:
-                        print(f"Video product compositing failed: {e}")
-
-                video_gen.brand_enhanced_prompt = result.get('enhanced_prompt', '')
-                video_gen.status = 'completed'
-                video_gen.save()
-
-                # Track exact API cost: actual Veo model used + exact duration
-                actual_model = result.get('model_used', '') or 'veo-3.1-generate-preview'
-                try:
-                    from accounts.services.diamond_service import (
-                        deduct_diamonds as _deduct_video,
-                        InsufficientDiamondsError as _InsufErr,
-                    )
-                    _deduct_video(
-                        user=request.user,
-                        feature=f'video_{duration}s',
-                        provider='gemini',
-                        model_used=actual_model,
-                        media_count=1,
-                        duration_seconds=duration,
-                    )
-                except Exception:
-                    pass  # Logging-only; don't fail the response
-
-                video_url = None
-                if video_gen.generated_video:
-                    try:
-                        video_url = request.build_absolute_uri(video_gen.generated_video.url)
-                    except Exception:
-                        video_url = video_gen.generated_video.url
-
-                return Response({
-                    'success': True,
-                    'generation_id': video_gen.id,
-                    'video_url': video_url,
-                    'enhanced_prompt': video_gen.brand_enhanced_prompt,
-                    'model_used': result.get('model_used', ''),
-                })
-            else:
-                video_gen.status = 'failed'
-                video_gen.save()
-                return Response(
-                    {'success': False, 'error': result.get('error', 'Generation failed')},
-                    status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                )
-
-        except Exception as exc:
-            video_gen.status = 'failed'
-            video_gen.save()
-            return Response(
-                {'success': False, 'error': str(exc)},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
+        return Response({
+            'generation_id': video_gen.id,
+            'status': video_gen.status,
+            'video_url': video_url,
+            'enhanced_prompt': video_gen.brand_enhanced_prompt or '',
+            'error': video_gen.error_message or None,
+        })
 
 
 class VideoHistoryAPIView(APIView):
