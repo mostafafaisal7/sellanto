@@ -68,11 +68,12 @@ import {
   AdminEmailSettingsPage,
 } from './pages/admin';
 import { LoadingScreen } from './components/ui';
-import { useAuthStore } from './store';
+import { useAuthStore, useAdminStore } from './store';
 
 // Protected route wrapper
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading, fetchUser, user } = useAuthStore();
+  const { impersonatedUserId } = useAdminStore();
   const location = useLocation();
 
   useEffect(() => {
@@ -87,14 +88,17 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to="/login" replace />;
   }
 
-  // Force onboarding for first-time users
-  if (user?.onboarding_status?.needs_onboarding && location.pathname !== '/onboarding') {
-    return <Navigate to="/onboarding" replace />;
-  }
+  // Skip onboarding gate when admin is impersonating — they should be able to exit freely
+  if (!impersonatedUserId) {
+    // Force onboarding for first-time users
+    if (user?.onboarding_status?.needs_onboarding && location.pathname !== '/onboarding') {
+      return <Navigate to="/onboarding" replace />;
+    }
 
-  // Force onboarding if user has no brand (business profile empty)
-  if (user && user.has_brand === false && location.pathname !== '/onboarding') {
-    return <Navigate to="/onboarding" replace />;
+    // Force onboarding if user has no brand (business profile empty)
+    if (user && user.has_brand === false && location.pathname !== '/onboarding') {
+      return <Navigate to="/onboarding" replace />;
+    }
   }
 
   return <>{children}</>;
