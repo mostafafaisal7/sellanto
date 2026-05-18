@@ -312,6 +312,11 @@ REACT_BUILD_DIR = os.path.join(BASE_DIR, 'frontend', 'dist')
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# ─── Upload size limits ───────────────────────────────────────────────────────
+# Nginx client_max_body_size must also be set to at least this value on the server
+DATA_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024   # 20 MB
+FILE_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024   # 20 MB
+
 # ─── Email / SMTP ─────────────────────────────────────────────────────
 # Used for payment request notifications and user confirmations.
 EMAIL_BACKEND = config(

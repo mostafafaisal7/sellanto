@@ -69,6 +69,39 @@ export interface RefinePromptResponse {
   used_prompt?: string;
 }
 
+// Compress a File to JPEG if it exceeds maxSizeMB, resizing to fit within maxDim px.
+// Returns the original file unchanged when it is already small enough.
+async function compressImage(file: File, maxSizeMB = 1.5, maxDim = 1500): Promise<File> {
+  if (file.size <= maxSizeMB * 1024 * 1024) return file;
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let { width, height } = img;
+      if (width > maxDim || height > maxDim) {
+        const ratio = Math.min(maxDim / width, maxDim / height);
+        width = Math.round(width * ratio);
+        height = Math.round(height * ratio);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext('2d')!.drawImage(img, 0, 0, width, height);
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) { reject(new Error('Image compression failed')); return; }
+          resolve(new File([blob], file.name.replace(/\.[^.]+$/, '.jpg'), { type: 'image/jpeg' }));
+        },
+        'image/jpeg',
+        0.85,
+      );
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Could not load image for compression')); };
+    img.src = url;
+  });
+}
+
 export const imageService = {
   // Prompt refinement (link prompt)
   async refinePrompt(data: RefinePromptRequest): Promise<RefinePromptResponse> {
@@ -96,7 +129,8 @@ export const imageService = {
     if (data.add_lighting) formData.append('add_lighting', data.add_lighting);
     if (data.camera_angle) formData.append('camera_angle', data.camera_angle);
     if (data.product_image) {
-      formData.append('product_image', data.product_image);
+      const productImg = await compressImage(data.product_image);
+      formData.append('product_image', productImg);
       if (data.product_type) formData.append('product_type', data.product_type);
       if (data.background_style) formData.append('background_style', data.background_style);
       if (data.analyze_product_style != null) formData.append('analyze_product_style', String(data.analyze_product_style));
