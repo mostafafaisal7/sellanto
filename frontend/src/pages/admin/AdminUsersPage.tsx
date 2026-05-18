@@ -49,7 +49,7 @@ export function AdminUsersPage() {
 
   const handleImpersonate = (user: { id: number; username: string; email: string }) => {
     startImpersonation(user.id, user);
-    window.location.href = '/';
+    window.location.href = '/dashboard';
   };
 
   const toggleSelect = (id: number) => {

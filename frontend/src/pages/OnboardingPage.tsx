@@ -825,9 +825,38 @@ export function OnboardingPage() {
     }
   };
 
+  // Resolve impersonation from store or localStorage fallback
+  const impersonationData = impersonatedUser ?? (() => {
+    try {
+      const raw = localStorage.getItem('impersonate_user_data');
+      return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
+  })();
+
+  const impersonationBanner = impersonationData ? (
+    <div className="fixed top-0 left-0 right-0 z-[60] bg-amber-500 text-black">
+      <div className="max-w-7xl mx-auto px-4 py-2 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <ShieldExclamationIcon className="w-5 h-5" />
+          <span className="text-sm font-medium">
+            Viewing as <strong>{impersonationData.username}</strong> ({impersonationData.email})
+          </span>
+        </div>
+        <button
+          onClick={handleExitImpersonation}
+          className="flex items-center gap-1.5 px-3 py-1 bg-black/20 hover:bg-black/30 rounded-lg text-sm font-medium transition-colors"
+        >
+          <ArrowLeftIcon className="w-4 h-4" />
+          Back to Admin
+        </button>
+      </div>
+    </div>
+  ) : null;
+
   if (loading) {
     return (
       <div className="min-h-screen bg-dark-900 flex items-center justify-center">
+        {impersonationBanner}
         <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full" />
       </div>
     );
@@ -836,28 +865,10 @@ export function OnboardingPage() {
   return (
     <div className="min-h-screen bg-dark-900">
       {/* Impersonation banner — only visible when admin is viewing as another user */}
-      {impersonatedUser && (
-        <div className="fixed top-0 left-0 right-0 z-[60] bg-amber-500 text-black">
-          <div className="max-w-7xl mx-auto px-4 py-2 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <ShieldExclamationIcon className="w-5 h-5" />
-              <span className="text-sm font-medium">
-                Viewing as <strong>{impersonatedUser.username}</strong> ({impersonatedUser.email})
-              </span>
-            </div>
-            <button
-              onClick={handleExitImpersonation}
-              className="flex items-center gap-1.5 px-3 py-1 bg-black/20 hover:bg-black/30 rounded-lg text-sm font-medium transition-colors"
-            >
-              <ArrowLeftIcon className="w-4 h-4" />
-              Back to Admin
-            </button>
-          </div>
-        </div>
-      )}
+      {impersonationBanner}
 
       {/* Header */}
-      <div className={`border-b border-white/5 px-6 py-4 ${impersonatedUser ? 'mt-10' : ''}`}>
+      <div className={`border-b border-white/5 px-6 py-4 ${impersonationData ? 'mt-10' : ''}`}>
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <h1 className="text-xl font-bold gradient-text">Sellanto Setup</h1>
           <span className="text-sm text-text-muted">Step {currentStep} of 2</span>

@@ -88,8 +88,10 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to="/login" replace />;
   }
 
-  // Skip onboarding gate when admin is impersonating — they should be able to exit freely
-  if (!impersonatedUserId) {
+  // Skip onboarding gate when admin is impersonating — check both Zustand store and
+  // localStorage directly to guard against any store-hydration timing edge cases.
+  const isImpersonating = !!impersonatedUserId || !!localStorage.getItem('impersonate_user_id');
+  if (!isImpersonating) {
     // Force onboarding for first-time users
     if (user?.onboarding_status?.needs_onboarding && location.pathname !== '/onboarding') {
       return <Navigate to="/onboarding" replace />;

@@ -199,7 +199,7 @@ export function AdminUserDetailPage() {
       username: userDetail.user.username,
       email: userDetail.user.email,
     });
-    window.location.href = '/';
+    window.location.href = '/dashboard';
   };
 
   if (userDetailLoading && !userDetail) {
