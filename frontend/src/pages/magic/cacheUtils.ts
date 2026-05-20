@@ -49,6 +49,7 @@ export const MAGIC_QUESTION_OPTIONS = {
     'Purple (creative, premium)',
     'Dark/Minimal (sleek, modern)',
     'Use colors from my website',
+    'Custom color',
   ],
 };
 
@@ -137,6 +138,20 @@ export function buildMagicCacheKey(
 
     if (sanitized) {
       cacheKey += `/${sanitized}`;
+    }
+  }
+
+  // Append custom color text if "Custom color" was selected, so different
+  // custom colors don't collide on the same cache key.
+  if (customAnswers?.colors_other) {
+    const sanitized = customAnswers.colors_other
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '')
+      .substring(0, 50);
+
+    if (sanitized) {
+      cacheKey += `/c-${sanitized}`;
     }
   }
 

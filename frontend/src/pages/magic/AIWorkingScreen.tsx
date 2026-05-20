@@ -256,6 +256,20 @@ export function AIWorkingScreen({ onComplete, onStop }: AIWorkingScreenProps) {
       // Step 5: Generate images for each post
       setStep(5);
 
+      // Build brand-color hint to inject into every image prompt.
+      // Drops the "Custom color" placeholder label and substitutes the user's
+      // typed value from customAnswers.colors_other.
+      const colorsAnswer = store.answers.colors;
+      const selectedColors = Array.isArray(colorsAnswer)
+        ? colorsAnswer
+        : (colorsAnswer ? [String(colorsAnswer)] : []);
+      const customColorText = (store.customAnswers?.colors_other || '').trim();
+      const colorChoices = selectedColors.filter((c) => c !== 'Custom color');
+      if (customColorText) colorChoices.push(customColorText);
+      const colorHint = colorChoices.length > 0
+        ? ` Use the following brand color palette in the visual design: ${colorChoices.join(', ')}.`
+        : '';
+
       // Check if user selected product mode
       const productMode = store.answers.product_mode;
       const useProductImages = Array.isArray(productMode)
@@ -315,7 +329,7 @@ export function AIWorkingScreen({ onComplete, onStop }: AIWorkingScreenProps) {
             const productFeatures = productData.features;
             const backgroundStyle = productData.background;
 
-            const productPrompt = `Professional empty ${backgroundStyle} photography studio background for a social media post about "${post.title}". The background setting should complement a ${productType} with features: ${productFeatures}. The visual style is ${post.imageStyle}. IMPORTANT: The center of the image must be completely empty as a product will be placed there. Do NOT generate the product itself.`;
+            const productPrompt = `Professional empty ${backgroundStyle} photography studio background for a social media post about "${post.title}". The background setting should complement a ${productType} with features: ${productFeatures}. The visual style is ${post.imageStyle}.${colorHint} IMPORTANT: The center of the image must be completely empty as a product will be placed there. Do NOT generate the product itself.`;
 
             const imgReq: Parameters<typeof imageService.generate>[0] = {
               prompt: productPrompt,
@@ -356,7 +370,7 @@ export function AIWorkingScreen({ onComplete, onStop }: AIWorkingScreenProps) {
           try {
             const post = posts[i];
             const imgReq: Parameters<typeof imageService.generate>[0] = {
-              prompt: `Create a professional social media image for: "${post.title}". ${post.imageStyle}`,
+              prompt: `Create a professional social media image for: "${post.title}". ${post.imageStyle}${colorHint}`,
               title: post.title,
               provider: 'gemini',
               style: 'modern',

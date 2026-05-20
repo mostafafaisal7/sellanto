@@ -54,7 +54,7 @@ const QUESTIONS: Question[] = [
     id: 'colors', emoji: '🎨',
     question: 'What colors represent your brand?',
     subtext: "We'll use these in your image designs",
-    options: ['Blue tones (trust, professional)', 'Red/Orange (energy, bold)', 'Green (growth, nature)', 'Purple (creative, premium)', 'Dark/Minimal (sleek, modern)', 'Use colors from my website'],
+    options: ['Blue tones (trust, professional)', 'Red/Orange (energy, bold)', 'Green (growth, nature)', 'Purple (creative, premium)', 'Dark/Minimal (sleek, modern)', 'Use colors from my website', 'Custom color'],
   },
 ];
 
@@ -269,7 +269,7 @@ export function AIQuestionsScreen({ onComplete, onNext, onBack, onProductUpload,
         <div className="w-full max-w-[440px] mx-auto flex flex-col gap-3">
           {question.options.map((option, i) => {
             const isSelected = multiSel.has(option);
-            const isOtherOption = option === 'Other';
+            const isOtherOption = option === 'Other' || option === 'Custom color';
 
             return (
               <div key={option} className="w-full">
@@ -348,6 +348,8 @@ export function AIQuestionsScreen({ onComplete, onNext, onBack, onProductUpload,
                           ? "Please specify your goal..."
                           : question.id === 'tone'
                           ? "Describe your preferred tone..."
+                          : question.id === 'colors'
+                          ? "Enter your custom color (e.g., 'Sky blue', 'Coral pink', '#1A73E8')"
                           : "Please specify..."
                       }
                       className="w-full text-[15px]"

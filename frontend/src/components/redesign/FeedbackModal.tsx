@@ -49,6 +49,7 @@ const STEPS: FeedbackStep[] = [
       { label: 'Different layout', emoji: '📐', desc: 'Rearrange elements' },
       { label: 'Change the text overlay', emoji: '🔤', desc: 'Different text on the image' },
       { label: 'Completely different concept', emoji: '🔄', desc: 'Start fresh with a new idea' },
+      { label: 'Custom prompt', emoji: '✏️', desc: 'Describe what you want in your own words' },
     ],
     condition: (a) => a.what === 'The image style',
   },
@@ -92,6 +93,7 @@ export function FeedbackModal({ isOpen, onClose, onSubmit, postTitle, postPlatfo
   const [currentStep, setCurrentStep] = useState(0);
   const [customText, setCustomText] = useState('');
   const [showCustomInput, setShowCustomInput] = useState(false);
+  const [customMode, setCustomMode] = useState<'general' | 'image'>('general');
   const [extraNote, setExtraNote] = useState('');
 
   useEffect(() => {
@@ -100,6 +102,7 @@ export function FeedbackModal({ isOpen, onClose, onSubmit, postTitle, postPlatfo
       setCurrentStep(0);
       setCustomText('');
       setShowCustomInput(false);
+      setCustomMode('general');
       setExtraNote('');
     }
   }, [isOpen]);
@@ -117,8 +120,18 @@ export function FeedbackModal({ isOpen, onClose, onSubmit, postTitle, postPlatfo
     if (!currentQuestion) return;
 
     if (option === 'Something else') {
+      setCustomMode('general');
       setShowCustomInput(true);
       setAnswers({ ...answers, what: option });
+      return;
+    }
+
+    // Image-style custom prompt: keep `what = 'The image style'` so the
+    // receiver still routes this as image feedback, and let the user write
+    // a free-form prompt that flows through `feedback.custom`.
+    if (option === 'Custom prompt' && currentQuestion.id === 'image_fix') {
+      setCustomMode('image');
+      setShowCustomInput(true);
       return;
     }
 
@@ -221,16 +234,24 @@ export function FeedbackModal({ isOpen, onClose, onSubmit, postTitle, postPlatfo
             <>
               {/* Custom text input */}
               <div className="text-center mb-5">
-                <div className="text-[36px] mb-2">💬</div>
-                <h3 className="text-[20px] font-extrabold text-text-primary">Tell us what to change</h3>
+                <div className="text-[36px] mb-2">{customMode === 'image' ? '🎨' : '💬'}</div>
+                <h3 className="text-[20px] font-extrabold text-text-primary">
+                  {customMode === 'image' ? 'Describe the image you want' : 'Tell us what to change'}
+                </h3>
                 <p className="text-[13px] text-text-secondary mt-1">
-                  Describe what you'd like differently and we'll regenerate it.
+                  {customMode === 'image'
+                    ? "Write your own prompt and we'll regenerate just the image."
+                    : "Describe what you'd like differently and we'll regenerate it."}
                 </p>
               </div>
               <textarea
                 value={customText}
                 onChange={(e) => setCustomText(e.target.value)}
-                placeholder="e.g. Make it more punchy, use different colors, focus on pricing..."
+                placeholder={
+                  customMode === 'image'
+                    ? 'e.g. Flat-lay of a coral pink fabric swatch on a marble surface, soft daylight, top-down, lots of negative space...'
+                    : 'e.g. Make it more punchy, use different colors, focus on pricing...'
+                }
                 rows={4}
                 autoFocus
                 className="w-full rounded-[14px] p-4 text-[14px] resize-none mb-4 focus:outline-none"
@@ -264,7 +285,7 @@ export function FeedbackModal({ isOpen, onClose, onSubmit, postTitle, postPlatfo
                     opacity: !customText.trim() ? 0.4 : 1,
                   }}
                 >
-                  Regenerate with this feedback
+                  {customMode === 'image' ? 'Regenerate image with this prompt' : 'Regenerate with this feedback'}
                 </button>
               </div>
             </>

@@ -75,6 +75,35 @@ const AUTH_ENDPOINTS = ['/auth/login/', '/auth/register/', '/auth/refresh/'];
 const isAuthEndpoint = (url?: string): boolean =>
   !!url && AUTH_ENDPOINTS.some((path) => url.includes(path));
 
+// Single in-flight refresh promise. The backend has BLACKLIST_AFTER_ROTATION=True
+// (settings.py SIMPLE_JWT), so if N concurrent requests each hit /auth/refresh/
+// with the same refresh token, the first wins and blacklists it — the rest fail
+// and force a logout. We must serialize: only one refresh runs at a time, and all
+// other 401s wait for its result before retrying.
+let refreshPromise: Promise<string> | null = null;
+
+const refreshAccessToken = (): Promise<string> => {
+  if (refreshPromise) return refreshPromise;
+
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) {
+    return Promise.reject(new Error('No refresh token'));
+  }
+
+  refreshPromise = axios
+    .post<AuthTokens>(`${API_BASE_URL}/auth/refresh/`, { refresh: refreshToken })
+    .then((response) => {
+      setTokens(response.data);
+      return response.data.access;
+    })
+    .finally(() => {
+      // Release the lock so the next expiry cycle can refresh again.
+      refreshPromise = null;
+    });
+
+  return refreshPromise;
+};
+
 // Response interceptor - handle token refresh
 api.interceptors.response.use(
   (response) => response,
@@ -90,17 +119,12 @@ api.interceptors.response.use(
     ) {
       originalRequest._retry = true;
 
-      const refreshToken = getRefreshToken();
-      if (refreshToken) {
+      if (getRefreshToken()) {
         try {
-          const response = await axios.post<AuthTokens>(`${API_BASE_URL}/auth/refresh/`, {
-            refresh: refreshToken,
-          });
-
-          setTokens(response.data);
+          const newAccess = await refreshAccessToken();
 
           if (originalRequest.headers) {
-            originalRequest.headers.Authorization = `Bearer ${response.data.access}`;
+            originalRequest.headers.Authorization = `Bearer ${newAccess}`;
           }
 
           return api(originalRequest);
