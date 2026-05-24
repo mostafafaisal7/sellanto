@@ -82,6 +82,12 @@ PROMPT_SCHEMA: dict[str, list[str]] = {
     'image_refiner': [
         'context_block', 'user_prompt',
     ],
+    'visual_prompt_image': [
+        'brand_name', 'caption', 'platform',
+    ],
+    'visual_prompt_video': [
+        'brand_name', 'user_prompt',
+    ],
     'image_product_bg': [
         'background_style', 'post_title', 'product_type',
         'product_features', 'image_style',

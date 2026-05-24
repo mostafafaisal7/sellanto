@@ -594,17 +594,17 @@ def create_user_profile(sender, instance, created, **kwargs):
             # Create Diamond Wallet with initial free-plan grant
             wallet = DiamondWallet.objects.create(
                 user=instance,
-                balance=200,
-                total_recharged=200
+                balance=400,
+                total_recharged=400
             )
 
             # Create transaction record
             DiamondTransaction.objects.create(
                 user=instance,
-                amount=200,
+                amount=400,
                 transaction_type='plan_grant',
-                balance_after=200,
-                note='Initial free plan grant (200 diamonds)',
+                balance_after=400,
+                note='Initial free plan grant (400 diamonds)',
             )
 
             # Create OnboardingProgress for new users

@@ -50,6 +50,7 @@ from . import diamond_views
 from . import payment_views
 from . import finance_views
 from . import stripe_views
+from . import visual_prompt_views
 
 # Create router for viewsets
 router = DefaultRouter()
@@ -503,7 +504,13 @@ urlpatterns = [
     # Video AI (React-accessible JWT endpoints)
     path('video/generate/', views.VideoGenerateAPIView.as_view(), name='api-video-generate'),
     path('video/status/<int:generation_id>/', views.VideoStatusAPIView.as_view(), name='api-video-status'),
+    path('video/<int:generation_id>/feedback/', views.VideoFeedbackRegenerateAPIView.as_view(), name='api-video-feedback'),
     path('video/history/', views.VideoHistoryAPIView.as_view(), name='api-video-history'),
+
+    # Visual prompt builders — synthesise brand DNA + idea + caption + trending
+    # into a single rich prompt before image/video generation.
+    path('visual-prompt/image/', visual_prompt_views.BuildImageVisualPromptView.as_view(), name='api-visual-prompt-image'),
+    path('visual-prompt/video/', visual_prompt_views.BuildVideoVisualPromptView.as_view(), name='api-visual-prompt-video'),
 
     # Magic Mode History
     path('magic/history/', views.MagicHistoryView.as_view(), name='api-magic-history'),

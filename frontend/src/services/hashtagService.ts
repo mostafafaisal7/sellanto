@@ -5,7 +5,25 @@ export const hashtagService = {
     const res = await api.get(`/drafts/${postId}/hashtags/`);
     return res.data;
   },
-  async generateHashtags(postId: number, data: { platform: string; topic?: string; count?: number; override_prompt?: string }) {
+  async generateHashtags(
+    postId: number,
+    data: {
+      platform: string;
+      topic?: string;
+      count?: number;
+      override_prompt?: string;
+      // Strategic context — lets the backend LLM pick tags from the full
+      // post setup (idea angle + trending themes + product details + caption),
+      // not just keyword matches on the caption.
+      idea?: { title?: string; hook?: string; angle?: string };
+      trending_topics?: string[];
+      product_context?: {
+        product_type?: string;
+        features?: string;
+        background_style?: string;
+      };
+    },
+  ) {
     const res = await api.post(`/drafts/${postId}/hashtags/generate/`, data);
     return res.data;
   },

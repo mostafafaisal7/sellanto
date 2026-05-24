@@ -153,6 +153,7 @@ class UnifiedLLMService:
         max_tokens: int = 500,
         response_format: Optional[Dict] = None,
         thinking_budget: int = 0,
+        tools: Optional[List[Dict]] = None,
         **kwargs,
     ) -> LLMResponse:
         """
@@ -164,6 +165,8 @@ class UnifiedLLMService:
             temperature, max_tokens:  Generation parameters
             response_format:  {"type": "json_object"} to enable JSON mode
             thinking_budget:  Claude extended thinking budget (>= 1024 to enable)
+            tools:     Anthropic-format tool specs (e.g. server tools like
+                       web_search). Claude-only for now; ignored by other providers.
             **kwargs:  Extra provider-specific params forwarded to OpenAI only
         """
         provider = self._resolve_provider()
@@ -178,7 +181,7 @@ class UnifiedLLMService:
         if provider == 'claude':
             return self._claude_completion(
                 messages, resolved_model, temperature, max_tokens,
-                response_format, thinking_budget,
+                response_format, thinking_budget, tools,
             )
         elif provider == 'openai':
             return self._openai_completion(
@@ -245,7 +248,7 @@ class UnifiedLLMService:
     # ── Claude (Anthropic SDK) ────────────────────────────────────
 
     def _claude_completion(self, messages, model, temperature, max_tokens,
-                           response_format, thinking_budget=0) -> LLMResponse:
+                           response_format, thinking_budget=0, tools=None) -> LLMResponse:
         try:
             import anthropic
             client = anthropic.Anthropic(api_key=self.claude_key)
@@ -286,6 +289,9 @@ class UnifiedLLMService:
 
             if system_text:
                 params['system'] = system_text
+
+            if tools:
+                params['tools'] = tools
 
             resp = client.messages.create(**params)
 

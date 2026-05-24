@@ -73,7 +73,9 @@ class GenerateHashtagsView(APIView):
                 'code': 'INSUFFICIENT_DIAMONDS',
             }, status=402)
 
-        # Generate using Claude (primary) via user config
+        # Generate using Claude (primary) via user config. The strategic
+        # context (idea + trending + product) lets the LLM pick tags that
+        # reflect why the post exists, not just what the caption literally says.
         override_prompt = request.data.get('override_prompt', '')
         created, used_prompt = generate_hashtags(
             post=post,
@@ -82,6 +84,9 @@ class GenerateHashtagsView(APIView):
             count=count,
             topic=topic,
             override_prompt=override_prompt or None,
+            idea=data.get('idea'),
+            trending_topics=data.get('trending_topics') or [],
+            product_context=data.get('product_context'),
         )
 
         deduct_diamonds(user=request.user, feature='hashtag_generation', provider='claude', raw_tokens=0)

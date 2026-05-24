@@ -30,7 +30,7 @@ DIAMOND_COSTS = {
     'caption': 5,
     'caption_adapt': 5,
     'caption_regenerate': 5,
-    'brand_dna': 15,
+    'brand_dna': 35,  # bumped from 15 — covers web_search + extended thinking
     'strategy_ideas': 10,
     'idea_regenerate': 10,
     'ai_reply_comment': 3,

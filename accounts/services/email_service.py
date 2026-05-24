@@ -152,7 +152,7 @@ def send_welcome_email(user) -> bool:
         '',
         f'Open your dashboard: {dashboard_url}',
         '',
-        'You started with 200 free Diamond Tokens — enough to try every feature.',
+        'You started with 400 free Diamond Tokens — enough to try every feature.',
         'Need help? Just reply to this email; a human reads every message.',
         '',
         '— The Sellanto team',
@@ -162,7 +162,7 @@ def send_welcome_email(user) -> bool:
       <h1 style="margin:0 0 12px;font-size:26px;font-weight:800;letter-spacing:-0.4px;">Welcome aboard, {name}! 🎉</h1>
       <p style="margin:0 0 18px;color:#C7C7D1;font-size:15px;line-height:1.65;">
         We're thrilled you joined Sellanto. Your account is ready and waiting — you've got
-        <strong style="color:#FF6B47;">200 free Diamond Tokens</strong> to spend on captions, images, and videos.
+        <strong style="color:#FF6B47;">400 free Diamond Tokens</strong> to spend on captions, images, and videos.
       </p>
 
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:8px 0 24px;">

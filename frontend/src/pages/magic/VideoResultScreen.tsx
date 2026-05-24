@@ -2,8 +2,10 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 import { useMagicModeStore } from '../../store/magicModeStore';
+import api from '../../services/api';
 import { postService } from '../../services/postService';
 import { captionService } from '../../services/captionService';
+import hashtagService from '../../services/hashtagService';
 import ConnectAccountModal from '../../components/ConnectAccountModal';
 import type { PlatformType, CaptionPlatform, CaptionTone } from '../../types';
 
@@ -163,7 +165,7 @@ interface VideoResultScreenProps {
 
 export function VideoResultScreen({ onBack, onGenerateAnother }: VideoResultScreenProps) {
   const navigate = useNavigate();
-  const { videoResult, answers } = useMagicModeStore();
+  const { videoResult, answers, setVideoResult } = useMagicModeStore();
 
   const videoUrl = videoResult?.videoUrl ?? '';
   const prompt = videoResult?.prompt ?? '';
@@ -260,6 +262,15 @@ export function VideoResultScreen({ onBack, onGenerateAnother }: VideoResultScre
   const [draftPostId, setDraftPostId] = useState<number | null>(null);
   const draftCreationStartedRef = useRef(false);
 
+  // Video feedback → regeneration. We save the comment on the original
+  // VideoGeneration and start a new one whose prompt includes the feedback.
+  const [feedbackText, setFeedbackText] = useState('');
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
+  const [regenGenId, setRegenGenId] = useState<number | null>(null);
+  const [regenStatus, setRegenStatus] = useState<'idle' | 'processing' | 'completed' | 'failed'>('idle');
+  const [regenJustCompleted, setRegenJustCompleted] = useState(false);
+
   const downloadVideoAsFile = async (): Promise<File[]> => {
     if (!videoUrl) return [];
     try {
@@ -315,6 +326,92 @@ export function VideoResultScreen({ onBack, onGenerateAnother }: VideoResultScre
     }, 800);
     return () => clearTimeout(t);
   }, [caption, draftPostId]);
+
+  // Auto-generate hashtags as the last step, based on the video + caption.
+  // Runs once per draft, after the draft post + caption are both ready.
+  const hashtagsGeneratedRef = useRef(false);
+  useEffect(() => {
+    if (hashtagsGeneratedRef.current) return;
+    if (!draftPostId || !caption || captionGenerating) return;
+    hashtagsGeneratedRef.current = true;
+
+    const platform = (publishPlatforms[0] || 'instagram').toLowerCase();
+    hashtagService
+      .generateHashtags(draftPostId, { platform, topic: prompt.slice(0, 120) })
+      .catch((err) => {
+        console.warn('[VideoResultScreen] Hashtag generation failed:', err);
+        hashtagsGeneratedRef.current = false;
+      });
+  }, [draftPostId, caption, captionGenerating, publishPlatforms, prompt]);
+
+  // Submit user feedback on the current video and kick off a regeneration.
+  const handleSubmitFeedback = async () => {
+    const originalGenId = videoResult?.generationId;
+    const trimmed = feedbackText.trim();
+    if (!originalGenId || !trimmed || feedbackSubmitting || regenStatus === 'processing') return;
+
+    setFeedbackSubmitting(true);
+    setFeedbackError(null);
+    try {
+      const res = await api.post(`/video/${originalGenId}/feedback/`, {
+        feedback: trimmed,
+      });
+      setRegenGenId(res.data.generation_id);
+      setRegenStatus('processing');
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { error?: string } }; message?: string };
+      setFeedbackError(e?.response?.data?.error || e?.message || 'Failed to submit feedback');
+    } finally {
+      setFeedbackSubmitting(false);
+    }
+  };
+
+  // Poll the regeneration job. Mirrors the loop shape used in VideoWorkingScreen.
+  useEffect(() => {
+    if (!regenGenId || regenStatus !== 'processing') return;
+    let cancelled = false;
+    const deadline = Date.now() + 10 * 60 * 1000;
+
+    (async () => {
+      while (!cancelled && Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 5000));
+        if (cancelled) return;
+        try {
+          const r = await api.get(`/video/status/${regenGenId}/`);
+          const data = r.data as { status: string; video_url?: string; error?: string };
+          if (data.status === 'completed' && data.video_url) {
+            // Swap the player's source and reset the feedback box.
+            setVideoResult({
+              videoUrl: data.video_url,
+              generationId: regenGenId,
+              prompt: videoResult?.prompt ?? '',
+              style: videoResult?.style ?? '',
+            });
+            setRegenStatus('completed');
+            setRegenJustCompleted(true);
+            setFeedbackText('');
+            // Re-create the post draft so the new video is what gets posted.
+            draftCreationStartedRef.current = false;
+            setDraftPostId(null);
+            return;
+          }
+          if (data.status === 'failed') {
+            setRegenStatus('failed');
+            setFeedbackError(data.error || 'Regeneration failed');
+            return;
+          }
+        } catch {
+          // transient network error — keep polling until deadline
+        }
+      }
+      if (!cancelled) {
+        setRegenStatus('failed');
+        setFeedbackError('Regeneration timed out');
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [regenGenId, regenStatus, setVideoResult, videoResult?.prompt, videoResult?.style]);
 
   const handlePost = async () => {
     setStatus('posting');
@@ -571,6 +668,70 @@ export function VideoResultScreen({ onBack, onGenerateAnother }: VideoResultScre
             {postError}
           </div>
         )}
+
+        {/* Video feedback → regeneration */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[13px] font-semibold text-text-secondary uppercase tracking-wide">
+              Want to improve this video?
+            </p>
+            {regenJustCompleted && (
+              <button
+                onClick={() => setRegenJustCompleted(false)}
+                className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
+                style={{ background: 'rgba(34,197,94,0.12)', color: 'rgb(34,197,94)' }}
+              >
+                ✓ Updated based on your feedback
+              </button>
+            )}
+          </div>
+          <textarea
+            value={feedbackText}
+            onChange={(e) => setFeedbackText(e.target.value)}
+            placeholder="What should we change? e.g. 'Slower pacing, more cinematic.' (Regenerating costs 800 diamonds.)"
+            rows={2}
+            disabled={feedbackSubmitting || regenStatus === 'processing' || captionGenerating}
+            className="w-full text-[13px] resize-none"
+            style={{
+              padding: '10px 12px',
+              borderRadius: 12,
+              border: '1px solid var(--border-color)',
+              background: 'rgba(255,255,255,0.04)',
+              color: 'rgb(var(--c-text-primary))',
+              outline: 'none',
+              opacity: regenStatus === 'processing' ? 0.5 : 1,
+            }}
+          />
+          <div className="flex items-center justify-between mt-2 gap-3">
+            <p className="text-[12px] text-text-muted flex-1">
+              {regenStatus === 'processing'
+                ? 'Regenerating with your feedback… (1–3 min)'
+                : regenStatus === 'failed' && feedbackError
+                  ? feedbackError
+                  : 'Feedback is saved to this video and used to generate an improved version.'}
+            </p>
+            <button
+              onClick={handleSubmitFeedback}
+              disabled={!feedbackText.trim() || feedbackSubmitting || regenStatus === 'processing' || captionGenerating}
+              className="px-4 py-2 rounded-[10px] text-[13px] font-bold text-white"
+              style={{
+                background: 'linear-gradient(135deg, rgb(var(--c-coral)), rgb(var(--c-coral-hover)))',
+                opacity: !feedbackText.trim() || feedbackSubmitting || regenStatus === 'processing' ? 0.5 : 1,
+              }}
+            >
+              {feedbackSubmitting
+                ? 'Submitting…'
+                : regenStatus === 'processing'
+                  ? (
+                    <span className="flex items-center gap-2">
+                      <span className="w-3.5 h-3.5 rounded-full border-2 animate-spin" style={{ borderColor: 'rgba(255,255,255,0.3)', borderTopColor: 'white' }} />
+                      Regenerating…
+                    </span>
+                  )
+                  : '🔁 Regenerate with feedback'}
+            </button>
+          </div>
+        </div>
 
         {/* Scheduler */}
         {showScheduler && (

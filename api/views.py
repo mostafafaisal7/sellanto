@@ -2517,69 +2517,50 @@ class GenerateBrandDNAView(APIView):
         service = get_llm_service(request.user)
 
         override_prompt = request.data.get('override_prompt', '')
-        think_harder = request.data.get('think_harder', False)
 
         try:
-            from api.strategy_views import _crawl_site_pages, _fetch_page_content
-
-            # Fetch the website content — multi-page crawl for richer DNA
             url = brand.website_url
-            try:
-                pages = _crawl_site_pages(url, max_pages=5)
-                if pages:
-                    combined_content = ''
-                    combined_title = pages[0].get('title', '')
-                    combined_desc = pages[0].get('description', '')
-                    for p in pages:
-                        combined_content += f"\n--- Page: {p.get('url', '')} ---\n{p.get('content', '')}\n"
-                    page_data = {'success': True, 'title': combined_title, 'description': combined_desc, 'content': combined_content[:8000]}
-                else:
-                    page_data = _fetch_page_content(url)
-            except Exception:
-                page_data = _fetch_page_content(url)
-
-            if not page_data['success']:
-                return Response(
-                    {'error': f"Could not read website: {page_data.get('error', 'unknown error')}"},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
 
             prompt = f"""<task>
-Analyze the website content and extract a complete 15-field Brand DNA profile.
+Research the brand at the URL below using the web_search tool, then extract a
+complete 15-field Brand DNA profile from what you find.
 </task>
 
-<website_data>
-URL: {url}
-Page title: {page_data['title']}
-Page content: {page_data['content']}
-</website_data>
+<target>
+Website URL: {url}
+</target>
 
-<instructions>
-Think step by step:
+<research_instructions>
+1. Use the web_search tool to read multiple pages of this brand's website:
+   homepage, About / Story, Services or Products, Pricing, and any blog or
+   press / news pages you can find.
+2. Run 2-5 searches. Start with `site:{url}` style queries to enumerate the
+   site's own pages; follow up with targeted queries like "<brand-name>
+   mission", "<brand-name> founder", "<brand-name> reviews", or "<brand-name>
+   vs <competitor>" when useful.
+3. Synthesise across pages — do NOT base the DNA on a single page.
+4. If the site is unreachable, return JSON with an "error" key explaining why.
+</research_instructions>
 
-1. READ the website content thoroughly — scan for messaging, positioning, offers, audience signals, and brand personality cues.
-2. EXTRACT information for all 15 Brand DNA fields:
-
-   | # | Field | What to extract |
-   |---|-------|-----------------|
-   | 1 | brand_name | Official brand name as displayed |
-   | 2 | tagline | Primary tagline or slogan |
-   | 3 | industry | Industry vertical and sub-category |
-   | 4 | description | 2-3 sentence brand description |
-   | 5 | products_services | Specific offerings listed |
-   | 6 | target_audience | Who the brand is speaking to (demographics + psychographics) |
-   | 7 | unique_selling_points | 3-5 specific differentiators |
-   | 8 | brand_voice | Detailed voice description (not just "professional") |
-   | 9 | brand_values | Core values demonstrated through content |
-   | 10 | color_theme | Dominant colors observed on the site |
-   | 11 | content_themes | Recurring topics and themes in the content |
-   | 12 | cta_style | How the brand asks for action (aggressive, soft, value-led, etc.) |
-   | 13 | social_platforms | Any social media links or mentions found |
-   | 14 | keywords | 10-15 high-relevance keywords for content creation |
-   | 15 | competitor_positioning | How the brand positions itself vs. alternatives |
-
-3. For any field not directly stated, make a reasonable inference based on the content and note it in your description.
-</instructions>
+<output_fields>
+| # | Field | What to extract |
+|---|-------|-----------------|
+| 1 | brand_name | Official brand name as displayed |
+| 2 | tagline | Primary tagline or slogan |
+| 3 | industry | Industry vertical and sub-category |
+| 4 | description | 2-3 sentence brand description |
+| 5 | products_services | Specific offerings listed |
+| 6 | target_audience | Who the brand is speaking to (demographics + psychographics) |
+| 7 | unique_selling_points | 3-5 specific differentiators |
+| 8 | brand_voice | Detailed voice description (not just "professional") |
+| 9 | brand_values | Core values demonstrated through content |
+| 10 | color_theme | Dominant colors observed on the site |
+| 11 | content_themes | Recurring topics and themes in the content |
+| 12 | cta_style | How the brand asks for action (aggressive, soft, value-led, etc.) |
+| 13 | social_platforms | Any social media links or mentions found |
+| 14 | keywords | 10-15 high-relevance keywords for content creation |
+| 15 | competitor_positioning | How the brand positions itself vs. alternatives |
+</output_fields>
 
 <output_format>
 Return ONLY a single JSON object with all 15 fields as keys.
@@ -2588,7 +2569,7 @@ Return ONLY a single JSON object with all 15 fields as keys.
 <constraints>
 - All 15 fields are required — leave none empty.
 - Be specific and detailed — generic answers reduce strategic value.
-- Base everything on actual page content.
+- Base everything on actual content you find via web_search.
 - Return valid JSON only.
 </constraints>"""
 
@@ -2599,13 +2580,13 @@ Return ONLY a single JSON object with all 15 fields as keys.
             )
             prompt, _dna_was_override = _resolve_dna(
                 request.user, 'brand_dna_website', prompt,
-                {'url': url, 'page_title': page_data['title'], 'page_content': page_data['content']},
+                {'url': url},
                 return_meta=True,
             )
             if override_prompt:
                 prompt = override_prompt
 
-            _dna_system = 'You are a senior brand strategist who extracts comprehensive brand identity profiles from website content. You combine analytical precision with strategic intuition to build Brand DNA profiles that power content creation.\n\nYour approach:\n- You read website copy the way a strategist reads — looking for positioning, messaging hierarchy, value propositions, and audience signals\n- You distinguish between what a brand SAYS and what it MEANS\n- You extract implicit signals (tone of voice from writing style, target audience from language choices, values from what they emphasize)\n- You are specific and detailed — "professional" is not a useful brand voice description; "authoritative but approachable, uses industry jargon sparingly, favors short sentences and active voice" IS\n\nCRITICAL: Base ALL analysis on the actual page content provided. Clearly distinguish between directly stated facts and reasonable inferences.\n\nReturn ONLY valid JSON — no markdown, no commentary.'
+            _dna_system = 'You are a senior brand strategist who extracts comprehensive brand identity profiles by researching brand websites live. You combine analytical precision with strategic intuition to build Brand DNA profiles that power content creation.\n\nYour approach:\n- You use the web_search tool to read actual brand pages — homepage, about, services, blog — instead of guessing\n- You read website copy the way a strategist reads — looking for positioning, messaging hierarchy, value propositions, and audience signals\n- You distinguish between what a brand SAYS and what it MEANS\n- You extract implicit signals (tone of voice from writing style, target audience from language choices, values from what they emphasize)\n- You are specific and detailed — "professional" is not a useful brand voice description; "authoritative but approachable, uses industry jargon sparingly, favors short sentences and active voice" IS\n\nCRITICAL: Base ALL analysis on actual content surfaced through web_search. Clearly distinguish between directly stated facts and reasonable inferences.\n\nReturn ONLY valid JSON — no markdown, no commentary.'
             _t0 = _time.monotonic()
             result = service.chat_completion(
                 messages=[
@@ -2613,8 +2594,13 @@ Return ONLY a single JSON object with all 15 fields as keys.
                     {'role': 'user', 'content': prompt},
                 ],
                 temperature=0.3,
-                max_tokens=5000 if think_harder else 2500,
-                thinking_budget=10000 if think_harder else 0,
+                max_tokens=8000,
+                thinking_budget=10000,
+                tools=[{
+                    'type': 'web_search_20250305',
+                    'name': 'web_search',
+                    'max_uses': 5,
+                }],
             )
             _latency_ms = int((_time.monotonic() - _t0) * 1000)
 
@@ -2657,7 +2643,10 @@ Return ONLY a single JSON object with all 15 fields as keys.
 
             # Save to brand
             dna_data['website_url'] = url
-            dna_data['page_title'] = page_data['title']
+            # `page_title` used to come from the BS4 scrape; now we surface
+            # the brand_name the LLM extracted via web_search, falling back
+            # to the URL if it's missing.
+            dna_data['page_title'] = dna_data.get('brand_name') or url
             brand.brand_dna = dna_data
             brand.brand_dna_generated_at = timezone.now()
             brand.brand_dna_source = 'website'
@@ -4159,10 +4148,29 @@ class VideoGenerateAPIView(APIView):
             )
 
         style = request.data.get('style', 'realistic')
-        duration = int(request.data.get('duration', 5))
+        duration = int(request.data.get('duration', 8))
         aspect_ratio = request.data.get('aspect_ratio', '16:9')
         product_position = request.data.get('product_position', 'center')
         product_scale = int(request.data.get('product_scale', 50))
+
+        # Copy/text-overlay toggle — mirrors the image endpoint's behaviour
+        # so Veo gets the same "include text" / "no text" instruction the
+        # image generator already receives.
+        with_copy = _parse_bool(request.data.get('with_copy', 'false'), default=False)
+        copy_text = (request.data.get('copy_text', '') or '').strip()
+        if with_copy and copy_text:
+            prompt += (
+                f'\n\nIMPORTANT: This video MUST prominently feature the following marketing copy '
+                f'text rendered artistically as part of the composition: "{copy_text}". '
+                f'The text should be professionally designed, clearly readable, and integrated '
+                f'into the visual layout. Keep the text on-screen for the duration of the clip.'
+            )
+        elif not with_copy:
+            prompt += (
+                '\n\nCRITICAL REQUIREMENT: Do NOT include any text, typography, words, letters, '
+                'numbers, watermarks, or any written characters anywhere in the video. '
+                'Purely visual content with zero text elements.'
+            )
 
         brand_id = request.data.get('brand_id')
         brand = None
@@ -4227,6 +4235,82 @@ class VideoStatusAPIView(APIView):
             'enhanced_prompt': video_gen.brand_enhanced_prompt or '',
             'error': video_gen.error_message or None,
         })
+
+
+class VideoFeedbackRegenerateAPIView(APIView):
+    """Persist feedback on a generated video AND start a new generation that
+    incorporates the feedback into the prompt. Returns the new generation_id
+    so the frontend can poll /video/status/<id>/ exactly like the original
+    generation."""
+    permission_classes = [IsAuthenticated]
+    parser_classes = [JSONParser, MultiPartParser, FormParser]
+
+    def post(self, request, generation_id):
+        import threading
+        from django.utils import timezone
+        from ai_video.models import VideoGeneration
+        from accounts.api_keys import get_gemini_key
+
+        feedback = (request.data.get('feedback') or '').strip()
+        if not feedback:
+            return Response({'error': 'feedback is required'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            original = VideoGeneration.objects.get(
+                id=generation_id, user=request.user,
+            )
+        except VideoGeneration.DoesNotExist:
+            return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Persist feedback on the original generation regardless of whether
+        # the regeneration succeeds — we want every feedback comment captured.
+        original.user_feedback = feedback
+        original.feedback_submitted_at = timezone.now()
+        original.save(update_fields=['user_feedback', 'feedback_submitted_at'])
+
+        # Upfront balance check (better UX than failing at deduction time
+        # inside the worker thread). The worker still does the actual
+        # `deduct_diamonds(feature='video_8s')` on completion.
+        gate = diamond_gate(request.user, 'video_8s')
+        if gate:
+            return gate
+
+        api_key = get_gemini_key(request.user)
+        if not api_key:
+            return Response(
+                {'error': 'No Gemini API key configured. Ask your admin to add a global key.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        merged_prompt = (
+            f"{original.prompt}\n\n"
+            f"User feedback to address in this new version: {feedback}"
+        )
+
+        new_gen = VideoGeneration.objects.create(
+            user=request.user,
+            title=original.title,
+            prompt=merged_prompt,
+            style=original.style,
+            duration=8,
+            aspect_ratio=original.aspect_ratio,
+            status='processing',
+            brand=original.brand,
+            regenerated_from=original,
+        )
+
+        thread = threading.Thread(
+            target=_video_generation_worker,
+            args=(new_gen.id, api_key, None, 'center', 50),
+            daemon=True,
+        )
+        thread.start()
+
+        return Response({
+            'generation_id': new_gen.id,
+            'status': 'processing',
+        }, status=status.HTTP_202_ACCEPTED)
 
 
 class VideoHistoryAPIView(APIView):

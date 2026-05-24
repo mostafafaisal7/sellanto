@@ -45,6 +45,13 @@ const QUESTIONS: Question[] = [
     singleSelect: true,
   },
   {
+    id: 'include_copy', emoji: '📝',
+    question: 'Should the visuals include text on them?',
+    subtext: 'Yes = headline copy is burned into the image/video. No = clean visuals only.',
+    options: ['Yes — include copy on the visual', 'No — no text, image only'],
+    singleSelect: true,
+  },
+  {
     id: 'platforms', emoji: '📱',
     question: 'Where do you post most? (pick 1-2)',
     subtext: "We'll optimize content for these platforms",

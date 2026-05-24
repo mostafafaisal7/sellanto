@@ -229,7 +229,7 @@ class VideoGeneration(models.Model):
     
     # Style Settings
     style = models.CharField(max_length=30, choices=STYLE_CHOICES, default='realistic')
-    duration = models.IntegerField(choices=DURATION_CHOICES, default=5)
+    duration = models.IntegerField(choices=DURATION_CHOICES, default=8)
     resolution = models.CharField(max_length=20, choices=RESOLUTION_CHOICES, default='1080p')
     aspect_ratio = models.CharField(max_length=10, choices=ASPECT_RATIO_CHOICES, default='16:9')
     fps = models.IntegerField(choices=FPS_CHOICES, default=30)
@@ -284,10 +284,19 @@ class VideoGeneration(models.Model):
     processing_time = models.FloatField(default=0, help_text="Processing time in seconds")
     file_size = models.BigIntegerField(default=0, help_text="File size in bytes")
     
+    # User feedback on the generated video — drives one-click regeneration.
+    user_feedback = models.TextField(blank=True, default='', help_text="What the user wants changed about this video")
+    feedback_submitted_at = models.DateTimeField(null=True, blank=True)
+    regenerated_from = models.ForeignKey(
+        'self', null=True, blank=True, on_delete=models.SET_NULL,
+        related_name='regenerations',
+        help_text="The original VideoGeneration whose feedback spawned this one",
+    )
+
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    
+
     class Meta:
         ordering = ['-created_at']
         verbose_name = "Video Generation"

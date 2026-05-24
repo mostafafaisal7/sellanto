@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useMagicModeStore } from '../../store/magicModeStore';
 import api from '../../services/api';
 import strategyService from '../../services/strategyService';
+import visualPromptService from '../../services/visualPromptService';
 
 const VIDEO_STEPS = [
   { emoji: '🌐', label: 'Reading brand profile',    desc: 'Loading your brand voice and context...', estimatedMs: 3000 },
@@ -117,6 +118,8 @@ export function VideoWorkingScreen({ onComplete, onStop }: VideoWorkingScreenPro
       // Step 3: Generate video concept idea (1 idea for creative direction)
       setStep(3);
       let videoConceptHint = '';
+      let videoCopyTitle = '';
+      let firstIdea: { title?: string; hook?: string; angle?: string } | null = null;
       try {
         const ideasResult = await strategyService.generateIdeas({
           brand_id: brandId,
@@ -127,6 +130,8 @@ export function VideoWorkingScreen({ onComplete, onStop }: VideoWorkingScreenPro
         if (ideas.length > 0) {
           const idea = ideas[0];
           videoConceptHint = idea.hook || idea.angle || idea.title || '';
+          videoCopyTitle = idea.title || videoConceptHint;
+          firstIdea = { title: idea.title, hook: idea.hook, angle: idea.angle };
         }
       } catch {
         // Non-fatal — video will still generate without the hint
@@ -146,11 +151,35 @@ export function VideoWorkingScreen({ onComplete, onStop }: VideoWorkingScreenPro
         ? `${basePrompt} — Creative direction: ${videoConceptHint}`
         : basePrompt;
 
+      // 🆕 Ask the backend to synthesise brand DNA + idea + trending into a
+      // rich video prompt. User's typed seed (`pending.prompt`) remains the
+      // primary subject; brand voice and creative angle are layered on top.
+      // Falls back to `enhancedPrompt` if the LLM call fails.
+      const richVideoPrompt = await visualPromptService.buildVideoPrompt({
+        brand_id: brandId,
+        user_prompt: pending.prompt,
+        idea: firstIdea,
+        trending_topics: trendingTopics,
+        has_reference_image: !!pending.referenceImage,
+      });
+      const promptToSend = richVideoPrompt || enhancedPrompt;
+
+      // Copy/text-overlay toggle from the `include_copy` magic-mode question.
+      const copyAnswer = store.answers.include_copy;
+      const wantsCopy =
+        (Array.isArray(copyAnswer) ? copyAnswer[0] : copyAnswer || '')
+          .toString()
+          .toLowerCase()
+          .startsWith('yes');
+      const copyTextForVideo = videoCopyTitle || pending.prompt.slice(0, 80);
+
       const formData = new FormData();
-      formData.append('prompt', enhancedPrompt);
+      formData.append('prompt', promptToSend);
       formData.append('style', pending.style);
       formData.append('duration', String(pending.duration));
       formData.append('brand_id', String(brandId));
+      formData.append('with_copy', String(wantsCopy));
+      if (wantsCopy && copyTextForVideo) formData.append('copy_text', copyTextForVideo);
       if (pending.referenceImage) formData.append('reference_image', pending.referenceImage);
 
       const response = await api.post('/video/generate/', formData, {

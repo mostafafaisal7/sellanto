@@ -1007,6 +1007,16 @@ class GenerateHashtagsRequestSerializer(serializers.Serializer):
     caption_text = serializers.CharField(required=False, allow_blank=True)
     topic = serializers.CharField(required=False, allow_blank=True)
     count = serializers.IntegerField(default=20, min_value=1, max_value=30)
+    # Strategic context — lets the LLM pick tags that reflect the idea
+    # angle, current trending themes, and product details (when present),
+    # not just caption keywords.
+    idea = serializers.DictField(required=False, allow_null=True)
+    trending_topics = serializers.ListField(
+        child=serializers.CharField(allow_blank=True),
+        required=False,
+        allow_empty=True,
+    )
+    product_context = serializers.DictField(required=False, allow_null=True)
 
 
 # --- Creative Assets ---

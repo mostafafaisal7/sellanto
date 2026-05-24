@@ -5,6 +5,8 @@ import api from '../../services/api';
 import strategyService from '../../services/strategyService';
 import captionService from '../../services/captionService';
 import imageService from '../../services/imageService';
+import hashtagService from '../../services/hashtagService';
+import visualPromptService from '../../services/visualPromptService';
 import type { ContentIdea, CaptionTone, CaptionPlatform } from '../../types';
 import { buildMagicCacheKey } from './cacheUtils';
 
@@ -15,6 +17,7 @@ const STEPS = [
   { emoji: '💡', label: 'Generating content ideas', desc: 'Crafting ideas that match your brand...', estimatedMs: 10000 },
   { emoji: '✍️', label: 'Writing captions', desc: 'Creating engaging text for each post...', estimatedMs: 15000 },
   { emoji: '🎨', label: 'Designing images', desc: 'Building visuals for each post...', estimatedMs: 20000 },
+  { emoji: '#️⃣', label: 'Generating hashtags', desc: 'Picking hashtags based on the image and caption...', estimatedMs: 8000 },
   { emoji: '✅', label: 'Final polish', desc: 'Making sure everything looks perfect...', estimatedMs: 1000 },
 ];
 
@@ -219,13 +222,23 @@ export function AIWorkingScreen({ onComplete, onStop }: AIWorkingScreenProps) {
             include_cta: true,
           });
 
+          // 🆕 The caption API returns hashtags in a SEPARATE field
+          // (`generated_hashtags`) — merge them into the caption text now so
+          // the final post.caption already carries the hashtags. Mirrors the
+          // pattern in MagicHistoryPage.tsx:337-341 and VideoResultScreen.tsx:227.
+          const generatedBody = (caption.generated_caption || '').trim();
+          const generatedHashtags = (caption.generated_hashtags || '').trim();
+          const mergedCaption = generatedHashtags && !generatedBody.includes('#')
+            ? `${generatedBody}\n\n${generatedHashtags}`
+            : generatedBody;
+
           posts.push({
             id: idea.id,
             title: idea.title,
             platform: displayPlatform,
             imageOverlay: idea.title,
             imageStyle: idea.hook || idea.angle || '',
-            caption: caption.generated_caption || '',
+            caption: mergedCaption,
             status: 'ready' as const,
             captionId: caption.id,
             ideaId: idea.id,
@@ -233,7 +246,7 @@ export function AIWorkingScreen({ onComplete, onStop }: AIWorkingScreenProps) {
           captionsAccum.push({
             captionId: caption.id,
             ideaId: idea.id,
-            text: caption.generated_caption || '',
+            text: mergedCaption,
             platform: captionPlatform,
           });
         } catch {
@@ -255,6 +268,16 @@ export function AIWorkingScreen({ onComplete, onStop }: AIWorkingScreenProps) {
 
       // Step 5: Generate images for each post
       setStep(5);
+
+      // Copy/text-overlay toggle (from the `include_copy` magic-mode question).
+      // "Yes" → backend appends an instruction to render copy into the image.
+      // "No"  → backend appends an instruction to produce zero text/letters.
+      const copyAnswer = store.answers.include_copy;
+      const wantsCopy =
+        (Array.isArray(copyAnswer) ? copyAnswer[0] : copyAnswer || '')
+          .toString()
+          .toLowerCase()
+          .startsWith('yes');
 
       // Build brand-color hint to inject into every image prompt.
       // Drops the "Custom color" placeholder label and substitutes the user's
@@ -282,12 +305,15 @@ export function AIWorkingScreen({ onComplete, onStop }: AIWorkingScreenProps) {
       const hasLegacyImages = store.productImages.length > 0;
       const hasNewProducts = selectedProducts.length > 0;
 
+      // Lifted so step 6 (hashtag generation) can also read product context
+      // for each post — same array, no double-build.
+      const availableProductData: Array<{ file: File, type: string, features: string, background: string }> = [];
+
       if (useProductImages && (hasLegacyImages || hasNewProducts)) {
         // PRODUCT-BASED IMAGE GENERATION
-        
+
         // Flatten all available images into a unified array with metadata
-        const availableProductData: Array<{ file: File, type: string, features: string, background: string }> = [];
-        
+
         // Add new products
         if (hasNewProducts) {
           selectedProducts.forEach(p => {
@@ -301,7 +327,7 @@ export function AIWorkingScreen({ onComplete, onStop }: AIWorkingScreenProps) {
             });
           });
         }
-        
+
         // Add legacy images if present
         if (hasLegacyImages) {
           store.productImages.forEach(img => {
@@ -329,7 +355,28 @@ export function AIWorkingScreen({ onComplete, onStop }: AIWorkingScreenProps) {
             const productFeatures = productData.features;
             const backgroundStyle = productData.background;
 
-            const productPrompt = `Professional empty ${backgroundStyle} photography studio background for a social media post about "${post.title}". The background setting should complement a ${productType} with features: ${productFeatures}. The visual style is ${post.imageStyle}.${colorHint} IMPORTANT: The center of the image must be completely empty as a product will be placed there. Do NOT generate the product itself.`;
+            const fallbackProductPrompt = `Professional empty ${backgroundStyle} photography studio background for a social media post about "${post.title}". The background setting should complement a ${productType} with features: ${productFeatures}. The visual style is ${post.imageStyle}.${colorHint} IMPORTANT: The center of the image must be completely empty as a product will be placed there. Do NOT generate the product itself.`;
+
+            // 🆕 Ask the backend to synthesise brand DNA + idea + caption +
+            // trending into one focused prompt. Falls back to the template
+            // literal if the LLM call fails.
+            const richProductPrompt = await visualPromptService.buildImagePrompt({
+              brand_id: brandId,
+              idea: { title: post.title, hook: post.imageStyle, platform: post.platform.toLowerCase() },
+              caption: post.caption || captionsAccum[i]?.text || '',
+              platform: post.platform.toLowerCase(),
+              color_choices: colorChoices,
+              trending_topics: trendingTopics,
+              image_style_hint: post.imageStyle,
+              with_copy: wantsCopy,
+              copy_text: wantsCopy ? post.title : undefined,
+              product_context: {
+                product_type: productType,
+                features: productFeatures,
+                background_style: backgroundStyle,
+              },
+            });
+            const productPrompt = richProductPrompt || fallbackProductPrompt;
 
             const imgReq: Parameters<typeof imageService.generate>[0] = {
               prompt: productPrompt,
@@ -344,7 +391,9 @@ export function AIWorkingScreen({ onComplete, onStop }: AIWorkingScreenProps) {
               match_product_style: true,
               product_position: 'center_bottom',  // ✅ FIX: Place product on table/surface instead of floating
               product_scale: 1.0,
+              with_copy: wantsCopy,
             };
+            if (wantsCopy) imgReq.copy_text = post.title;
 
             if (brandLogoId) {
               imgReq.brand_logo_id = brandLogoId;
@@ -369,13 +418,31 @@ export function AIWorkingScreen({ onComplete, onStop }: AIWorkingScreenProps) {
           if (cancelledRef.current) return;
           try {
             const post = posts[i];
+            const fallbackAiPrompt = `Create a professional social media image for: "${post.title}". ${post.imageStyle}${colorHint}`;
+
+            // 🆕 Synthesise brand DNA + idea + caption + trending into a
+            // focused prompt. Falls back to the template literal if the
+            // LLM call fails.
+            const richAiPrompt = await visualPromptService.buildImagePrompt({
+              brand_id: brandId,
+              idea: { title: post.title, hook: post.imageStyle, platform: post.platform.toLowerCase() },
+              caption: post.caption || captionsAccum[i]?.text || '',
+              platform: post.platform.toLowerCase(),
+              color_choices: colorChoices,
+              trending_topics: trendingTopics,
+              image_style_hint: post.imageStyle,
+              with_copy: wantsCopy,
+              copy_text: wantsCopy ? post.title : undefined,
+            });
             const imgReq: Parameters<typeof imageService.generate>[0] = {
-              prompt: `Create a professional social media image for: "${post.title}". ${post.imageStyle}${colorHint}`,
+              prompt: richAiPrompt || fallbackAiPrompt,
               title: post.title,
               provider: 'gemini',
               style: 'modern',
               enhance_prompt: true,
+              with_copy: wantsCopy,
             };
+            if (wantsCopy) imgReq.copy_text = post.title;
             if (brandLogoId) {
               imgReq.brand_logo_id = brandLogoId;
               imgReq.logo_position = 'bottom_right';
@@ -449,8 +516,79 @@ export function AIWorkingScreen({ onComplete, onStop }: AIWorkingScreenProps) {
         }
       }
 
-      // Step 6: Finalize
+      // Step 6: Generate hashtags for each saved post (based on idea +
+      // trending themes + product + AI-generated caption + media), then
+      // append them to the caption text so they're visible on the result
+      // card and persist through to publishing.
       setStep(6);
+      for (let i = 0; i < posts.length; i++) {
+        if (cancelledRef.current) return;
+        const post = posts[i];
+        const postId = typeof post.id === 'number' ? post.id : Number(post.id);
+        if (!postId || !savedPostIds.includes(postId)) continue;
+
+        const platform = (post.platform || 'instagram')
+          .toLowerCase()
+          .replace(' / x', '')
+          .replace('twitter / x', 'twitter');
+
+        // If this batch used product mode, surface the same product
+        // metadata we used at image-gen time so the LLM can pick
+        // product-relevant tags too.
+        const prodCtx = useProductImages && availableProductData.length > 0
+          ? (() => {
+              const pd = availableProductData[i % availableProductData.length];
+              return {
+                product_type: pd.type,
+                features: pd.features,
+                background_style: pd.background,
+              };
+            })()
+          : undefined;
+
+        try {
+          const result = await hashtagService.generateHashtags(postId, {
+            platform,
+            topic: post.title,
+            idea: { title: post.title, hook: post.imageStyle, angle: post.imageStyle },
+            trending_topics: trendingTopics,
+            product_context: prodCtx,
+          });
+
+          // 🆕 Append the chosen hashtags to the caption so users see them
+          // on the result card. Skip if the caption already contains '#'
+          // (caption-side hashtags from the caption generator) to avoid
+          // duplication.
+          const tags: { tag?: string }[] = (result && result.hashtags) || [];
+          const tagLine = tags
+            .map((t) => '#' + ((t.tag || '').replace(/^#+/, '').trim()))
+            .filter((s) => s.length > 1)
+            .join(' ');
+
+          if (tagLine && !post.caption.includes('#')) {
+            const newCaption = `${post.caption}\n\n${tagLine}`;
+            posts[i] = { ...post, caption: newCaption };
+            // Persist to backend so reloads / Magic History show the same text.
+            try {
+              await api.patch(`/posts/${postId}/`, { caption: newCaption });
+            } catch (e) {
+              console.warn('[AIWorkingScreen] Failed to persist hashtag-enriched caption:', e);
+            }
+            // Keep the magic-store captions cache in sync for downstream consumers.
+            const cIdx = captionsAccum.findIndex((c) => c.captionId === posts[i].captionId);
+            if (cIdx !== -1) captionsAccum[cIdx] = { ...captionsAccum[cIdx], text: newCaption };
+          }
+        } catch (err) {
+          console.warn('[AIWorkingScreen] Hashtag generation failed for post', postId, err);
+        }
+      }
+      // Refresh the store's captions snapshot with the appended hashtags
+      // so any later consumer reads the hashtag-enriched version.
+      store.setCaptionsData(captionsAccum);
+      if (cancelledRef.current) return;
+
+      // Step 7: Finalize
+      setStep(7);
       store.setGeneratedPosts(posts);
       store.setPipelineCompleted(true);
 

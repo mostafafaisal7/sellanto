@@ -10,11 +10,9 @@ const VIDEO_STYLES = [
   { id: 'cinematic', label: 'Cinematic', emoji: '🎬', desc: 'Movie-quality visuals' },
 ];
 
-const DURATIONS = [
-  { value: 5, label: '5s', desc: 'Quick & punchy' },
-  { value: 8, label: '8s', desc: 'Balanced' },
-  { value: 15, label: '15s', desc: 'Full story' },
-];
+// Fixed 8-second duration — the duration picker was removed in favour of a
+// single, consistent video length. Backend default also = 8.
+const VIDEO_DURATION = 8;
 
 interface VideoPromptScreenProps {
   onGenerate: (prompt: string, style: string, duration: number, referenceImage?: File) => void;
@@ -26,7 +24,6 @@ interface VideoPromptScreenProps {
 export function VideoPromptScreen({ onGenerate, onBack, isLoading = false, initialPrompt = '' }: VideoPromptScreenProps) {
   const [prompt, setPrompt] = useState(initialPrompt);
   const [style, setStyle] = useState('product_showcase');
-  const [duration, setDuration] = useState(8);
   const [referenceImage, setReferenceImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -188,42 +185,9 @@ export function VideoPromptScreen({ onGenerate, onBack, isLoading = false, initi
           </div>
         </div>
 
-        {/* Duration selector */}
-        <div>
-          <label className="block text-[13px] font-semibold text-text-secondary mb-3 uppercase tracking-wide">
-            Duration
-          </label>
-          <div className="flex gap-3">
-            {DURATIONS.map((d) => {
-              const active = duration === d.value;
-              return (
-                <button
-                  key={d.value}
-                  onClick={() => setDuration(d.value)}
-                  className="flex-1 text-center transition-all duration-200"
-                  style={{
-                    padding: '12px 8px',
-                    borderRadius: 12,
-                    border: `2px solid ${active ? 'rgba(232,54,79,0.4)' : 'var(--border-color)'}`,
-                    background: active ? 'rgba(232,54,79,0.08)' : 'rgba(255,255,255,0.03)',
-                  }}
-                >
-                  <p
-                    className="text-[18px] font-extrabold"
-                    style={{ color: active ? 'rgb(var(--c-coral))' : 'rgb(var(--c-text-primary))' }}
-                  >
-                    {d.label}
-                  </p>
-                  <p className="text-[11px] text-text-muted">{d.desc}</p>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
         {/* Generate button */}
         <button
-          onClick={() => canSubmit && onGenerate(prompt.trim(), style, duration, referenceImage ?? undefined)}
+          onClick={() => canSubmit && onGenerate(prompt.trim(), style, VIDEO_DURATION, referenceImage ?? undefined)}
           disabled={!canSubmit}
           className="w-full py-4 rounded-[16px] text-[16px] font-bold text-white transition-all duration-200"
           style={{

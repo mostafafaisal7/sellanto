@@ -22,8 +22,25 @@ PLATFORM_LIMITS = {
 }
 
 
-def generate_hashtags(post, platform, api_key=None, count=None, topic=None, override_prompt=None, user=None, think_harder=False):
+def generate_hashtags(
+    post, platform,
+    api_key=None, count=None, topic=None,
+    override_prompt=None, user=None, think_harder=False,
+    idea=None,
+    trending_topics=None,
+    product_context=None,
+):
     """Generate hashtags for a post using LLM with tier distribution.
+
+    Args:
+        idea: optional dict {'title','hook','angle'} — the content idea this
+            post was generated from. Lets the LLM pick tags aligned with the
+            strategic angle, not just the caption.
+        trending_topics: optional list[str] — the trending themes that
+            anchored the idea, so the chosen tags can ride a current wave.
+        product_context: optional dict {'product_type','features',
+            'background_style'} — passed when the post features a real
+            product, so tags can reflect the product category.
 
     Returns tuple of (list of created PostHashtag objects, used_prompt string).
     """
@@ -55,6 +72,56 @@ def generate_hashtags(post, platform, api_key=None, count=None, topic=None, over
     if post.pillar:
         brand_context += f", Content Pillar: {post.pillar.name}"
 
+    # Media context — describe the visual asset so hashtags reflect image/video themes.
+    media_context = ''
+    try:
+        media_list = post.media_files_list or []
+    except Exception:
+        media_list = []
+    if media_list:
+        video_exts = ('.mp4', '.webm', '.mov', '.ogg', '.m4v')
+        media_lines = []
+        for idx, m in enumerate(media_list[:4]):
+            if not isinstance(m, str):
+                continue
+            lower = m.lower().split('?')[0].split('#')[0]
+            media_type = 'video' if lower.endswith(video_exts) or 'video' in lower else 'image'
+            # Keep filename hint short — full data URLs are useless for hashtag context.
+            hint = m if not m.startswith('data:') else f'{media_type} (inline data)'
+            if len(hint) > 200:
+                hint = hint[-200:]
+            media_lines.append(f"- {media_type}: {hint}")
+        if media_lines:
+            media_context = "Attached media (use the visual subject matter when picking hashtags):\n" + "\n".join(media_lines)
+
+    # Strategic context — the idea this post was built on, the trending
+    # themes it rides, and any product details. Lets the LLM pick tags that
+    # span all four signals (idea + trending + product + caption) instead
+    # of relying on caption keywords alone.
+    idea_block = ''
+    if idea:
+        idea_block = (
+            "Content idea (the strategic angle behind this post):\n"
+            f"- title: {idea.get('title') or '—'}\n"
+            f"- hook:  {idea.get('hook') or '—'}\n"
+            f"- angle: {idea.get('angle') or '—'}"
+        )
+
+    trending_block = ''
+    if trending_topics:
+        bullets = '\n'.join(f"- {str(t).strip()}" for t in trending_topics if str(t).strip())
+        if bullets:
+            trending_block = "Trending themes the idea is anchored on:\n" + bullets
+
+    product_block = ''
+    if product_context:
+        product_block = (
+            "Product featured in this post:\n"
+            f"- product_type: {product_context.get('product_type') or '—'}\n"
+            f"- features:     {product_context.get('features') or '—'}\n"
+            f"- background:   {product_context.get('background_style') or '—'}"
+        )
+
     high_count = int(count * 0.3)
     mid_count = int(count * 0.4)
     niche_count = count - high_count - mid_count
@@ -67,6 +134,10 @@ Generate exactly {count} hashtags for a {platform} post using a 3-tier volume di
 Brand: {brand_context}
 Caption: {caption_text[:500]}
 {f'Topic: {topic}' if topic else ''}
+{media_context}
+{idea_block}
+{trending_block}
+{product_block}
 </context>
 
 <tier_distribution>
@@ -78,9 +149,12 @@ Caption: {caption_text[:500]}
 </tier_distribution>
 
 <instructions>
-1. Analyze the caption and topic for key themes, keywords, and audience signals.
-2. Generate hashtags that are directly relevant to the content.
-3. Distribute across tiers as specified.
+1. Analyze ALL of these signals together — the caption text, the content idea (title/hook/angle),
+   the trending themes the idea is riding, the product (if any), AND the attached media. Your
+   tag selection must reflect the full strategic context, not just keyword matches from the caption.
+2. Pick tags that span multiple signals: e.g. at least one tag should reflect the idea's angle,
+   at least one a trending theme (when listed), and at least one the product category (when present).
+3. Distribute across volume tiers as specified.
 4. Return WITHOUT the # symbol.
 </instructions>
 
