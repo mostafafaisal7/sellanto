@@ -217,6 +217,12 @@ export function VideoWorkingScreen({ onComplete, onStop }: VideoWorkingScreenPro
         generationId: generation_id,
         prompt: pending.prompt,
         style: pending.style,
+        // Carry the rich context the video was built from so the caption can be
+        // written to match the video (brand voice + creative idea + trending).
+        videoPrompt: promptToSend,
+        brandId,
+        idea: firstIdea,
+        trendingTopics,
       });
 
       // Step 5: Final polish

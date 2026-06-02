@@ -43,10 +43,19 @@ export const postService = {
     }
 
     console.log('[PostService] media_files count:', data.media_files?.length, 'files:', data.media_files?.map(f => f?.name));
-    data.media_files.forEach((file, index) => {
+    (data.media_files || []).forEach((file, index) => {
       console.log(`[PostService] Appending media_${index}:`, file?.name, file?.size, file?.type);
       formData.append(`media_${index}`, file);
     });
+
+    // Attach already-generated media by reference (image URLs / paths the user
+    // owns, or a generated video by id) instead of re-uploading from the browser.
+    if (data.media_paths && data.media_paths.length > 0) {
+      formData.append('media_paths', JSON.stringify(data.media_paths));
+    }
+    if (data.video_generation_id != null) {
+      formData.append('video_generation_id', String(data.video_generation_id));
+    }
 
     try {
       // Don't set Content-Type manually for FormData - axios will set it with proper boundary

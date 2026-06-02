@@ -731,6 +731,100 @@ class RecentPostsView(generics.ListAPIView):
 
 # ===================== POSTS VIEWS =====================
 
+def _resolve_owned_media_paths(user, raw_paths, video_generation_id=None):
+    """Resolve user-supplied media references to MEDIA_ROOT-relative paths the
+    user actually owns.
+
+    Accepts a list of /media/-relative paths or absolute media URLs (e.g. an
+    AI-generated image URL) plus an optional video generation id, and returns
+    the safe relative paths (the same format uploaded files are stored as).
+    This lets already-generated media be attached to a draft *by reference*
+    instead of being re-downloaded and re-uploaded from the browser — the
+    fragile path that was silently dropping media from Magic drafts.
+
+    Anything that fails path-safety or ownership checks is silently dropped, so
+    a bad reference can never raise or break draft creation.
+    """
+    import os
+    from urllib.parse import urlparse, unquote
+    from django.conf import settings
+    from ai_video.models import VideoGeneration
+
+    media_root = os.path.realpath(settings.MEDIA_ROOT)
+    media_url = settings.MEDIA_URL or '/media/'
+    resolved = []
+
+    def _normalize(raw):
+        if not isinstance(raw, str) or not raw.strip():
+            return None
+        rel = raw.strip()
+        if rel.startswith('http://') or rel.startswith('https://'):
+            rel = urlparse(rel).path
+        rel = unquote(rel).replace('\\', '/')
+        if media_url and rel.startswith(media_url):
+            rel = rel[len(media_url):]
+        rel = rel.lstrip('/')
+        # Reject empty, traversal, absolute or drive-qualified paths
+        if not rel or '..' in rel.split('/') or ':' in rel:
+            return None
+        full = os.path.realpath(os.path.join(media_root, rel))
+        if full != media_root and not full.startswith(media_root + os.sep):
+            return None
+        return rel
+
+    # Ownership: media generated for this user always lives under one of these
+    # per-user subtrees (see ai_image/ai_video upload_to helpers). Matching the
+    # subtree is far more robust than exact FileField equality, which silently
+    # failed for the copy-overlay variant, absolute URLs, or any path variance.
+    user_prefixes = (
+        f'generated_images/{user.id}/',
+        f'generated_videos/{user.id}/',
+        f'video_thumbnails/{user.id}/',
+        f'posts/{user.id}/',
+    )
+
+    def _is_owned(rel):
+        if rel.startswith(user_prefixes):  # str.startswith accepts a tuple
+            return True
+        # Fallback: exact match against the user's own generation records.
+        return (
+            ImageGeneration.objects.filter(user=user).filter(
+                Q(generated_image=rel)
+                | Q(generated_image_with_logo=rel)
+                | Q(composited_image=rel)
+            ).exists()
+            or VideoGeneration.objects.filter(user=user).filter(
+                Q(generated_video=rel)
+                | Q(generated_video_with_logo=rel)
+                | Q(thumbnail=rel)
+            ).exists()
+        )
+
+    for raw in (raw_paths or []):
+        rel = _normalize(raw)
+        if rel and rel not in resolved and _is_owned(rel):
+            resolved.append(rel)
+
+    if video_generation_id not in (None, '', 'null'):
+        try:
+            vg = VideoGeneration.objects.filter(
+                user=user, id=int(video_generation_id)
+            ).first()
+        except (ValueError, TypeError):
+            vg = None
+        if vg:
+            # Prefer the model's display helper; fall back to the raw fields.
+            display = vg.get_display_video() if hasattr(vg, 'get_display_video') else None
+            name = getattr(display, 'name', None) if display else None
+            if not name:
+                name = (getattr(vg.generated_video_with_logo, 'name', None)
+                        or getattr(vg.generated_video, 'name', None))
+            if name and name not in resolved:
+                resolved.append(name)
+
+    return resolved
+
+
 class PostViewSet(viewsets.ModelViewSet):
     """ViewSet for Post CRUD operations"""
     serializer_class = PostSerializer
@@ -865,9 +959,32 @@ class PostViewSet(viewsets.ModelViewSet):
                     for chunk in uploaded_file.chunks():
                         destination.write(chunk)
 
-                # Store path WITHOUT /media/ prefix (scheduler expects this format)
-                media_files.append(file_path)
+                # Store path WITHOUT /media/ prefix (scheduler expects this format).
+                # Normalize to forward slashes — on Windows os.path.join yields
+                # backslashes, which then break the media URL in the browser.
+                media_files.append(file_path.replace('\\', '/'))
                 file_idx += 1
+
+        # Attach already-generated media (AI image/video) by reference. Magic
+        # Link/Mode generates the media server-side first, so re-uploading it
+        # from the browser is fragile (the video flow aborts the whole draft if
+        # the client re-fetch fails; the image flow sent a URL the backend
+        # ignored). Accept owned media paths / a video generation id instead.
+        media_paths_raw = request.data.get('media_paths')
+        if isinstance(media_paths_raw, str):
+            try:
+                parsed = json.loads(media_paths_raw)
+                media_paths_raw = parsed if isinstance(parsed, list) else [parsed]
+            except (json.JSONDecodeError, TypeError):
+                media_paths_raw = [media_paths_raw]
+        elif not isinstance(media_paths_raw, (list, tuple)):
+            media_paths_raw = [] if media_paths_raw is None else [media_paths_raw]
+
+        for rel in _resolve_owned_media_paths(
+            request.user, media_paths_raw, request.data.get('video_generation_id')
+        ):
+            if rel not in media_files:
+                media_files.append(rel)
 
         # Validate connected accounts for non-draft posts
         post_status = serializer.validated_data.get('status', 'scheduled')
@@ -1002,6 +1119,83 @@ def _parse_bool(value, default=True):
     return default
 
 
+def _build_caption_brand_context(user, brand_id=None, idea=None, trending_topics=None, video_prompt=None):
+    """Assemble a brand / idea / trending / video context block for caption
+    generation.
+
+    Mirrors the context the video & image prompt builders already use
+    (posts/services/visual_prompt_builder.py) so a caption written for an AI
+    video reflects the same brand DNA, creative idea and the *actual* video
+    prompt — instead of being generated from the raw seed topic alone, which is
+    why captions diverged from the videos. Returned as a text block that gets
+    appended to the caption's custom_instructions, so the caption service
+    signature is unchanged.
+    """
+    import json as _json
+    lines = []
+
+    dna = {}
+    if brand_id:
+        try:
+            from brands.models import Brand
+            brand = Brand.objects.filter(id=int(brand_id), user=user).first()
+            if brand:
+                dna = brand.brand_dna or {}
+        except (ValueError, TypeError):
+            dna = {}
+
+    def _f(key):
+        val = dna.get(key) if isinstance(dna, dict) else None
+        if isinstance(val, (list, tuple)):
+            val = ', '.join(str(v) for v in val if v)
+        return str(val).strip() if val else ''
+
+    brand_bits = []
+    for label, key in (
+        ('name', 'brand_name'), ('voice', 'brand_voice'),
+        ('values', 'brand_values'), ('audience', 'target_audience'),
+        ('cta_style', 'cta_style'),
+    ):
+        v = _f(key)
+        if v:
+            brand_bits.append(f"  {label}: {v}")
+    if brand_bits:
+        lines.append("<brand>\n" + "\n".join(brand_bits) + "\n</brand>")
+
+    if isinstance(idea, str):
+        try:
+            idea = _json.loads(idea)
+        except (ValueError, TypeError):
+            idea = None
+    if isinstance(idea, dict):
+        idea_bits = [f"  {k}: {str(idea.get(k)).strip()}"
+                     for k in ('title', 'hook', 'angle') if idea.get(k)]
+        if idea_bits:
+            lines.append("<creative_idea>\n" + "\n".join(idea_bits) + "\n</creative_idea>")
+
+    if isinstance(trending_topics, str):
+        try:
+            trending_topics = _json.loads(trending_topics)
+        except (ValueError, TypeError):
+            trending_topics = None
+    if isinstance(trending_topics, (list, tuple)):
+        themes = [str(t).strip() for t in trending_topics if t]
+        if themes:
+            lines.append("<trending_themes>\n  " + "\n  ".join(themes) + "\n</trending_themes>")
+
+    if video_prompt and str(video_prompt).strip():
+        lines.append("<video_prompt>\n  " + str(video_prompt).strip()[:1200] + "\n</video_prompt>")
+
+    if not lines:
+        return ''
+
+    return (
+        "Use the brand identity, creative idea and the video described below so the "
+        "caption matches the actual video and the brand's voice (do NOT just describe "
+        "the video):\n" + "\n".join(lines)
+    )
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def generate_caption(request):
@@ -1036,6 +1230,22 @@ def generate_caption(request):
         include_cta = _parse_bool(request.data.get('include_cta', False))
         custom_instructions = request.data.get('custom_instructions', '')
         override_prompt = request.data.get('override_prompt', '')
+
+        # Enrich the caption with the same brand DNA / idea / trending / video
+        # prompt context the video itself was built from, so the caption matches
+        # the video instead of being generated from the raw topic alone.
+        brand_context = _build_caption_brand_context(
+            user=request.user,
+            brand_id=request.data.get('brand_id'),
+            idea=request.data.get('idea'),
+            trending_topics=request.data.get('trending_topics'),
+            video_prompt=request.data.get('video_prompt'),
+        )
+        if brand_context:
+            custom_instructions = (
+                f"{custom_instructions}\n\n{brand_context}".strip()
+                if custom_instructions else brand_context
+            )
 
         if not input_text and not media_file:
             return Response(

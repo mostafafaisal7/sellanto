@@ -1081,16 +1081,6 @@ export function ResultsScreen({ onGenerateMore, onGoBack }: ResultsScreenProps) 
     (async () => {
       for (const post of needsSave) {
         try {
-          const mediaFiles: File[] = [];
-          if (post.imageUrl) {
-            try {
-              const res = await fetch(post.imageUrl);
-              const blob = await res.blob();
-              const ext = post.imageUrl.split('.').pop()?.split('?')[0] || 'png';
-              mediaFiles.push(new File([blob], `generated-image.${ext}`, { type: blob.type || 'image/png' }));
-            } catch { /* skip media */ }
-          }
-
           // If draft already exists (image changed), delete old one first
           const existing = savedMap[post.id];
           if (existing?.draftId) {
@@ -1099,7 +1089,10 @@ export function ResultsScreen({ onGenerateMore, onGoBack }: ResultsScreenProps) 
 
           const draft = await postService.create({
             caption: post.caption,
-            media_files: mediaFiles,
+            // Attach the generated image by reference — re-fetching it in the
+            // browser silently failed for cross-origin URLs and left the draft
+            // with no media.
+            media_paths: post.imageUrl ? [post.imageUrl] : [],
             platforms: [post.platform.toLowerCase() as PlatformType],
             source: 'magic',
             status: 'draft',

@@ -106,7 +106,18 @@ interface MagicModeState {
   videoPending: { prompt: string; style: string; duration: number; referenceImage?: File } | null;
 
   // Video result (kept separate from generatedPosts — video is a single file, not a list of image posts)
-  videoResult: { videoUrl: string; generationId: number; prompt: string; style: string } | null;
+  // videoPrompt/brandId/idea/trendingTopics carry the SAME rich context the video was
+  // generated from, so the caption can be written to match the video (not the raw seed).
+  videoResult: {
+    videoUrl: string;
+    generationId: number;
+    prompt: string;
+    style: string;
+    videoPrompt?: string;
+    brandId?: number | null;
+    idea?: { title?: string; hook?: string; angle?: string } | null;
+    trendingTopics?: string[];
+  } | null;
 
   setScreen: (screen: MagicModeState['screen']) => void;
   setUrl: (url: string) => void;

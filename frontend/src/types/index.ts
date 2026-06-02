@@ -259,7 +259,13 @@ export interface PlatformResult {
 
 export interface CreatePostData {
   caption: string;
-  media_files: File[];
+  /** Files uploaded directly from the browser. */
+  media_files?: File[];
+  /** Already-generated media the user owns, attached by reference
+   *  (/media/-relative paths or absolute media URLs). */
+  media_paths?: string[];
+  /** Attach a generated video directly by its VideoGeneration id. */
+  video_generation_id?: number;
   platforms: PlatformType[];
   scheduled_time?: string;
   timezone?: string;

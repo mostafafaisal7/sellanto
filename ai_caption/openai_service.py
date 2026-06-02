@@ -79,7 +79,7 @@ class CaptionGeneratorService:
         }
         return guidelines.get(platform, guidelines['general'])
     
-    def _build_system_prompt(self, tone, platform, include_hashtags, include_emojis, include_cta):
+    def _build_system_prompt(self, tone, platform, include_hashtags, include_emojis, include_cta, custom_instructions=None):
         """Build the system prompt based on settings"""
         tone_descriptions = {
             'professional': "Professional, polished, and authoritative",
@@ -179,6 +179,22 @@ general | facebook | instagram | twitter | linkedin | tiktok | youtube | pintere
         except Exception:
             pass
 
+        # High-priority brand/idea/video context (passed via custom_instructions).
+        # Injected into the SYSTEM prompt so the model treats it as a binding
+        # constraint — otherwise (when only echoed in the user prompt) captions
+        # drift back to a generic restatement of the topic and don't match the
+        # brand or the actual video.
+        if custom_instructions and str(custom_instructions).strip():
+            system_prompt += (
+                "\n\n<brand_context>\n"
+                f"{str(custom_instructions).strip()}\n"
+                "</brand_context>\n"
+                "The brand_context above is a NON-NEGOTIABLE, high-priority constraint. "
+                "The caption MUST reflect this brand voice, creative idea, and the "
+                "described video/subject. Do NOT merely describe the video — write a "
+                "native social post that matches it and the brand."
+            )
+
         return system_prompt
     
     def generate_from_text(self, topic, tone='professional', length='medium', platform='general',
@@ -203,7 +219,7 @@ general | facebook | instagram | twitter | linkedin | tiktok | youtube | pintere
         start_time = time.time()
 
         try:
-            system_prompt = self._build_system_prompt(tone, platform, include_hashtags, include_emojis, include_cta)
+            system_prompt = self._build_system_prompt(tone, platform, include_hashtags, include_emojis, include_cta, custom_instructions=custom_instructions)
 
             user_prompt = f"""<task>
 Create a single social media caption about the topic below.

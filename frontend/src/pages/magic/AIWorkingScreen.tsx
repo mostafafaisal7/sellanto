@@ -470,7 +470,10 @@ export function AIWorkingScreen({ onComplete, onStop }: AIWorkingScreenProps) {
         try {
           const response = await api.post('/posts/', {
             caption: post.caption,
-            media_files: JSON.stringify(post.imageUrl ? [post.imageUrl] : []),
+            // Attach the generated image by reference. A `media_files` text field
+            // is ignored by the backend (it only reads request.FILES / media_paths),
+            // which is why these drafts had a caption but no image.
+            media_paths: post.imageUrl ? [post.imageUrl] : [],
             platforms: JSON.stringify([post.platform.toLowerCase()]),
             source: 'magic',
             status: 'draft',

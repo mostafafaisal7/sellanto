@@ -169,6 +169,12 @@ export function VideoResultScreen({ onBack, onGenerateAnother }: VideoResultScre
 
   const videoUrl = videoResult?.videoUrl ?? '';
   const prompt = videoResult?.prompt ?? '';
+  // Rich context the video was generated from — used so the caption matches the
+  // video (brand voice + creative idea + trending), not just the raw seed prompt.
+  const videoPrompt = videoResult?.videoPrompt || prompt;
+  const brandId = videoResult?.brandId ?? null;
+  const videoIdea = videoResult?.idea ?? null;
+  const videoTrending = videoResult?.trendingTopics ?? [];
 
   const selectedPlatforms: string[] = Array.isArray(answers.platforms)
     ? (answers.platforms as string[])
@@ -214,7 +220,10 @@ export function VideoResultScreen({ onBack, onGenerateAnother }: VideoResultScre
     (async () => {
       try {
         const result = await captionService.generate({
-          topic: prompt,
+          // Use the rich video prompt (brand + idea + trending synthesised) as the
+          // topic, plus the explicit brand/idea/trending context, so the caption
+          // reflects the actual video and the brand voice.
+          topic: videoPrompt,
           tone: captionTone,
           length: 'medium',
           platform: firstPlat,
@@ -222,17 +231,21 @@ export function VideoResultScreen({ onBack, onGenerateAnother }: VideoResultScre
           include_emojis: true,
           include_cta: true,
           custom_instructions: customInstructions,
+          brand_id: brandId && brandId > 0 ? brandId : undefined,
+          idea: videoIdea || undefined,
+          trending_topics: videoTrending,
+          video_prompt: videoPrompt,
         });
         const generated = (result.generated_caption || '').trim();
         const hashtags = (result.generated_hashtags || '').trim();
 
-        // Reject thin / descriptive AI output ("A professional video..." etc.)
-        const looksDescriptive =
-          /^(a |an |the )?(professional|polished|short|quick|simple)?\s*(and\s+\w+\s+)?video\b/i.test(generated) ||
-          /^this video\b/i.test(generated);
-
+        // Use the AI caption unless it's effectively empty. The previous
+        // "looksDescriptive" regex + 60-char floor was discarding good,
+        // brand-aware captions and falling back to a generic local template
+        // built from the raw seed prompt — which is exactly why captions
+        // didn't match the video. Only fall back on a real empty result.
         let finalCaption: string;
-        if (generated && generated.length >= 60 && !looksDescriptive) {
+        if (generated && generated.length >= 15) {
           finalCaption = hashtags && !generated.includes('#')
             ? `${generated}\n\n${hashtags}`
             : generated;
@@ -271,17 +284,6 @@ export function VideoResultScreen({ onBack, onGenerateAnother }: VideoResultScre
   const [regenStatus, setRegenStatus] = useState<'idle' | 'processing' | 'completed' | 'failed'>('idle');
   const [regenJustCompleted, setRegenJustCompleted] = useState(false);
 
-  const downloadVideoAsFile = async (): Promise<File[]> => {
-    if (!videoUrl) return [];
-    try {
-      const res = await fetch(videoUrl);
-      const blob = await res.blob();
-      return [new File([blob], 'generated-video.mp4', { type: blob.type || 'video/mp4' })];
-    } catch {
-      return [];
-    }
-  };
-
   const publishPlatforms = selectedPlatforms.map(
     (p) => p.toLowerCase().replace(' / x', '') as PlatformType
   );
@@ -296,14 +298,13 @@ export function VideoResultScreen({ onBack, onGenerateAnother }: VideoResultScre
 
     (async () => {
       try {
-        const mediaFiles = await downloadVideoAsFile();
-        if (mediaFiles.length === 0) {
-          draftCreationStartedRef.current = false;
-          return;
-        }
+        // Attach the generated video by reference (it's already saved server-side)
+        // instead of re-fetching it in the browser — that fetch silently failed
+        // for cross-origin video URLs, so the draft was never created and the
+        // video never showed up in Draft Posts or Magic History.
         const draft = await postService.create({
           caption,
-          media_files: mediaFiles,
+          video_generation_id: videoResult?.generationId,
           platforms: publishPlatforms,
           source: 'magic',
           status: 'draft',
@@ -430,10 +431,9 @@ export function VideoResultScreen({ onBack, onGenerateAnother }: VideoResultScre
           timezone,
         });
       } else {
-        const mediaFiles = await downloadVideoAsFile();
         const created = await postService.create({
           caption,
-          media_files: mediaFiles,
+          video_generation_id: videoResult?.generationId,
           platforms: publishPlatforms,
           source: 'magic',
           hook: prompt.slice(0, 60),
@@ -471,10 +471,9 @@ export function VideoResultScreen({ onBack, onGenerateAnother }: VideoResultScre
           timezone,
         });
       } else {
-        const mediaFiles = await downloadVideoAsFile();
         const created = await postService.create({
           caption,
-          media_files: mediaFiles,
+          video_generation_id: videoResult?.generationId,
           platforms: publishPlatforms,
           source: 'magic',
           hook: prompt.slice(0, 60),

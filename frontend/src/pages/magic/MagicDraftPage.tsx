@@ -4,15 +4,21 @@ import {
   TrashIcon,
   PencilIcon,
   SparklesIcon,
+  EyeIcon,
   MagnifyingGlassIcon,
 } from '@heroicons/react/24/outline';
 import { format } from 'date-fns';
 import { postService } from '../../services/postService';
+import { Modal } from '../../components/ui/Modal';
 import type { Post, PlatformType } from '../../types';
 
 const platformEmoji: Record<string, string> = {
   linkedin: '💼', instagram: '📸', facebook: '📘', twitter: '🐦', tiktok: '🎵',
 };
+
+/** Best-effort detection of a video URL by extension (ignores query string). */
+const isVideoUrl = (url: string): boolean =>
+  /\.(mp4|mov|webm|m4v|avi|mkv)(\?|$)/i.test(url || '');
 
 export function MagicDraftPage() {
   const navigate = useNavigate();
@@ -20,6 +26,7 @@ export function MagicDraftPage() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [viewing, setViewing] = useState<Post | null>(null);
 
   const fetchDrafts = async () => {
     setLoading(true);
@@ -177,15 +184,27 @@ export function MagicDraftPage() {
                   {/* Media preview */}
                   {draft.media_files && draft.media_files.length > 0 && (
                     <div className="flex gap-2 mb-3">
-                      {draft.media_files.slice(0, 3).map((url, idx) => (
-                        <img
-                          key={idx}
-                          src={url}
-                          alt=""
-                          className="w-16 h-16 rounded-[10px] object-cover"
-                          style={{ border: '1px solid var(--border-color)' }}
-                        />
-                      ))}
+                      {draft.media_files.slice(0, 3).map((url, idx) =>
+                        /\.(mp4|mov|webm|m4v|avi|mkv)(\?|$)/i.test(url) ? (
+                          <video
+                            key={idx}
+                            src={url}
+                            muted
+                            playsInline
+                            preload="metadata"
+                            className="w-16 h-16 rounded-[10px] object-cover bg-black"
+                            style={{ border: '1px solid var(--border-color)' }}
+                          />
+                        ) : (
+                          <img
+                            key={idx}
+                            src={url}
+                            alt=""
+                            className="w-16 h-16 rounded-[10px] object-cover"
+                            style={{ border: '1px solid var(--border-color)' }}
+                          />
+                        )
+                      )}
                       {draft.media_files.length > 3 && (
                         <div
                           className="w-16 h-16 rounded-[10px] flex items-center justify-center text-[12px] font-bold text-text-muted"
@@ -221,7 +240,7 @@ export function MagicDraftPage() {
                       Edit
                     </button>
                     <button
-                      onClick={() => navigate('/magic')}
+                      onClick={() => setViewing(draft)}
                       className="flex items-center gap-1.5 px-3.5 py-2 rounded-[10px] text-[13px] font-semibold transition-all"
                       style={{
                         background: 'rgba(255,255,255,0.06)',
@@ -229,8 +248,8 @@ export function MagicDraftPage() {
                         color: 'rgb(var(--c-text-primary))',
                       }}
                     >
-                      <SparklesIcon className="w-3.5 h-3.5" />
-                      Resume in Magic Link
+                      <EyeIcon className="w-3.5 h-3.5" />
+                      View
                     </button>
                     <button
                       onClick={() => handleDelete(draft.id)}
@@ -251,6 +270,74 @@ export function MagicDraftPage() {
           })}
         </div>
       )}
+
+      {/* View popup — platform(s), status/schedule, the caption, and the media large */}
+      <Modal
+        isOpen={!!viewing}
+        onClose={() => setViewing(null)}
+        title="Draft preview"
+        size="xl"
+      >
+        {viewing && (
+          <div className="space-y-4">
+            {/* Platforms + status / schedule */}
+            <div className="flex flex-wrap items-center gap-2">
+              {(Array.isArray(viewing.platforms) ? viewing.platforms : []).map((p) => (
+                <span
+                  key={p}
+                  className="px-2.5 py-1 rounded-full text-[11px] font-semibold"
+                  style={{ background: 'rgba(59,130,246,0.1)', color: 'rgb(var(--c-blue))' }}
+                >
+                  {platformEmoji[p] || '📱'} {p.charAt(0).toUpperCase() + p.slice(1)}
+                </span>
+              ))}
+              <span
+                className="px-2.5 py-1 rounded-full text-[11px] font-bold capitalize"
+                style={{ background: 'rgba(255,255,255,0.06)', color: 'rgb(var(--c-text-secondary))' }}
+              >
+                {viewing.status}
+                {viewing.scheduled_time
+                  ? ` · ${format(new Date(viewing.scheduled_time), 'MMM d, yyyy p')}`
+                  : ''}
+              </span>
+            </div>
+
+            {/* Caption */}
+            <div
+              className="rounded-[12px] p-4 text-[14px] text-text-primary whitespace-pre-wrap leading-relaxed"
+              style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-color)' }}
+            >
+              {viewing.caption || 'No caption'}
+            </div>
+
+            {/* Media (large) */}
+            {Array.isArray(viewing.media_files) && viewing.media_files.length > 0 && (
+              <div className="space-y-3">
+                {viewing.media_files.map((url, idx) =>
+                  isVideoUrl(url) ? (
+                    <video
+                      key={idx}
+                      src={url}
+                      controls
+                      playsInline
+                      className="w-full rounded-[12px] bg-black"
+                      style={{ maxHeight: 480 }}
+                    />
+                  ) : (
+                    <img
+                      key={idx}
+                      src={url}
+                      alt=""
+                      className="w-full rounded-[12px] object-contain"
+                      style={{ maxHeight: 480, border: '1px solid var(--border-color)' }}
+                    />
+                  )
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }
