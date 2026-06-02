@@ -155,70 +155,29 @@ class Post(models.Model):
         """Set media files from list"""
         self.media_files = json.dumps(files)
 
-
-class MagicModeCache(models.Model):
-    """Cache for Magic Mode post generations based on answer combinations"""
-
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='magic_caches')
-    brand = models.ForeignKey('brands.Brand', on_delete=models.CASCADE, related_name='magic_caches', null=True, blank=True)
-
-    # Cache key format: "industry/goal/tone/platforms/colors"
-    # Example: "2/2/1/123/6" (each number is 1-based option indices)
-    params_hash = models.CharField(max_length=100, help_text='Encoded answer parameters (e.g., "2/2/1/123/6")')
-
-    # Store post IDs as JSON array
-    post_ids = models.JSONField(default=list, help_text='List of Post IDs generated for this combination')
-
-    # Timestamps
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        db_table = 'magic_mode_cache'
-        verbose_name = 'Magic Mode Cache'
-        verbose_name_plural = 'Magic Mode Caches'
-        ordering = ['-created_at']
-        # Ensure one cache entry per user + params_hash combination
-        unique_together = [['user', 'params_hash']]
-
-    def __str__(self):
-        return f"{self.user.username} - {self.params_hash} ({len(self.post_ids)} posts)"
-
-    @property
-    def media_files_list(self):
-        """Get media files as list"""
-        try:
-            return json.loads(self.media_files)
-        except:
-            return []
-    
-    def set_media_files(self, files):
-        """Set media files from list"""
-        self.media_files = json.dumps(files)
-    
     def is_scheduled_for_future(self):
         """Check if post is scheduled for future"""
         return self.scheduled_time > timezone.now()
-    
+
     def can_be_edited(self):
         """Check if post can be edited"""
         return self.status in ['draft', 'scheduled', 'changes_requested']
-    
+
     def can_be_cancelled(self):
         """Check if post can be cancelled"""
         return self.status in ['scheduled']
-    
+
     def mark_as_posted(self):
         """Mark post as successfully posted"""
         self.status = 'posted'
         self.posted_at = timezone.now()
         self.save()
-    
+
     def mark_as_failed(self):
         """Mark post as failed"""
         self.status = 'failed'
         self.save()
-    
+
     def get_success_platforms(self):
         """Get list of platforms where post was successful"""
         successful = []
@@ -231,7 +190,7 @@ class MagicModeCache(models.Model):
         if self.pinterest_post_id: successful.append('pinterest')
         if self.telegram_post_id: successful.append('telegram')
         return successful
-    
+
     def get_failed_platforms(self):
         """Get list of platforms where post failed"""
         failed = []
@@ -263,6 +222,35 @@ class MagicModeCache(models.Model):
         """Check if all required checklist items are complete"""
         required = ['caption', 'platform_mapping']
         return all(self.checklist_status.get(k, False) for k in required)
+
+
+class MagicModeCache(models.Model):
+    """Cache for Magic Mode post generations based on answer combinations"""
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='magic_caches')
+    brand = models.ForeignKey('brands.Brand', on_delete=models.CASCADE, related_name='magic_caches', null=True, blank=True)
+
+    # Cache key format: "industry/goal/tone/platforms/colors"
+    # Example: "2/2/1/123/6" (each number is 1-based option indices)
+    params_hash = models.CharField(max_length=100, help_text='Encoded answer parameters (e.g., "2/2/1/123/6")')
+
+    # Store post IDs as JSON array
+    post_ids = models.JSONField(default=list, help_text='List of Post IDs generated for this combination')
+
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'magic_mode_cache'
+        verbose_name = 'Magic Mode Cache'
+        verbose_name_plural = 'Magic Mode Caches'
+        ordering = ['-created_at']
+        # Ensure one cache entry per user + params_hash combination
+        unique_together = [['user', 'params_hash']]
+
+    def __str__(self):
+        return f"{self.user.username} - {self.params_hash} ({len(self.post_ids)} posts)"
 
 
 # ============================================================

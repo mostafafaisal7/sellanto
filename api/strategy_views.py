@@ -1,3 +1,4 @@
+import json
 import logging
 
 from rest_framework import viewsets, status
@@ -498,14 +499,8 @@ Return ONLY valid JSON array — no markdown, no commentary."""},
 
                 all_used_prompts.append(prompt)
 
-                raw = result.content
-                if raw.startswith('```'):
-                    raw = raw.split('\n', 1)[1] if '\n' in raw else raw[3:]
-                    if raw.endswith('```'):
-                        raw = raw[:-3]
-                    raw = raw.strip()
-
-                insights_data = json.loads(raw)
+                from accounts.services.llm_service import extract_json_object
+                insights_data = extract_json_object(result.content)
 
                 # Handle both array and object-wrapped responses
                 if isinstance(insights_data, dict):
@@ -907,16 +902,8 @@ Return ONLY a JSON array of exactly {count} objects:
 
             deduct_diamonds(user=request.user, feature='strategy_ideas', result=result)
 
-            import json
-            raw = result.content
-            # Strip markdown code fences if present
-            if raw.startswith('```'):
-                raw = raw.split('\n', 1)[1] if '\n' in raw else raw[3:]
-                if raw.endswith('```'):
-                    raw = raw[:-3]
-                raw = raw.strip()
-
-            ideas_data = json.loads(raw)
+            from accounts.services.llm_service import extract_json_object
+            ideas_data = extract_json_object(result.content)
 
             # Save ideas to database and build response
             import uuid

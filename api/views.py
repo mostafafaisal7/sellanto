@@ -19,7 +19,7 @@ import logging
 
 from accounts.models import UserProfile, SiteConfiguration, UserRole
 from accounts.api_keys import get_openai_key
-from accounts.services.llm_service import get_llm_service, UnifiedLLMService
+from accounts.services.llm_service import get_llm_service, UnifiedLLMService, extract_json_object
 from accounts.services.prompt_resolver import resolve_prompt
 from posts.models import Post
 from platforms.models import SocialAccount
@@ -251,13 +251,7 @@ Return ONLY a single JSON object with all 15 Brand DNA fields.
                         )
                         if not result.success:
                             raise Exception(result.error)
-                        raw = result.content.strip()
-                        if raw.startswith('```'):
-                            raw = raw.split('\n', 1)[1] if '\n' in raw else raw[3:]
-                            if raw.endswith('```'):
-                                raw = raw[:-3]
-                            raw = raw.strip()
-                        enhanced_dna = json.loads(raw)
+                        enhanced_dna = extract_json_object(result.content)
                         enhanced_dna['website_url'] = brand.website_url
                         brand.brand_dna = enhanced_dna
                         brand.brand_dna_source = 'website'
@@ -2620,14 +2614,7 @@ Return ONLY a single JSON object with all 15 fields as keys.
             if not result.success:
                 return Response({'error': result.error}, status=status.HTTP_400_BAD_REQUEST)
 
-            raw = result.content.strip()
-            if raw.startswith('```'):
-                raw = raw.split('\n', 1)[1] if '\n' in raw else raw[3:]
-                if raw.endswith('```'):
-                    raw = raw[:-3]
-                raw = raw.strip()
-
-            dna_data = json.loads(raw)
+            dna_data = extract_json_object(result.content)
 
             # Normalize array fields — LLM may return strings instead of arrays
             _array_fields = [
@@ -2681,6 +2668,11 @@ Return ONLY a single JSON object with all 15 fields as keys.
             })
 
         except json.JSONDecodeError:
+            logger.error(
+                'Brand DNA parse failure (brand=%s, finish_reason=%s): %.500s',
+                brand_id, getattr(result, 'finish_reason', ''),
+                getattr(result, 'content', ''),
+            )
             return Response({'error': 'Failed to parse AI response'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         except Exception as e:
             import traceback
@@ -2816,13 +2808,7 @@ Return ONLY a single JSON object with all 15 Brand DNA fields.
                         {'error': f'AI enhancement failed: {result.error}. Your manual inputs were NOT saved — please try again or save without AI.'},
                         status=status.HTTP_500_INTERNAL_SERVER_ERROR
                     )
-                raw = result.content.strip()
-                if raw.startswith('```'):
-                    raw = raw.split('\n', 1)[1] if '\n' in raw else raw[3:]
-                    if raw.endswith('```'):
-                        raw = raw[:-3]
-                    raw = raw.strip()
-                dna_data = json.loads(raw)
+                dna_data = extract_json_object(result.content)
                 source = 'website'  # AI-enhanced
             except Exception as e:
                 return Response(

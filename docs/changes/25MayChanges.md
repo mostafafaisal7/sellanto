@@ -1,11 +1,9 @@
-# 25 May 2026 — Codebase Changes (In-Depth)
+# 25 May 2026 — Codebase Changes
 
-**Branch:** `features/swapnil-v3.2`
+**Branch:** `features/swapnil-v3.4`
 **Author:** Arifuzzaman Swapnil
-**Working tree state at time of writing:** 17 files modified, 6 files added (untracked)
-**Aggregate diff size:** ~650 insertions, ~132 deletions across 17 tracked files
-
-> NOTE: These are *uncommitted working-tree changes* as of 2026-05-25. No new commits landed today; everything below is staged-and-modified or untracked. The most recent commit on the branch is `c248cfbd feat: add custom brand color, custom image prompt, and serialized token refresh`.
+**Working tree state at time of writing:** 24 files modified, 7 files added (untracked)
+**Aggregate diff size:** ~2262 insertions, ~132 deletions across 24 tracked files
 
 ---
 
@@ -542,4 +540,4 @@ Splitting like this keeps the per-commit diff small enough to bisect cleanly lat
 
 ---
 
-*Generated 2026-05-25 by Claude Code.*
+*Generated 2026-05-25 by Arifuzzaman Swapnil.*

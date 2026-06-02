@@ -26,6 +26,7 @@ Usage:
 
 import logging
 import json
+import re
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Any
 
@@ -79,6 +80,88 @@ class LLMResponse:
     error: str = ''
     raw_response: Any = None
     thinking: str = ''  # Claude extended thinking output
+
+
+# ── Robust JSON Extraction ─────────────────────────────────────────
+
+_FENCE_RE = re.compile(r'```(?:json)?\s*(.*?)\s*```', re.DOTALL | re.IGNORECASE)
+
+
+def _find_json_span(text: str) -> Optional[str]:
+    """Return the first balanced {...} or [...] span in `text`, ignoring
+    braces/brackets that appear inside JSON string literals. Returns None
+    if no balanced span is found."""
+    start = None
+    open_ch = close_ch = ''
+    for i, ch in enumerate(text):
+        if ch in '{[':
+            start = i
+            open_ch = ch
+            close_ch = '}' if ch == '{' else ']'
+            break
+    if start is None:
+        return None
+
+    depth = 0
+    in_str = False
+    escaped = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if in_str:
+            if escaped:
+                escaped = False
+            elif ch == '\\':
+                escaped = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == open_ch:
+            depth += 1
+        elif ch == close_ch:
+            depth -= 1
+            if depth == 0:
+                return text[start:i + 1]
+    return None
+
+
+def extract_json_object(text: str):
+    """Parse JSON out of an LLM response that may be wrapped in prose and/or
+    markdown code fences.
+
+    Handles: pure JSON, ```json fenced blocks (anywhere in the text),
+    prose before/after the JSON, and braces inside string values.
+
+    Raises json.JSONDecodeError if no valid JSON can be recovered, so callers
+    that already catch json.JSONDecodeError keep working unchanged.
+    """
+    if text is None:
+        raise json.JSONDecodeError('empty AI response', '', 0)
+
+    cleaned = text.strip()
+
+    # 1. Direct parse (the happy path — response is already pure JSON).
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        pass
+
+    # 2. Pull the contents of a ```/```json fence appearing anywhere.
+    fence = _FENCE_RE.search(cleaned)
+    if fence:
+        candidate = fence.group(1).strip()
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError:
+            cleaned = candidate  # fall through to span scan on the fence body
+
+    # 3. Locate a balanced JSON span within whatever's left.
+    span = _find_json_span(cleaned)
+    if span is not None:
+        return json.loads(span)  # let a failure here surface as JSONDecodeError
+
+    raise json.JSONDecodeError('no JSON object found in AI response', cleaned, 0)
 
 
 # ── Message Order Helper ──────────────────────────────────────────

@@ -2,8 +2,8 @@ import { motion } from 'framer-motion';
 import {
   VideoCameraIcon,
   CheckCircleIcon,
-  PlayIcon,
 } from '@heroicons/react/24/outline';
+import { BoomerangVideo } from './BoomerangVideo';
 
 const BULLETS = [
   'Cinematic 1080p clips tuned to your brand voice',
@@ -65,22 +65,11 @@ export function AIVideoSection() {
             <div className="absolute -inset-6 bg-gradient-to-br from-coral/30 via-purple/20 to-amber/20 blur-3xl opacity-70 rounded-3xl" />
 
             <div className="relative aspect-[4/5] rounded-3xl overflow-hidden border border-white/[0.08] bg-bg-card shadow-2xl">
-              {/* Animated gradient as placeholder for video */}
-              <div className="absolute inset-0">
-                <div className="absolute inset-0 bg-gradient-to-br from-coral/40 via-purple/30 to-amber/30" />
-                <motion.div
-                  animate={{ x: ['-20%', '120%'] }}
-                  transition={{ duration: 6, repeat: Infinity, ease: 'linear' as const }}
-                  className="absolute inset-y-0 w-1/3 bg-gradient-to-r from-transparent via-white/10 to-transparent"
-                />
-                <div
-                  className="absolute inset-0 opacity-30 mix-blend-overlay"
-                  style={{
-                    backgroundImage:
-                      'radial-gradient(circle at 30% 20%, rgba(255,255,255,0.6), transparent 40%), radial-gradient(circle at 80% 70%, rgba(255,255,255,0.4), transparent 40%)',
-                  }}
-                />
-              </div>
+              {/* Looping (ping-pong) brand video */}
+              <BoomerangVideo
+                src="/static/medias/videos/9dd17588-fc59-4c96-b229-c1a8d1d9f116.mp4"
+                className="absolute inset-0 w-full h-full object-cover"
+              />
 
               {/* Top label */}
               <div className="absolute top-4 left-4 right-4 flex items-center justify-between">
@@ -90,17 +79,6 @@ export function AIVideoSection() {
                 <span className="px-2 py-1 rounded-md bg-bg-primary/70 backdrop-blur-sm text-[10px] font-mono text-text-secondary">
                   9:16 · 1080p
                 </span>
-              </div>
-
-              {/* Center play */}
-              <div className="absolute inset-0 flex items-center justify-center">
-                <motion.div
-                  animate={{ scale: [1, 1.08, 1] }}
-                  transition={{ duration: 2, repeat: Infinity }}
-                  className="w-20 h-20 rounded-full bg-bg-primary/40 backdrop-blur-md border border-white/20 flex items-center justify-center"
-                >
-                  <PlayIcon className="w-9 h-9 text-white pl-1" />
-                </motion.div>
               </div>
 
               {/* Bottom caption */}
