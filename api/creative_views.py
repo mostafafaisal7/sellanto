@@ -800,17 +800,22 @@ class GenerateCopyOverlayTextView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        # Build brand context
+        # Build brand context — include full DNA so the copy prompt is rich
         brand_context = {}
         if data.get('brand_id'):
             from brands.models import Brand
             try:
                 brand = Brand.objects.get(id=data['brand_id'], user=request.user)
+                dna = brand.brand_dna or {}
                 brand_context = {
                     'brand_name': brand.brand_name,
-                    'industry': brand.industry or '',
-                    'target_audience': str(getattr(brand, 'audiences', '') or ''),
-                    'voice_tone': getattr(brand, 'voice_tone', '') or '',
+                    'industry': brand.industry or dna.get('industry', ''),
+                    'target_audience': str(getattr(brand, 'audiences', '') or dna.get('target_audience', '') or ''),
+                    'voice_tone': getattr(brand, 'voice_tone', '') or dna.get('brand_voice', '') or '',
+                    'visual_style': dna.get('visual_style', ''),
+                    'mood': dna.get('mood', ''),
+                    'brand_values': dna.get('brand_values', ''),
+                    'keywords': dna.get('keywords', ''),
                 }
             except Brand.DoesNotExist:
                 pass

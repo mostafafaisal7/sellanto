@@ -34,46 +34,54 @@ def generate_copy_suggestions(
     target_audience = brand_context.get('target_audience', '')
     voice_tone = brand_context.get('voice_tone', '')
 
-    system_prompt = """You are a senior copywriter specializing in social media graphics and brand imagery.
-Generate short, punchy text overlays for brand images. These are NOT social media captions — they are
-SHORT headline text that will be overlaid directly on the image, like a professional graphic designer would create.
+    # Pull extended brand DNA fields if passed through
+    visual_style = brand_context.get('visual_style', '')
+    mood = brand_context.get('mood', '')
+    brand_values = brand_context.get('brand_values', '')
+    keywords = brand_context.get('keywords', '')
 
-CRITICAL RULES:
-- Maximum 8 words per line, maximum 2 lines total
-- Each suggestion MUST be UNIQUE and DIFFERENT from the others — vary the angle, hook, and message
-- The copy MUST be directly derived from the caption content and idea context — NOT generic marketing slogans
-- Extract key phrases, hooks, CTAs, product names, or emotional triggers from the caption
-- Consider the brand voice and industry context
-- Return ONLY valid JSON, no markdown or extra text"""
+    system_prompt = """You are a senior brand copywriter who writes SHORT, ACCURATE text overlays for social media graphics.
 
-    user_prompt = f"""Generate {count} UNIQUE text overlay suggestions for a brand image.
+ABSOLUTE RULES — violating any of these makes the output worthless:
+1. Perfect English: zero spelling errors, zero grammar errors, no repeated words.
+2. Concise: maximum 6 words per line, maximum 2 lines. Shorter is always better.
+3. Derived from context: every suggestion must reflect the brand, idea, and caption — never generic slogans.
+4. Professional tone: polished, clear, on-brand — as if a top-tier design agency wrote it.
+5. Return ONLY valid JSON, no markdown, no explanations."""
 
-<brand_context>
-Brand: {brand_name}
-Industry: {industry}
-Target Audience: {target_audience}
-Brand Voice: {voice_tone}
-</brand_context>
+    user_prompt = f"""Generate {count} distinct, professional text overlay suggestions for a brand image or video.
 
-<content_context>
-Caption (PRIMARY — derive copy from this): {caption_text[:500] if caption_text else 'N/A'}
-Idea Context: {idea_context[:300] if idea_context else 'N/A'}
-Trending Topics: {trending_topics[:200] if trending_topics else 'N/A'}
-Image Prompt: {image_description[:300] if image_description else 'N/A'}
-CTA: {cta_text if cta_text else 'N/A'}
-</content_context>
+<brand>
+Name: {brand_name or '—'}
+Industry: {industry or '—'}
+Target Audience: {target_audience or '—'}
+Voice / Tone: {voice_tone or '—'}
+Visual Style: {visual_style or '—'}
+Mood: {mood or '—'}
+Brand Values: {brand_values or '—'}
+Keywords: {keywords or '—'}
+</brand>
 
-IMPORTANT: Each copy text must be a DIFFERENT take on the caption's message. Extract different hooks, angles, or key phrases from the caption. Do NOT repeat similar patterns or generic slogans.
+<post_context>
+Caption (extract the core message from this): {caption_text[:600] if caption_text else '—'}
+Content Idea: {idea_context[:300] if idea_context else '—'}
+Trending Topics: {trending_topics[:200] if trending_topics else '—'}
+Visual Description: {image_description[:200] if image_description else '—'}
+CTA: {cta_text or '—'}
+</post_context>
 
-Return JSON in this exact format:
+TASK: Read the caption and idea above. Identify the single strongest message (benefit, emotion, or hook). Write {count} short overlay phrases that each express that message from a DIFFERENT angle. Every phrase must be grammatically perfect English, max 6 words per line, max 2 lines total.
+
+Return JSON:
 {{"suggestions": [
-  {{"text": "Your Bold Headline Here", "style": "bold", "recommended_layout": "center"}},
-  {{"text": "Inspire Your Audience", "style": "inspirational", "recommended_layout": "bottom_banner"}},
+  {{"text": "Two Line\\nHeadline Here", "style": "bold", "recommended_layout": "bottom_banner"}},
+  {{"text": "Single Line Copy", "style": "minimal", "recommended_layout": "center"}},
   ...
 ]}}
 
-Each suggestion must use a different style from: bold, inspirational, question, cta, minimal
-Each must use a recommended_layout from: center, bottom_banner, top_banner"""
+Styles: bold, inspirational, question, cta, minimal
+Layouts: center, bottom_banner, top_banner
+Use \\n only when a second line genuinely adds impact."""
 
     try:
         service = get_llm_service(user)
@@ -82,7 +90,7 @@ Each must use a recommended_layout from: center, bottom_banner, top_banner"""
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            temperature=0.8,
+            temperature=0.3,
             max_tokens=800,
             response_format={"type": "json_object"},
         )
@@ -98,12 +106,17 @@ Each must use a recommended_layout from: center, bottom_banner, top_banner"""
         valid_layouts = {'center', 'bottom_banner', 'top_banner'}
         cleaned = []
         for s in suggestions[:count]:
+            text = str(s.get('text', '')).strip()
+            if not text or not _is_quality_text(text):
+                continue
             cleaned.append({
-                'text': str(s.get('text', ''))[:200],
+                'text': text[:120],
                 'style': s.get('style', 'bold') if s.get('style') in valid_styles else 'bold',
                 'recommended_layout': s.get('recommended_layout', 'bottom_banner') if s.get('recommended_layout') in valid_layouts else 'bottom_banner',
             })
 
+        if not cleaned:
+            return _fallback_suggestions(brand_name, count)
         return cleaned
 
     except json.JSONDecodeError as e:
@@ -207,6 +220,34 @@ Make each style VERY different — mix elegant serif with bold sans-serif, light
     except Exception as e:
         logger.error(f"AI style generation failed: {e}")
         return _fallback_styles(count)
+
+
+def _is_quality_text(text: str) -> bool:
+    """
+    Reject obviously garbled overlay text before it reaches the renderer.
+    Checks: no duplicate consecutive words, each line ≤ 9 words, total ≤ 18 words,
+    and no suspiciously long 'words' that indicate hallucination.
+    """
+    lines = [ln.strip() for ln in text.replace('\\n', '\n').split('\n') if ln.strip()]
+    if len(lines) > 2:
+        return False
+    all_words = []
+    for line in lines:
+        words = line.split()
+        if len(words) > 9:
+            return False
+        # Reject any single token longer than 20 chars (likely garbled)
+        if any(len(w) > 20 for w in words):
+            return False
+        all_words.extend(words)
+    if len(all_words) > 18:
+        return False
+    # Reject consecutive duplicate words (e.g. "for for", "the the")
+    lower = [w.lower().strip('.,!?') for w in all_words]
+    for i in range(len(lower) - 1):
+        if lower[i] and lower[i] == lower[i + 1]:
+            return False
+    return True
 
 
 def _fallback_styles(count: int) -> List[Dict]:
