@@ -100,7 +100,9 @@ LAYER 9 — NEGATIVE PROMPT / EXCLUSIONS: Explicitly state what to avoid.
 RULES:
 - NEVER generate vague or generic prompts. Every prompt must be specific enough that two different models would produce visually similar outputs.
 - ALWAYS write prompts as a single natural-language paragraph — no bullet points, labels, or headers inside the prompt.
-- ALWAYS prioritize brand consistency.
+- CRITICAL — SUBJECT IS LOCKED: The "USER'S REQUIRED SUBJECT" field in the creative brief is the user's required visual intent. It defines WHAT appears in the image. Your job is to enrich HOW it looks (style, colours, lighting, composition) using the brand DNA — NOT to replace, reinterpret, or overrule the subject. If the user says "a woman relaxing in a spa", the output MUST feature a woman relaxing in a spa.
+- NEVER substitute the subject with a generic brand scene. The subject must be the dominant focal element of the output prompt.
+- ALWAYS layer brand context (palette, style, mood, lighting) on top of the user's subject — not instead of it.
 - ALWAYS consider the "thumb-stop test" — will this image make someone stop scrolling?
 - ALWAYS include negative exclusions to minimize unwanted artifacts.
 - AVOID prompt cliches like "stunning", "beautiful", "amazing" — use precise, descriptive language.
@@ -263,17 +265,19 @@ class ImagePromptEngineerService:
         brand_info = _build_brand_context(brand)
 
         # Build the creative brief
+        idea_context = (content_context.get('idea_context') or '').strip()
         brief = f"""CREATIVE BRIEF:
 Platform: {platform_spec['desc']} ({platform_spec['ratio']}, {platform_spec['size']})
 Content Type: {content_context.get('content_type', 'general social media post')}
-Subject: {content_context.get('subject', 'brand visual')}
+USER'S REQUIRED SUBJECT (LOCKED — MUST APPEAR IN OUTPUT PROMPT): {content_context.get('subject', 'brand visual')}
+Idea / Content Angle: {idea_context or '—'}
 Key Message: {content_context.get('key_message', '')}
 Mood: {content_context.get('mood', 'brand default')}
 Must Include: {', '.join(content_context.get('must_include', [])) or 'none specified'}
 Must Exclude: {', '.join(content_context.get('must_exclude', [])) or 'none specified'}
 Text Overlay Space: {'Yes — reserve ' + content_context.get('text_position', 'top') + ' area' if content_context.get('text_overlay') else 'No'}
 
-BRAND CONTEXT:
+BRAND CONTEXT (enrich the subject's visual style with this — do NOT replace the subject):
 {_format_dict(brand_info)}"""
 
         messages = [
@@ -283,7 +287,7 @@ BRAND CONTEXT:
 
         result = service.chat_completion(
             messages=messages,
-            temperature=0.7,
+            temperature=0.4,
             max_tokens=4000 if think_harder else 2000,
             response_format={'type': 'json_object'},
             thinking_budget=10000 if think_harder else 0,

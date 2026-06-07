@@ -252,11 +252,23 @@ class DraftAssetGenerateView(APIView):
             try:
                 from ai_image.services.prompt_engineering_service import ImagePromptEngineerService
                 pe_service = ImagePromptEngineerService()
+
+                # Build idea context from linked ContentIdea if available
+                idea_context = ''
+                if getattr(post, 'idea', None):
+                    parts = [
+                        getattr(post.idea, 'title', '') or '',
+                        getattr(post.idea, 'hook', '') or '',
+                        getattr(post.idea, 'angle', '') or '',
+                    ]
+                    idea_context = ' | '.join(p for p in parts if p)
+
                 pe_result = pe_service.generate_image_prompt(
                     brand=brand,
                     content_context={
                         'subject': prompt,
-                        'key_message': (post.caption or '')[:200],
+                        'idea_context': idea_context,
+                        'key_message': (post.caption or '')[:300],
                         'mood': style,
                     },
                     platform='instagram',

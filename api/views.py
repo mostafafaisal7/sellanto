@@ -2089,10 +2089,22 @@ def generate_image(request):
                 from ai_image.services.prompt_engineering_service import ImagePromptEngineerService
                 pe_service = ImagePromptEngineerService()
                 platform = request.data.get('platform', 'instagram')
+
+                # Build idea context from linked post's ContentIdea if available
+                idea_context = ''
+                if linked_post and getattr(linked_post, 'idea', None):
+                    parts = [
+                        getattr(linked_post.idea, 'title', '') or '',
+                        getattr(linked_post.idea, 'hook', '') or '',
+                        getattr(linked_post.idea, 'angle', '') or '',
+                    ]
+                    idea_context = ' | '.join(p for p in parts if p)
+
                 pe_result = pe_service.generate_image_prompt(
                     brand=brand,
                     content_context={
                         'subject': gen_prompt,
+                        'idea_context': idea_context,
                         'key_message': '',
                         'mood': style,
                         'must_include': [],
