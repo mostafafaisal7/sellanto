@@ -69,6 +69,13 @@ class Post(models.Model):
         help_text='Links Magic Mode post to its corresponding Draft post for "Add to Calendar" flow'
     )
 
+    # Caption generation linkage — persists the CaptionGeneration DB ID so feedback
+    # regeneration works even after the in-memory Zustand store is cleared on page reload.
+    caption_generation_id = models.IntegerField(
+        null=True, blank=True,
+        help_text='ID of the CaptionGeneration record that produced this post caption'
+    )
+
     # V1.2.1 - Draft/Strategy fields
     idea = models.ForeignKey(
         'brands.ContentIdea', on_delete=models.SET_NULL,

@@ -245,6 +245,9 @@ export async function lookupCachedPosts(
           imageUrl: mediaFiles[0] || undefined,
           status: p.status === 'draft' ? 'ready' : p.status,
           approvedPlatforms: p.status === 'approved' ? platforms : undefined,
+          // Restore captionId from the persisted DB field so feedback
+          // regeneration works after the in-memory Zustand store is cleared.
+          captionId: p.caption_generation_id || undefined,
         };
       });
 

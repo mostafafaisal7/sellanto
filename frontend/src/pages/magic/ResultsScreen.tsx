@@ -1145,26 +1145,28 @@ export function ResultsScreen({ onGenerateMore, onGoBack }: ResultsScreenProps) 
       || feedback.what
       || '';
 
+    const toneMap: Record<string, CaptionTone> = {
+      'professional & authoritative': 'professional',
+      'friendly & approachable': 'friendly',
+      'bold & provocative': 'enthusiastic',
+      'educational & helpful': 'formal',
+      'fun & casual': 'casual',
+    };
+    const toneAnswer = answers.tone ? String(answers.tone).toLowerCase() : '';
+    const captionTone: CaptionTone = toneMap[toneAnswer] || 'professional';
+
     try {
       if (isTopicFeedback && post.ideaId) {
-        // --- Full regeneration: new idea + new caption + new image ---
-        // 1. Regenerate idea
+        // --- Full chain regeneration: new idea → caption → image ---
+        // 1. Regenerate idea with structured feedback_category so the backend
+        //    builds a more targeted prompt than a raw string.
         const newIdea = await strategyService.regenerateIdea(
           post.ideaId,
-          `Generate a ${feedbackText} style post. Create a completely new topic and angle.`
+          feedbackText,
+          'topic'  // feedback_category
         );
 
         // 2. Generate new caption for the new idea
-        const toneMap: Record<string, CaptionTone> = {
-          'professional & authoritative': 'professional',
-          'friendly & approachable': 'friendly',
-          'bold & provocative': 'enthusiastic',
-          'educational & helpful': 'formal',
-          'fun & casual': 'casual',
-        };
-        const toneAnswer = answers.tone ? String(answers.tone).toLowerCase() : '';
-        const captionTone: CaptionTone = toneMap[toneAnswer] || 'professional';
-
         const captionResult = await captionService.generate({
           topic: newIdea.title + (newIdea.hook ? ': ' + newIdea.hook : ''),
           tone: captionTone,
@@ -1174,21 +1176,21 @@ export function ResultsScreen({ onGenerateMore, onGoBack }: ResultsScreenProps) 
           include_emojis: true,
           include_cta: true,
         });
+        const newCaption = captionResult.generated_caption || '';
 
-        // 3. Generate new image
+        // 3. Generate new image anchored to the new caption
         let newImageUrl = '';
         try {
           const imgResult = await imageService.generate({
             prompt: `Create a professional social media image for: "${newIdea.title}". ${newIdea.hook || newIdea.angle || ''}`,
             title: newIdea.title,
-            // provider: 'openai',  // OpenAI billing limit reached
             provider: 'gemini',
             style: 'modern',
             enhance_prompt: true,
           });
           newImageUrl = imgResult.generated_image_with_logo || imgResult.generated_image || imgResult.composited_image || '';
         } catch {
-          // Non-fatal — post will show without image
+          // Non-fatal — post shows without new image
         }
 
         // 4. Update post with all new data
@@ -1200,7 +1202,7 @@ export function ResultsScreen({ onGenerateMore, onGoBack }: ResultsScreenProps) 
                   title: newIdea.title,
                   imageOverlay: newIdea.title,
                   imageStyle: newIdea.hook || newIdea.angle || '',
-                  caption: captionResult.generated_caption || '',
+                  caption: newCaption,
                   captionId: captionResult.id,
                   ideaId: newIdea.id,
                   imageUrl: newImageUrl || p.imageUrl,
@@ -1210,23 +1212,32 @@ export function ResultsScreen({ onGenerateMore, onGoBack }: ResultsScreenProps) 
           )
         );
       } else if (isImageFeedback) {
+        // --- Image-only regeneration — also regenerate copy overlay after ---
         const imgResult = await imageService.generate({
           prompt: `Create a social media image for: "${post.title}". Style feedback: ${feedback.image_fix || feedbackText}`,
           title: post.title,
-          // provider: 'openai',  // OpenAI billing limit reached
           provider: 'gemini',
           style: 'modern',
           enhance_prompt: true,
         });
         const imgUrl = imgResult.generated_image_with_logo || imgResult.generated_image || imgResult.composited_image;
+
         setGeneratedPosts(
           generatedPosts.map((p) =>
             p.id === post.id
-              ? { ...p, imageUrl: imgUrl || p.imageUrl, status: 'ready' as const }
+              ? {
+                  ...p,
+                  imageUrl: imgUrl || p.imageUrl,
+                  status: 'ready' as const,
+                }
               : p
           )
         );
       } else {
+        // --- Caption-only regeneration ---
+        // Use regenerate endpoint when captionId is known (correct path: applies
+        // feedback to original). Fall back to generate with custom_instructions
+        // when captionId is missing (page reload cleared Zustand store).
         if (post.captionId) {
           const result = await captionService.regenerate(post.captionId, feedbackText);
           const newCaption = result.caption || '';
@@ -1238,15 +1249,19 @@ export function ResultsScreen({ onGenerateMore, onGoBack }: ResultsScreenProps) 
             )
           );
         } else {
+          // captionId missing — use original caption as additional context so
+          // the LLM knows WHAT to improve, not just the topic title.
           const result = await captionService.generate({
             topic: post.title,
-            tone: 'professional',
+            tone: captionTone,
             length: 'medium',
             platform: post.platform.toLowerCase() as CaptionPlatform,
             include_hashtags: true,
             include_emojis: true,
             include_cta: true,
-            custom_instructions: feedbackText,
+            custom_instructions: post.caption
+              ? `Original caption: "${post.caption.slice(0, 300)}". User feedback: ${feedbackText}`
+              : feedbackText,
           });
           const newCaption = result.generated_caption || '';
           setGeneratedPosts(

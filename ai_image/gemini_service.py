@@ -9,6 +9,7 @@ Install: pip install requests Pillow
 import io
 import time
 import base64
+import urllib.parse
 import requests
 from PIL import Image
 from django.conf import settings
@@ -116,25 +117,40 @@ Ensure professional quality with clear composition, consistent lighting, and a c
             # Parse size
             width, height = map(int, size.split('x'))
             
-            # Try Gemini Flash (latest first, then fallback)
+            # Try Gemini Flash models (latest first, then fallback)
             result = self._generate_with_gemini_flash(final_prompt, width, height)
-            
+
             if result.get('success'):
                 result['enhanced_prompt'] = final_prompt
                 result['processing_time'] = time.time() - start_time
                 return result
-            
-            # If that fails, try Imagen
-            result = self._generate_with_imagen(final_prompt, width, height)
-            
-            if result.get('success'):
-                result['enhanced_prompt'] = final_prompt
-                result['processing_time'] = time.time() - start_time
-                return result
-            
+
+            # Preserve the Gemini Flash error for better diagnostics.
+            gemini_error = result.get('error', 'Gemini image generation failed')
+
+            # Imagen 3 requires Vertex AI — only attempt if a Vertex AI endpoint
+            # is configured (base_url override), otherwise skip to avoid a
+            # misleading "Imagen not available" error hiding the real cause.
+            if 'aiplatform.googleapis.com' in (self.base_url or ''):
+                imagen_result = self._generate_with_imagen(final_prompt, width, height)
+                if imagen_result.get('success'):
+                    imagen_result['enhanced_prompt'] = final_prompt
+                    imagen_result['processing_time'] = time.time() - start_time
+                    return imagen_result
+
+            # Free fallback: Pollinations.ai (FLUX model, no extra API key needed)
+            pollinations_result = self._generate_with_pollinations(final_prompt, width, height)
+            if pollinations_result.get('success'):
+                pollinations_result['enhanced_prompt'] = final_prompt
+                pollinations_result['processing_time'] = time.time() - start_time
+                return pollinations_result
+
+            pollinations_error = pollinations_result.get('error', 'Pollinations failed')
+
+            # All providers failed — include all errors so the caller can diagnose
             return {
                 'success': False,
-                'error': result.get('error', 'Failed to generate image. Image generation may not be available in your region.'),
+                'error': f'{gemini_error} | Pollinations: {pollinations_error}',
                 'processing_time': time.time() - start_time
             }
                 
@@ -145,103 +161,155 @@ Ensure professional quality with clear composition, consistent lighting, and a c
                 'processing_time': time.time() - start_time
             }
     
+    def _extract_api_error(self, response):
+        """Read the error message from an API error response."""
+        try:
+            data = response.json()
+            if 'error' in data:
+                return data['error'].get('message', '') or data['error'].get('status', '')
+        except Exception:
+            pass
+        return ''
+
     def _generate_with_gemini_flash(self, prompt, width, height):
-        """Generate using Gemini Flash with image output (tries latest first)"""
-        models_to_try = [
-            'gemini-3.1-flash-image-preview',      # Nano Banana 2 (Fast, efficient)
-            'gemini-2.5-flash-image',              # Nano Banana (Original)
-            'gemini-3-pro-image-preview',          # Nano Banana Pro (High quality)
+        """Generate using Gemini Flash with image output (tries multiple models)."""
+        # Each tuple is (model_name, payload) — different models need slightly
+        # different payload structures for responseModalities.
+        candidates = [
+            # gemini-2.0-flash-preview-image-generation: modalities at top level
+            (
+                'gemini-2.0-flash-preview-image-generation',
+                {
+                    'contents': [{'parts': [{'text': prompt}]}],
+                    'generationConfig': {'responseModalities': ['IMAGE'], 'temperature': 1.0},
+                },
+            ),
+            # gemini-2.0-flash-exp: modalities inside generationConfig
+            (
+                'gemini-2.0-flash-exp',
+                {
+                    'contents': [{'parts': [{'text': prompt}]}],
+                    'generationConfig': {
+                        'responseModalities': ['TEXT', 'IMAGE'],
+                        'temperature': 1.0,
+                        'topP': 0.95,
+                    },
+                },
+            ),
+            # gemini-2.0-flash (stable GA, try both modality configs)
+            (
+                'gemini-2.0-flash',
+                {
+                    'contents': [{'parts': [{'text': prompt}]}],
+                    'generationConfig': {
+                        'responseModalities': ['TEXT', 'IMAGE'],
+                        'temperature': 1.0,
+                        'topP': 0.95,
+                    },
+                },
+            ),
         ]
 
-        last_error = 'No models available'
+        errors = []  # collect per-model errors for diagnostics
 
-        for model_name in models_to_try:
+        for model_name, payload in candidates:
             try:
                 url = f"{self.base_url}/models/{model_name}:generateContent"
 
-                headers = {
-                    'Content-Type': 'application/json',
-                }
-
-                payload = {
-                    'contents': [{
-                        'parts': [{
-                            'text': prompt
-                        }]
-                    }],
-                    'generationConfig': {
-                        'responseModalities': ['TEXT', 'IMAGE'],  # Required for image generation
-                        'temperature': 1.0,
-                        'topP': 0.95,
-                    }
-                }
-
                 response = requests.post(
                     f"{url}?key={self.api_key}",
-                    headers=headers,
+                    headers={'Content-Type': 'application/json'},
                     json=payload,
                     timeout=120
                 )
 
                 if response.status_code == 200:
                     result = response.json()
-
-                    # Extract image from response
-                    if 'candidates' in result:
-                        for candidate in result['candidates']:
-                            content = candidate.get('content', {})
-                            parts = content.get('parts', [])
-
-                            for part in parts:
-                                if 'inlineData' in part:
-                                    inline_data = part['inlineData']
-                                    mime_type = inline_data.get('mimeType', '')
-
-                                    if mime_type.startswith('image/'):
-                                        image_b64 = inline_data.get('data', '')
-
-                                        if image_b64:
-                                            image_data = base64.b64decode(image_b64)
-
-                                            # Resize if needed
-                                            img = Image.open(io.BytesIO(image_data))
-                                            if img.size != (width, height):
-                                                img = img.resize((width, height), Image.Resampling.LANCZOS)
-                                                buffer = io.BytesIO()
-                                                img.save(buffer, format='PNG', quality=95)
-                                                image_data = buffer.getvalue()
-
-                                            return {
-                                                'success': True,
-                                                'image_data': image_data,
-                                                'model_used': model_name,
-                                            }
-
-                    last_error = f'No image in response from {model_name}'
+                    for candidate in result.get('candidates', []):
+                        for part in candidate.get('content', {}).get('parts', []):
+                            if 'inlineData' in part:
+                                inline_data = part['inlineData']
+                                if inline_data.get('mimeType', '').startswith('image/'):
+                                    image_b64 = inline_data.get('data', '')
+                                    if image_b64:
+                                        image_data = base64.b64decode(image_b64)
+                                        img = Image.open(io.BytesIO(image_data))
+                                        if img.size != (width, height):
+                                            img = img.resize((width, height), Image.Resampling.LANCZOS)
+                                            buf = io.BytesIO()
+                                            img.save(buf, format='PNG', quality=95)
+                                            image_data = buf.getvalue()
+                                        return {
+                                            'success': True,
+                                            'image_data': image_data,
+                                            'model_used': model_name,
+                                        }
+                    errors.append(f'{model_name}: no image part in response')
                     continue
-                elif response.status_code == 404:
-                    # Model not available, try next
-                    last_error = f'{model_name} not available'
-                    continue
+
+                api_msg = self._extract_api_error(response)
+                if response.status_code == 404:
+                    detail = f' ({api_msg})' if api_msg else ''
+                    errors.append(f'{model_name}: not found (404){detail}')
+                elif response.status_code == 400:
+                    errors.append(f'{model_name}: bad request — {api_msg or response.status_code}')
+                elif response.status_code == 403:
+                    errors.append(f'{model_name}: permission denied — {api_msg or "check API key"}')
                 else:
-                    error_msg = f"API Error: {response.status_code}"
-                    try:
-                        error_data = response.json()
-                        if 'error' in error_data:
-                            error_msg = error_data['error'].get('message', error_msg)
-                    except:
-                        pass
-                    last_error = error_msg
-                    continue
+                    errors.append(f'{model_name}: HTTP {response.status_code} — {api_msg or "unknown error"}')
 
             except requests.exceptions.Timeout:
-                last_error = 'Request timed out'
-                continue
+                errors.append(f'{model_name}: request timed out')
             except Exception as e:
-                last_error = str(e)
-                continue
+                errors.append(f'{model_name}: {e}')
 
-        return {'success': False, 'error': last_error}
+        combined = '; '.join(errors) if errors else 'All Gemini image models failed'
+        return {'success': False, 'error': f'Gemini image generation failed: {combined}'}
+
+    def _generate_with_pollinations(self, prompt, width, height):
+        """
+        Free fallback: Pollinations.ai (FLUX model, no API key required).
+        Returns image bytes on success.
+        """
+        try:
+            # Keep prompt short — long URLs cause 414/connection issues.
+            # Take only the first meaningful sentence/line.
+            short_prompt = prompt.strip()
+            # Strip the "enhance_prompt" boilerplate that gets appended
+            if '\n\nVisual style:' in short_prompt:
+                short_prompt = short_prompt.split('\n\nVisual style:')[0]
+            short_prompt = short_prompt[:300]
+
+            safe_prompt = urllib.parse.quote(short_prompt, safe='')
+            url = (
+                f"https://image.pollinations.ai/prompt/{safe_prompt}"
+                f"?width={width}&height={height}&model=flux&nologo=true&seed=42"
+            )
+            response = requests.get(url, timeout=90)
+
+            if response.status_code != 200 or not response.content:
+                return {
+                    'success': False,
+                    'error': f'Pollinations HTTP {response.status_code}',
+                }
+
+            img = Image.open(io.BytesIO(response.content))
+            if img.mode not in ('RGB', 'RGBA'):
+                img = img.convert('RGB')
+            if img.size != (width, height):
+                img = img.resize((width, height), Image.Resampling.LANCZOS)
+
+            buf = io.BytesIO()
+            img.convert('RGB').save(buf, format='PNG', quality=95)
+
+            return {
+                'success': True,
+                'image_data': buf.getvalue(),
+                'model_used': 'pollinations-flux',
+            }
+
+        except Exception as e:
+            return {'success': False, 'error': f'Pollinations error: {e}'}
     
     def _generate_with_imagen(self, prompt, width, height):
         """Generate using Imagen API"""

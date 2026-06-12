@@ -62,8 +62,11 @@ export const strategyService = {
     const res = await api.post('/ideas/generate/', data);
     return res.data;
   },
-  async regenerateIdea(ideaId: number, overridePrompt?: string) {
-    const res = await api.post(`/ideas/${ideaId}/regenerate/`, overridePrompt ? { override_prompt: overridePrompt } : {});
+  async regenerateIdea(ideaId: number, instructions?: string, feedbackCategory?: 'topic' | 'tone' | 'image' | 'other') {
+    const payload: Record<string, string> = {};
+    if (instructions) payload.instructions = instructions;
+    if (feedbackCategory) payload.feedback_category = feedbackCategory;
+    const res = await api.post(`/ideas/${ideaId}/regenerate/`, payload);
     return res.data;
   },
   async addIdeaToCalendar(ideaId: number) {

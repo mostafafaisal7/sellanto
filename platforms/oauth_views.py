@@ -56,6 +56,11 @@ FB_SCOPES = ','.join([
     'pages_messaging',
     'instagram_basic',
     'instagram_content_publish',
+    'instagram_business_content_publish',
+    'instagram_manage_comments',
+    'instagram_manage_insights',
+    # Lead Ads
+    'leads_retrieval',
     # Ads
     'ads_management',
     'ads_read',

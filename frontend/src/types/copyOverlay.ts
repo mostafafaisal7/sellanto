@@ -8,6 +8,8 @@ export interface CopyOverlayGenerateRequest {
   brand_id?: number;
   caption_text?: string;
   image_description?: string;
+  /** Engineered visual prompt from visual_prompt_builder — grounds copy in the actual image scene */
+  visual_prompt?: string;
   cta_text?: string;
   idea_context?: string;
   trending_topics?: string;

@@ -121,6 +121,19 @@ class ImageVisualPromptBuilder:
                 f"Treat your prompt as the BACKGROUND / setting — keep the centre "
                 f"empty for the product. Do NOT describe the product itself.\n"
             )
+        else:
+            # Fall back to products_services from brand DNA so images represent
+            # the actual business even when no product image was uploaded.
+            dna_products = _dna_field(dna, 'products_services')
+            if dna_products:
+                product_block = (
+                    f"\n<key_products>\n"
+                    f"{dna_products[:400]}\n"
+                    f"</key_products>\n\n"
+                    f"INSTRUCTION: The image MUST visually feature or represent the "
+                    f"product/service listed in <key_products>. Do not show generic "
+                    f"objects — show the specific offering relevant to the caption.\n"
+                )
 
         # Text-overlay block — explicit signal to the LLM about whether the
         # image must carry on-image text or stay purely visual.
@@ -312,6 +325,15 @@ class VideoVisualPromptBuilder:
                 "describe the product itself.\n"
             )
 
+        dna_products = _dna_field(dna, 'products_services')
+        products_section = ''
+        if not has_reference_image and dna_products:
+            products_section = (
+                f"\n<key_products>\n{dna_products[:400]}\n</key_products>\n"
+                f"INSTRUCTION: Feature or represent this product/service visually — "
+                f"not a generic scene.\n"
+            )
+
         return f"""<user_seed_prompt>
 {(user_prompt or '—').strip()[:1000]}
 </user_seed_prompt>
@@ -323,7 +345,7 @@ voice: {_dna_field(dna, 'brand_voice') or '—'}
 target_audience: {_dna_field(dna, 'target_audience') or '—'}
 brand_values: {_dna_field(dna, 'brand_values') or '—'}
 brand_color_theme: {_dna_field(dna, 'color_theme') or '—'}
-</brand>
+</brand>{products_section}
 
 <creative_idea>
 title: {idea.get('title') or '—'}

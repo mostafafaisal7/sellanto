@@ -47,5 +47,12 @@ export { OverflowHistoryPage } from './OverflowHistoryPage';
 // Video AI
 export { VideoAIPage } from './VideoAIPage';
 
+// Meta App Review — permission demonstration pages
+export { LeadsPage } from './LeadsPage';
+export { AdsPage } from './AdsPage';
+export { CommentsPage } from './CommentsPage';
+export { InstagramContentPage } from './InstagramContentPage';
+export { DiscoverPage } from './DiscoverPage';
+
 // Dev / Test
 export { APITestPage } from './APITestPage';

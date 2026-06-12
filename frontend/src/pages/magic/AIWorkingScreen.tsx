@@ -10,6 +10,62 @@ import visualPromptService from '../../services/visualPromptService';
 import type { ContentIdea, CaptionTone, CaptionPlatform } from '../../types';
 import { buildMagicCacheKey } from './cacheUtils';
 
+type ErrorInfo = {
+  icon: string;
+  title: string;
+  message: string;
+  actionUrl?: string;
+  actionLabel?: string;
+};
+
+function classifyError(raw: string): ErrorInfo {
+  const r = raw.toLowerCase();
+
+  if (r.includes('prepayment') || r.includes('credits') || r.includes('billing') || r.includes('resource_exhausted')) {
+    return {
+      icon: '💳',
+      title: 'AI Credits Depleted',
+      message:
+        'Your Google AI Studio prepayment credits have run out. Top up your balance to keep generating posts.',
+      actionUrl: 'https://aistudio.google.com/app/billing',
+      actionLabel: 'Manage Credits',
+    };
+  }
+  if (r.includes('quota') || r.includes('rate limit') || r.includes('too many requests')) {
+    return {
+      icon: '⏳',
+      title: 'Rate Limit Reached',
+      message: 'The AI service is handling too many requests right now. Wait a moment and try again.',
+    };
+  }
+  if (r.includes('api key') || r.includes('unauthenticated') || r.includes('invalid key') || r.includes('unauthorized')) {
+    return {
+      icon: '🔑',
+      title: 'Authentication Failed',
+      message: 'The AI service API key is invalid or missing. Please contact support to resolve this.',
+    };
+  }
+  if (r.includes('getaddrinfo') || r.includes('nameresolution') || r.includes('failed to resolve') || r.includes('connection refused')) {
+    return {
+      icon: '📡',
+      title: 'Connection Error',
+      message: 'Unable to reach the AI service. Please check your internet connection and try again.',
+    };
+  }
+  if (r.includes('timeout') || r.includes('timed out')) {
+    return {
+      icon: '⏱️',
+      title: 'Request Timed Out',
+      message: 'Image generation took too long. This is usually temporary — please try again.',
+    };
+  }
+  return {
+    icon: '⚠️',
+    title: 'Generation Failed',
+    message: 'Something went wrong while creating your posts. This is usually temporary — please try again.',
+  };
+}
+
 const STEPS = [
   { emoji: '🌐', label: 'Reading your website', desc: 'Understanding your brand identity...', estimatedMs: 3000 },
   { emoji: '🧠', label: 'Building your brand profile', desc: 'Analyzing tone, audience, and services...', estimatedMs: 8000 },
@@ -124,26 +180,43 @@ export function AIWorkingScreen({ onComplete, onStop }: AIWorkingScreenProps) {
       }
       if (cancelledRef.current) return;
 
-      // Step 1: Generate DNA (if URL provided, not skipped, and brand has no existing DNA)
+      // Step 1: Generate DNA (if URL provided and brand lacks sufficient DNA)
       setStep(1);
-      if (store.websiteUrl && !store.skipDNAGeneration) {
-        try {
-          // Check if brand already has DNA before generating to avoid duplicate work
-          const brandDetail = await api.get(`/brands/${brandId}/`);
-          const existingDNA = brandDetail.data?.brand_dna;
-          const hasDNA = existingDNA && typeof existingDNA === 'object' && Object.keys(existingDNA).length > 0;
+      // Always fetch brand detail here so downstream steps can use brand DNA
+      // for product context, colour palette, etc.
+      let brandDNA: Record<string, unknown> = {};
+      try {
+        const brandDetail = await api.get(`/brands/${brandId}/`);
+        brandDNA = brandDetail.data?.brand_dna || {};
+      } catch {
+        // Non-fatal — proceed with empty DNA
+      }
 
-          if (hasDNA) {
-            console.log('[AIWorkingScreen] Brand already has DNA - skipping regeneration');
+      const REQUIRED_DNA_FIELDS = ['brand_voice', 'target_audience', 'products_services', 'brand_values'];
+      const hasSufficientDNA =
+        Object.keys(brandDNA).length > 0 &&
+        REQUIRED_DNA_FIELDS.some(
+          (f) => brandDNA[f] && String(brandDNA[f]).trim().length > 5
+        );
+
+      if (store.websiteUrl && (!store.skipDNAGeneration || !hasSufficientDNA)) {
+        try {
+          if (hasSufficientDNA) {
+            console.log('[AIWorkingScreen] Brand already has sufficient DNA - skipping regeneration');
           } else {
             console.log('[AIWorkingScreen] Generating DNA for brand:', brandId);
             await strategyService.generateDNA(brandId, store.websiteUrl);
+            // Re-fetch DNA after generation
+            try {
+              const refreshed = await api.get(`/brands/${brandId}/`);
+              brandDNA = refreshed.data?.brand_dna || {};
+            } catch { /* ignore */ }
           }
         } catch {
           // Non-fatal — continue without DNA
         }
-      } else if (store.skipDNAGeneration) {
-        console.log('[AIWorkingScreen] Skipping DNA generation - skipDNAGeneration flag set');
+      } else if (store.skipDNAGeneration && hasSufficientDNA) {
+        console.log('[AIWorkingScreen] Skipping DNA generation - brand has sufficient DNA');
       }
       if (cancelledRef.current) return;
 
@@ -414,15 +487,26 @@ export function AIWorkingScreen({ onComplete, onStop }: AIWorkingScreenProps) {
         // AI-ONLY IMAGE GENERATION (Current flow)
         console.log('[AIWorkingScreen] Using AI-only image generation');
 
+        // Extract products_services from brand DNA to anchor images to the
+        // actual business when no product photos were uploaded.
+        const dnaProductsServices = (brandDNA.products_services as string | undefined) || '';
+        const dnaProductContext = dnaProductsServices
+          ? {
+              product_type: dnaProductsServices.split('\n')[0].slice(0, 80),
+              features: dnaProductsServices.slice(0, 400),
+              background_style: 'clean',
+            }
+          : undefined;
+
         for (let i = 0; i < posts.length; i++) {
           if (cancelledRef.current) return;
           try {
             const post = posts[i];
             const fallbackAiPrompt = `Create a professional social media image for: "${post.title}". ${post.imageStyle}${colorHint}`;
 
-            // 🆕 Synthesise brand DNA + idea + caption + trending into a
-            // focused prompt. Falls back to the template literal if the
-            // LLM call fails.
+            // Synthesise brand DNA + idea + caption + trending into a focused
+            // prompt. Pass products_services so the backend visual prompt
+            // builder can make the image represent the actual business.
             const richAiPrompt = await visualPromptService.buildImagePrompt({
               brand_id: brandId,
               idea: { title: post.title, hook: post.imageStyle, platform: post.platform.toLowerCase() },
@@ -433,6 +517,7 @@ export function AIWorkingScreen({ onComplete, onStop }: AIWorkingScreenProps) {
               image_style_hint: post.imageStyle,
               with_copy: wantsCopy,
               copy_text: wantsCopy ? post.title : undefined,
+              product_context: dnaProductContext,
             });
             const imgReq: Parameters<typeof imageService.generate>[0] = {
               prompt: richAiPrompt || fallbackAiPrompt,
@@ -502,9 +587,20 @@ export function AIWorkingScreen({ onComplete, onStop }: AIWorkingScreenProps) {
           // ✅ Use unified cache key generation (matches MagicModePage lookup)
           const { cacheKey } = buildMagicCacheKey(store.answers, store.customAnswers, userId);
 
+          // Build caption_ids mapping so feedback works after page reload
+          // (captionId lives in Zustand in-memory; persisting it to Post lets
+          //  the backend find the correct CaptionGeneration record later).
+          const captionIdsMap: Record<string, number> = {};
+          posts.forEach((p) => {
+            if (p.id && p.captionId) {
+              captionIdsMap[String(p.id)] = p.captionId;
+            }
+          });
+
           // ✅ Include userId in URL for backend validation
           await api.post(`/magic/posts/${userId}/${cacheKey}/`, {
             post_ids: savedPostIds,
+            caption_ids: captionIdsMap,
           });
 
           console.log(`[AIWorkingScreen] ✅ Cache saved: ${cacheKey} → ${savedPostIds.length} posts`);
@@ -652,25 +748,70 @@ export function AIWorkingScreen({ onComplete, onStop }: AIWorkingScreenProps) {
       <div className="relative z-10 flex flex-col items-center max-w-[520px] w-full">
         {/* Error state */}
         {error ? (
-          <>
-            <div className="text-[64px] mb-4">❌</div>
-            <h2 className="text-[24px] font-extrabold text-text-primary text-center mb-2">
-              Something went wrong
-            </h2>
-            <p className="text-[14px] text-text-secondary text-center mb-6 max-w-[400px]">
-              {error}
-            </p>
-            <button
-              onClick={handleRetry}
-              className="px-6 py-3 rounded-[14px] text-[15px] font-bold text-white"
-              style={{
-                background: 'linear-gradient(135deg, rgb(var(--c-coral)), rgb(var(--c-coral-hover)))',
-                boxShadow: 'var(--shadow-glow-coral)',
-              }}
-            >
-              Try Again
-            </button>
-          </>
+          <div className="flex flex-col items-center w-full">
+            {(() => {
+              const info = classifyError(error);
+              return (
+                <>
+                  {/* Icon */}
+                  <div
+                    className="w-[80px] h-[80px] rounded-[28px] flex items-center justify-center text-[38px] mb-5"
+                    style={{
+                      background: 'rgba(255,255,255,0.05)',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.07)',
+                    }}
+                  >
+                    {info.icon}
+                  </div>
+
+                  <h2 className="text-[22px] font-extrabold text-text-primary text-center mb-2">
+                    {info.title}
+                  </h2>
+
+                  <p className="text-[13px] text-text-secondary text-center mb-7 max-w-[340px] leading-relaxed">
+                    {info.message}
+                  </p>
+
+                  <div className="flex flex-col gap-3 w-full max-w-[260px]">
+                    {info.actionUrl && (
+                      <a
+                        href={info.actionUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-6 py-3 rounded-[14px] text-[14px] font-bold text-white text-center transition-opacity hover:opacity-90"
+                        style={{
+                          background: 'linear-gradient(135deg, rgb(var(--c-coral)), rgb(var(--c-coral-hover)))',
+                          boxShadow: 'var(--shadow-glow-coral)',
+                        }}
+                      >
+                        {info.actionLabel} →
+                      </a>
+                    )}
+                    <button
+                      onClick={handleRetry}
+                      className="px-6 py-3 rounded-[14px] text-[14px] font-bold transition-opacity hover:opacity-90"
+                      style={
+                        info.actionUrl
+                          ? {
+                              background: 'rgba(255,255,255,0.06)',
+                              color: 'rgba(255,255,255,0.55)',
+                              border: '1px solid rgba(255,255,255,0.1)',
+                            }
+                          : {
+                              background: 'linear-gradient(135deg, rgb(var(--c-coral)), rgb(var(--c-coral-hover)))',
+                              boxShadow: 'var(--shadow-glow-coral)',
+                              color: 'white',
+                            }
+                      }
+                    >
+                      Try Again
+                    </button>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
         ) : (
           <>
             {/* Thinking dots */}

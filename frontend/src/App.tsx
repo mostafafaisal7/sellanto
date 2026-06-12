@@ -46,6 +46,12 @@ import {
   OverflowHistoryPage,
   // Video AI
   VideoAIPage,
+  // Meta App Review pages
+  LeadsPage,
+  AdsPage,
+  CommentsPage,
+  InstagramContentPage,
+  DiscoverPage,
   // Dev / Test
   APITestPage,
 } from './pages';
@@ -262,6 +268,13 @@ function App() {
 
           {/* Video AI */}
           <Route path="/video-ai" element={<VideoAIPage />} />
+
+          {/* Meta App Review — permission demonstration pages */}
+          <Route path="/comments" element={<CommentsPage />} />
+          <Route path="/instagram-content" element={<InstagramContentPage />} />
+          <Route path="/discover" element={<DiscoverPage />} />
+          <Route path="/leads" element={<LeadsPage />} />
+          <Route path="/ads" element={<AdsPage />} />
 
           {/* Dev / Test */}
           <Route path="/test-api" element={<APITestPage />} />

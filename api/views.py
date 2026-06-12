@@ -3674,7 +3674,8 @@ class MagicModeCachedPostsView(APIView):
                     'platforms': platforms,
                     'media_files': media_files,
                     'status': post.status,
-                    'magic_draft_id': post.magic_draft_id,  # 🔗 Link to Draft post
+                    'magic_draft_id': post.magic_draft_id,
+                    'caption_generation_id': post.caption_generation_id,
                     'created_at': post.created_at.isoformat(),
                 })
 
@@ -3713,6 +3714,9 @@ class MagicModeCachedPostsView(APIView):
             params_hash += f"/{custom}"
 
         post_ids = request.data.get('post_ids', [])
+        # Optional mapping of {post_id: caption_generation_id} so feedback works
+        # after Zustand store is cleared on page reload.
+        caption_ids_map = request.data.get('caption_ids', {})
 
         if not post_ids:
             return Response({'error': 'post_ids required'}, status=400)
@@ -3730,6 +3734,20 @@ class MagicModeCachedPostsView(APIView):
                 'error': 'Unauthorized: Some post IDs do not belong to you',
                 'invalid_ids': list(invalid_ids)
             }, status=403)
+
+        # Persist caption_generation_id on each Post so feedback regeneration
+        # works even after the in-memory Zustand store is cleared.
+        if caption_ids_map and isinstance(caption_ids_map, dict):
+            for post_id_str, cap_gen_id in caption_ids_map.items():
+                try:
+                    pid = int(post_id_str)
+                    cid = int(cap_gen_id) if cap_gen_id else None
+                    if cid and pid in owned_post_ids:
+                        Post.objects.filter(id=pid, user=request.user).update(
+                            caption_generation_id=cid
+                        )
+                except (ValueError, TypeError):
+                    pass
 
         print(f"[MagicCache] Saving cache for user {request.user.id} with params: {params_hash}, posts: {owned_post_ids}")
 

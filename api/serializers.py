@@ -319,6 +319,7 @@ class PostSerializer(serializers.ModelSerializer):
             'source',
             'hook',
             'ai_generated',
+            'caption_generation_id',
             'created_at',
             'updated_at',
             'posted_at',
@@ -1318,6 +1319,9 @@ class CopyOverlayGenerateSerializer(serializers.Serializer):
     brand_id = serializers.IntegerField(required=False)
     caption_text = serializers.CharField(required=False, default='')
     image_description = serializers.CharField(required=False, default='')
+    # The engineered visual prompt (from visual_prompt_builder) so copy text
+    # is grounded in what the image will actually show, not a generic context.
+    visual_prompt = serializers.CharField(required=False, default='')
     cta_text = serializers.CharField(required=False, default='')
     idea_context = serializers.CharField(required=False, default='')
     trending_topics = serializers.CharField(required=False, default='')

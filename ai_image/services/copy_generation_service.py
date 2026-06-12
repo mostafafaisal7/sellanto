@@ -20,6 +20,7 @@ def generate_copy_suggestions(
     idea_context: str = '',
     trending_topics: str = '',
     count: int = 5,
+    visual_prompt: str = '',
 ) -> List[Dict]:
     """
     Generate short marketing copy suggestions for image overlay.
@@ -49,6 +50,20 @@ ABSOLUTE RULES — violating any of these makes the output worthless:
 4. Professional tone: polished, clear, on-brand — as if a top-tier design agency wrote it.
 5. Return ONLY valid JSON, no markdown, no explanations."""
 
+    # Build optional visual prompt section — when provided, the LLM can reference
+    # the exact scene that will be rendered so copy is grounded in the visual.
+    visual_prompt_section = ''
+    if visual_prompt and visual_prompt.strip():
+        visual_prompt_section = (
+            f"\n<visual_prompt>\n"
+            f"{visual_prompt.strip()[:800]}\n"
+            f"</visual_prompt>\n"
+            f"CRITICAL: Your copy must feel like it belongs ON this specific image. "
+            f"Reference the visual — if the image shows a product, name the product "
+            f"benefit. If it shows a lifestyle scene, reflect the emotion. "
+            f"Never write generic slogans that could belong to any ad.\n"
+        )
+
     user_prompt = f"""Generate {count} distinct, professional text overlay suggestions for a brand image or video.
 
 <brand>
@@ -69,7 +84,7 @@ Trending Topics: {trending_topics[:200] if trending_topics else '—'}
 Visual Description: {image_description[:200] if image_description else '—'}
 CTA: {cta_text or '—'}
 </post_context>
-
+{visual_prompt_section}
 TASK: Read the caption and idea above. Identify the single strongest message (benefit, emotion, or hook). Write {count} short overlay phrases that each express that message from a DIFFERENT angle. Every phrase must be grammatically perfect English, max 6 words per line, max 2 lines total.
 
 Return JSON:

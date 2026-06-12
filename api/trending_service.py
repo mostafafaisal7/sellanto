@@ -233,7 +233,7 @@ def generate_trending_for_brand(brand_id, user, override_prompt=None, think_hard
         insight_texts = [ci.hook_text.split(' ||REC||')[0][:100] for ci in competitor_insights]
 
         # User feedback for learning
-        from brands.models import TrendFeedback
+        from brands.models import TrendFeedback, ShownTrendingTopic
         feedback_qs = TrendFeedback.objects.filter(brand=brand)
         accepted_topics = list(feedback_qs.filter(is_accepted=True).values_list('topic_text', flat=True)[:20])
         rejected_topics = list(feedback_qs.filter(is_accepted=False).values_list('topic_text', flat=True)[:20])
@@ -242,6 +242,21 @@ def generate_trending_for_brand(brand_id, user, override_prompt=None, think_hard
             feedback_context += f"\n\n═══ USER FEEDBACK — ACCEPTED TOPICS (generate MORE like these) ═══\n{chr(10).join(f'- {t}' for t in accepted_topics)}"
         if rejected_topics:
             feedback_context += f"\n\n═══ USER FEEDBACK — REJECTED TOPICS (AVOID these and similar topics) ═══\n{chr(10).join(f'- {t}' for t in rejected_topics)}"
+
+        # Hard exclusion: all topics ever shown to this brand (last 60)
+        previously_shown = list(
+            ShownTrendingTopic.objects.filter(brand=brand)
+            .order_by('-shown_at')
+            .values_list('topic', flat=True)[:60]
+        )
+        hard_exclusion_block = ''
+        if previously_shown:
+            hard_exclusion_block = (
+                f"\n\n<previously_shown_topics>\n"
+                f"HARD CONSTRAINT — DO NOT return any of these topics or semantically identical variants:\n"
+                + '\n'.join(f'- {t}' for t in previously_shown)
+                + '\n</previously_shown_topics>'
+            )
 
         # Format trends by source
         daily_trending = [t['topic'] for t in all_trends if t['source'] == 'daily_trending']
@@ -323,7 +338,7 @@ RISING QUERIES (related to brand keywords — gaining momentum):
 TOP QUERIES (most searched related to brand keywords):
 {json.dumps(top_queries[:15], indent=2) if top_queries else 'No top queries found'}
 </google_trends_data>
-{feedback_context}
+{feedback_context}{hard_exclusion_block}
 
 <instructions>
 1. Study the brand DNA to understand what "{brand.brand_name}" sells and who its audience is.
@@ -420,12 +435,14 @@ TOP QUERIES (most searched related to brand keywords):
 
         expires = timezone.now() + timedelta(hours=12)
         created = []
+        new_shown_topics = []
         for t in topics[:15]:
             if not isinstance(t, dict):
                 continue
+            topic_text = str(t.get('topic', ''))[:500]
             obj = TrendingCache.objects.create(
                 platform=t.get('platform', 'google'),
-                topic=str(t.get('topic', ''))[:500],
+                topic=topic_text,
                 volume_score=min(float(t.get('volume_score', 50)), 100),
                 region=geo or 'global',
                 brand=brand,
@@ -440,6 +457,12 @@ TOP QUERIES (most searched related to brand keywords):
                 'relevance_explanation': obj.relevance_explanation,
                 'category': t.get('category', 'industry'),
             })
+            if topic_text:
+                new_shown_topics.append(ShownTrendingTopic(brand=brand, topic=topic_text))
+
+        # Persist shown topics log so future generations can exclude them
+        if new_shown_topics:
+            ShownTrendingTopic.objects.bulk_create(new_shown_topics, ignore_conflicts=True)
 
         from brands.models import PromptHistory
         PromptHistory.save_prompt(brand, 'trending', prompt)

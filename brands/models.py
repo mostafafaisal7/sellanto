@@ -482,6 +482,24 @@ class TrendFeedback(models.Model):
         return f"{self.topic_text[:50]} ({status}) - {self.brand.brand_name}"
 
 
+class ShownTrendingTopic(models.Model):
+    """Persistent log of all trending topics ever shown to a brand.
+    Survives TrendingCache wipes — used to build hard exclusion lists so the
+    LLM never regenerates topics the user has already seen.
+    """
+    brand = models.ForeignKey(Brand, on_delete=models.CASCADE, related_name='shown_trending_topics')
+    topic = models.CharField(max_length=500)
+    shown_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'shown_trending_topics'
+        ordering = ['-shown_at']
+        indexes = [models.Index(fields=['brand', 'shown_at'])]
+
+    def __str__(self):
+        return f"{self.topic[:60]} ({self.brand.brand_name})"
+
+
 class ApprovalLog(models.Model):
     """Track all approval state transitions with comments"""
 
