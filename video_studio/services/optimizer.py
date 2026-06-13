@@ -1,65 +1,53 @@
 # video_studio/services/optimizer.py
 
 """
-Gemini Prompt Optimizer
-Use Gemini AI to enhance and optimize Veo prompts for better video generation
+Veo Prompt Optimizer
+Uses Claude (via UnifiedLLMService) to enhance prompts for Veo video generation.
+Gemini is reserved for image/video generation only; all text goes through Claude.
 """
-
-from django.conf import settings
 
 
 class GeminiPromptOptimizer:
     """
-    Use Gemini 2.5 Pro to optimize prompts for Veo video generation
+    Use Claude to optimize prompts for Veo video generation.
     """
 
     def __init__(self, api_key=None):
-        self.api_key = api_key or getattr(settings, 'GEMINI_API_KEY', None)
+        pass  # api_key no longer needed — Claude key is fetched from GlobalAPIKey
 
     def optimize_prompt_for_veo(self, user_prompt, brand=None, product_category=None, platform=None):
         """
-        Use Gemini to refine user prompt for better Veo results
-
-        Args:
-            user_prompt (str): Original user prompt
-            brand (Brand): Brand instance for context
-            product_category (str): Product category
-            platform (str): Target platform (instagram, tiktok, etc.)
-
-        Returns:
-            str: Optimized prompt
+        Use Claude to refine user prompt for better Veo results.
+        Falls back to the original prompt if Claude is unavailable.
         """
-        if not self.api_key:
-            print("Gemini API key not configured. Returning original prompt.")
-            return user_prompt
-
         try:
-            import google.generativeai as genai
+            from accounts.services.llm_service import get_llm_service
 
-            genai.configure(api_key=self.api_key)
-            model = genai.GenerativeModel('gemini-2.5-pro')
-
-            # Build optimization prompt
             optimization_request = self._build_optimization_prompt(
                 user_prompt, brand, product_category, platform
             )
 
-            # Generate optimized prompt
-            response = model.generate_content(optimization_request)
-            optimized = response.text.strip()
+            service = get_llm_service(None)
+            result = service.chat_completion(
+                messages=[{"role": "user", "content": optimization_request}],
+                max_tokens=300,
+                temperature=0.7,
+            )
 
-            # Remove any markdown formatting
+            if not result.success:
+                return user_prompt
+
+            optimized = result.content.strip()
             optimized = optimized.replace('```', '').replace('**', '').strip()
 
-            # Ensure it's not too long (Veo limit ~500 chars)
             if len(optimized) > 500:
                 optimized = optimized[:497] + '...'
 
             return optimized
 
         except Exception as e:
-            print(f"Gemini optimization failed: {e}")
-            return user_prompt  # Return original on failure
+            print(f"Prompt optimization failed: {e}")
+            return user_prompt
 
     def _build_optimization_prompt(self, user_prompt, brand, product_category, platform):
         """
@@ -148,24 +136,9 @@ Now optimize the user's prompt. Return ONLY the optimized prompt, no other text:
         return optimized
 
     def suggest_prompt_variations(self, base_prompt, num_variations=3):
-        """
-        Generate variations of a prompt for A/B testing
-
-        Args:
-            base_prompt (str): Base prompt
-            num_variations (int): Number of variations to generate
-
-        Returns:
-            list: List of prompt variations
-        """
-        if not self.api_key:
-            return [base_prompt] * num_variations
-
+        """Generate variations of a prompt for A/B testing using Claude."""
         try:
-            import google.generativeai as genai
-
-            genai.configure(api_key=self.api_key)
-            model = genai.GenerativeModel('gemini-2.5-pro')
+            from accounts.services.llm_service import get_llm_service
 
             variation_request = f"""Generate {num_variations} creative variations of this video prompt for A/B testing.
 
@@ -181,16 +154,21 @@ Create {num_variations} different versions that:
 Return ONLY the {num_variations} prompts, numbered 1-{num_variations}, no other text.
 """
 
-            response = model.generate_content(variation_request)
-            text = response.text.strip()
+            service = get_llm_service(None)
+            result = service.chat_completion(
+                messages=[{"role": "user", "content": variation_request}],
+                max_tokens=600,
+                temperature=0.9,
+            )
 
-            # Parse variations
+            if not result.success:
+                return [base_prompt] * num_variations
+
+            text = result.content.strip()
             variations = []
             for line in text.split('\n'):
                 line = line.strip()
-                # Remove numbering like "1. " or "1) "
                 if line and (line[0].isdigit() or line.startswith('-')):
-                    # Remove prefix
                     cleaned = line.lstrip('0123456789.-) ').strip()
                     if cleaned:
                         variations.append(cleaned)

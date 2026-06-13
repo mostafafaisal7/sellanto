@@ -71,6 +71,10 @@ IMAGE_SYSTEM_PROMPT = (
     "Hard rules:\n"
     "- Anchor every visual choice to the caption's subject. If the caption "
     "talks about Mondays, the image must read 'Monday'.\n"
+    "- If the brand DNA includes visual_style, color_palette_hex, visual_mood, "
+    "or photography_style fields, ALWAYS use them to set the aesthetic. These "
+    "come from real images of the brand — they are the ground truth for how "
+    "this brand looks.\n"
     "- Honour the brand voice and colour palette.\n"
     "- Reference trending themes only when they reinforce the post.\n"
     "- Lead with the dominant visual subject (a person, an object, a "
@@ -159,6 +163,23 @@ class ImageVisualPromptBuilder:
                 "</text_overlay>\n"
             )
 
+        # Visual DNA fields (populated by deep crawl with image analysis)
+        _visual_style = _dna_field(dna, 'visual_style')
+        _color_palette_hex = _dna_field(dna, 'color_palette_hex')
+        _visual_mood = _dna_field(dna, 'visual_mood')
+        _photography_style = _dna_field(dna, 'photography_style')
+        _image_subjects = _dna_field(dna, 'image_subjects')
+
+        _visual_block = ''
+        if any([_visual_style, _color_palette_hex, _visual_mood, _photography_style]):
+            _visual_block = (
+                f"visual_style: {_visual_style or '—'}\n"
+                f"color_palette_hex: {_color_palette_hex or '—'}\n"
+                f"visual_mood: {_visual_mood or '—'}\n"
+                f"photography_style: {_photography_style or '—'}\n"
+                f"image_subjects: {_image_subjects or '—'}\n"
+            )
+
         return f"""<brand>
 name: {brand_name or '—'}
 industry: {industry or '—'}
@@ -168,7 +189,7 @@ target_audience: {_dna_field(dna, 'target_audience') or '—'}
 brand_values: {_dna_field(dna, 'brand_values') or '—'}
 brand_color_theme: {_dna_field(dna, 'color_theme') or '—'}
 keywords: {_dna_field(dna, 'keywords') or '—'}
-</brand>
+{_visual_block}</brand>
 
 <content_idea>
 title: {idea.get('title') or '—'}
@@ -334,6 +355,20 @@ class VideoVisualPromptBuilder:
                 f"not a generic scene.\n"
             )
 
+        # Visual DNA fields for video
+        _v_visual_style = _dna_field(dna, 'visual_style')
+        _v_color_hex = _dna_field(dna, 'color_palette_hex')
+        _v_visual_mood = _dna_field(dna, 'visual_mood')
+        _v_photo_style = _dna_field(dna, 'photography_style')
+        _v_visual_block = ''
+        if any([_v_visual_style, _v_color_hex, _v_visual_mood, _v_photo_style]):
+            _v_visual_block = (
+                f"visual_style: {_v_visual_style or '—'}\n"
+                f"color_palette_hex: {_v_color_hex or '—'}\n"
+                f"visual_mood: {_v_visual_mood or '—'}\n"
+                f"photography_style: {_v_photo_style or '—'}\n"
+            )
+
         return f"""<user_seed_prompt>
 {(user_prompt or '—').strip()[:1000]}
 </user_seed_prompt>
@@ -345,7 +380,7 @@ voice: {_dna_field(dna, 'brand_voice') or '—'}
 target_audience: {_dna_field(dna, 'target_audience') or '—'}
 brand_values: {_dna_field(dna, 'brand_values') or '—'}
 brand_color_theme: {_dna_field(dna, 'color_theme') or '—'}
-</brand>{products_section}
+{_v_visual_block}</brand>{products_section}
 
 <creative_idea>
 title: {idea.get('title') or '—'}

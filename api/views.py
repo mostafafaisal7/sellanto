@@ -2126,11 +2126,20 @@ def generate_image(request):
         # Modify prompt based on with_copy flag
         if with_copy and copy_text:
             gen_prompt += (
-                f'\n\nIMPORTANT: This image MUST prominently feature the following marketing copy '
-                f'text rendered artistically as part of the composition: "{copy_text}". '
-                f'The text should be professionally designed, clearly readable, and integrated '
-                f'into the visual layout like a graphic designer would create. '
-                f'Think of this as a social media marketing graphic with text baked into the design.'
+                f'\n\n=== TYPOGRAPHY OVERLAY — CRITICAL REQUIREMENT ===\n'
+                f'The image MUST include this exact text with PREMIUM graphic-design quality:\n'
+                f'"{copy_text}"\n\n'
+                f'Typography requirements (all mandatory):\n'
+                f'• ALL-CAPS bold extended sans-serif (Futura Bold / Bebas Neue / DIN Black style)\n'
+                f'• Wide letter-spacing with generous tracking\n'
+                f'• Pure white text (#FFFFFF) with a subtle 2–3px soft drop shadow (black, 30% opacity)\n'
+                f'• Dark gradient scrim BEHIND the text: black at 60–70% opacity, '
+                f'feathered/fading edges — not a hard-edged box\n'
+                f'• Text placed in the upper-center of the frame, 15–20% padding from edges\n'
+                f'• Area beneath the text must be clean/dark so the copy reads instantly\n'
+                f'• Text must be PERFECTLY legible and CORRECTLY SPELLED: "{copy_text}"\n'
+                f'Quality standard: premium food delivery promotional banner '
+                f'(Deliveroo / Uber Eats / editorial magazine cover quality)\n'
             )
         else:
             gen_prompt += (
@@ -2228,10 +2237,20 @@ def generate_image(request):
 
         # Generate image(s)
         if with_copy and copy_text:
-            # Variation 1: bold centered layout
-            prompt_v1 = gen_prompt + '\nUse a bold, centered layout for the text with visual elements surrounding it.'
-            # Variation 2: asymmetric layout
-            prompt_v2 = gen_prompt + '\nUse an asymmetric layout with text on one side and visual focus on the other.'
+            # Variation 1: gradient scrim from top, food hero below
+            prompt_v1 = gen_prompt + (
+                '\nLayout: Text centered in the upper third of the frame. '
+                'Dark gradient scrim fades from the top edge downward behind the text. '
+                'The food/product hero fills the lower 60% in sharp cinematic detail. '
+                'The transition from scrim to food is smooth and editorial.'
+            )
+            # Variation 2: frosted banner strip at top
+            prompt_v2 = gen_prompt + (
+                '\nLayout: Full-bleed food photography with a dark frosted banner spanning the top 28% of the image. '
+                'Text is centered inside the banner. '
+                'A thin 2px accent line in white (40% opacity) runs beneath the text as a typographic detail. '
+                'The food scene extends edge-to-edge below the banner.'
+            )
 
             result1 = _generate_and_process(generation, prompt_v1, 'Variation 1')
 
@@ -2735,11 +2754,29 @@ class GenerateBrandDNAView(APIView):
         override_prompt = request.data.get('override_prompt', '')
 
         try:
+            import time as _time
+            from accounts.services.prompt_resolver import (
+                resolve_prompt as _resolve_dna, save_execution as _save_dna_exec,
+            )
+            from brands.services.brand_dna_service import BrandDNAService
+
             url = brand.website_url
 
-            prompt = f"""<task>
+            # ── Stage 1: Full website crawl ──────────────────────────────────────
+            logger.info(f"BrandDNA: crawling {url}")
+            _dna_svc = BrandDNAService(openai_api_key='')
+            _crawl = _dna_svc.crawl_full_website(url, max_pages=40)
+            _pages = _crawl.get('pages', [])
+
+            use_fallback = len(_pages) < 3  # JS-heavy or blocked site
+
+            if use_fallback:
+                # ── Fallback: web_search approach (5 tool calls) ─────────────────
+                logger.info(f"BrandDNA: crawl got only {len(_pages)} pages — falling back to web_search")
+
+                _prompt = f"""<task>
 Research the brand at the URL below using the web_search tool, then extract a
-complete 15-field Brand DNA profile from what you find.
+complete 20-field Brand DNA profile from what you find.
 </task>
 
 <target>
@@ -2776,62 +2813,170 @@ Website URL: {url}
 | 13 | social_platforms | Any social media links or mentions found |
 | 14 | keywords | 10-15 high-relevance keywords for content creation |
 | 15 | competitor_positioning | How the brand positions itself vs. alternatives |
+| 16 | visual_style | Overall visual aesthetic in 1 sentence |
+| 17 | color_palette_hex | 3-6 dominant hex color codes visible on the site (best guess from description) |
+| 18 | image_subjects | Comma-separated subjects that appear in brand imagery |
+| 19 | visual_mood | Emotional atmosphere of the visual content |
+| 20 | photography_style | Technical photography approach (lighting, background, composition) |
 </output_fields>
 
 <output_format>
-Return ONLY a single JSON object with all 15 fields as keys.
+Return ONLY a single JSON object with all 20 fields as keys.
 </output_format>
 
 <constraints>
-- All 15 fields are required — leave none empty.
+- All 20 fields are required — leave none empty.
 - Be specific and detailed — generic answers reduce strategic value.
 - Base everything on actual content you find via web_search.
 - Return valid JSON only.
 </constraints>"""
 
-            # Per-user admin override of brand_dna_website prompt
-            import time as _time
-            from accounts.services.prompt_resolver import (
-                resolve_prompt as _resolve_dna, save_execution as _save_dna_exec,
-            )
-            prompt, _dna_was_override = _resolve_dna(
-                request.user, 'brand_dna_website', prompt,
-                {'url': url},
-                return_meta=True,
-            )
-            if override_prompt:
-                prompt = override_prompt
+                if override_prompt:
+                    _prompt = override_prompt
 
-            _dna_system = 'You are a senior brand strategist who extracts comprehensive brand identity profiles by researching brand websites live. You combine analytical precision with strategic intuition to build Brand DNA profiles that power content creation.\n\nYour approach:\n- You use the web_search tool to read actual brand pages — homepage, about, services, blog — instead of guessing\n- You read website copy the way a strategist reads — looking for positioning, messaging hierarchy, value propositions, and audience signals\n- You distinguish between what a brand SAYS and what it MEANS\n- You extract implicit signals (tone of voice from writing style, target audience from language choices, values from what they emphasize)\n- You are specific and detailed — "professional" is not a useful brand voice description; "authoritative but approachable, uses industry jargon sparingly, favors short sentences and active voice" IS\n\nCRITICAL: Base ALL analysis on actual content surfaced through web_search. Clearly distinguish between directly stated facts and reasonable inferences.\n\nReturn ONLY valid JSON — no markdown, no commentary.'
-            _t0 = _time.monotonic()
-            result = service.chat_completion(
-                messages=[
-                    {'role': 'system', 'content': _dna_system},
-                    {'role': 'user', 'content': prompt},
-                ],
-                temperature=0.3,
-                max_tokens=8000,
-                thinking_budget=10000,
-                tools=[{
-                    'type': 'web_search_20250305',
-                    'name': 'web_search',
-                    'max_uses': 5,
-                }],
-            )
-            _latency_ms = int((_time.monotonic() - _t0) * 1000)
+                _prompt, _dna_was_override = _resolve_dna(
+                    request.user, 'brand_dna_website', _prompt,
+                    {'url': url}, return_meta=True,
+                )
 
-            _save_dna_exec(
-                request.user, 'brand_dna_website',
-                f"SYSTEM:\n{_dna_system}\n\nUSER:\n{prompt}",
-                response_received=(result.content if result.success else ''),
-                was_override=_dna_was_override,
-                model_used=getattr(result, 'model', ''),
-                tokens_in=getattr(result, 'input_tokens', 0),
-                tokens_out=getattr(result, 'output_tokens', 0),
-                latency_ms=_latency_ms, success=result.success,
-                error_message=result.error or '',
-                brand=brand,
-            )
+                _dna_system = (
+                    'You are a senior brand strategist and visual identity analyst who extracts '
+                    'comprehensive brand profiles by researching brand websites live. You combine '
+                    'analytical precision with strategic intuition to build Brand DNA profiles that '
+                    'power AI content creation.\n\n'
+                    'Your approach:\n'
+                    '- You use the web_search tool to read actual brand pages — homepage, about, services, blog\n'
+                    '- You read website copy the way a strategist reads — looking for positioning, '
+                    'messaging hierarchy, value propositions, and audience signals\n'
+                    '- You extract implicit signals (tone of voice from writing style, target audience '
+                    'from language choices, values from what they emphasize)\n'
+                    '- For visual fields, infer from color descriptions, image alt text, and page descriptions\n'
+                    '- You are specific — "professional" is not a useful brand voice; '
+                    '"authoritative but approachable, uses industry jargon sparingly, favors short '
+                    'sentences and active voice" IS\n\n'
+                    'CRITICAL: Base ALL analysis on actual content surfaced through web_search.\n\n'
+                    'Return ONLY valid JSON — no markdown, no commentary.'
+                )
+                _t0 = _time.monotonic()
+                result = service.chat_completion(
+                    messages=[
+                        {'role': 'system', 'content': _dna_system},
+                        {'role': 'user', 'content': _prompt},
+                    ],
+                    temperature=0.3,
+                    max_tokens=8000,
+                    thinking_budget=10000,
+                    tools=[{
+                        'type': 'web_search_20250305',
+                        'name': 'web_search',
+                        'max_uses': 5,
+                    }],
+                )
+                _latency_ms = int((_time.monotonic() - _t0) * 1000)
+
+                _save_dna_exec(
+                    request.user, 'brand_dna_website',
+                    f"SYSTEM:\n{_dna_system}\n\nUSER:\n{_prompt}",
+                    response_received=(result.content if result.success else ''),
+                    was_override=_dna_was_override,
+                    model_used=getattr(result, 'model', ''),
+                    tokens_in=getattr(result, 'input_tokens', 0),
+                    tokens_out=getattr(result, 'output_tokens', 0),
+                    latency_ms=_latency_ms, success=result.success,
+                    error_message=result.error or '',
+                    brand=brand,
+                )
+
+            else:
+                # ── Deep path: full text corpus → Claude Opus ────────────────────
+                logger.info(f"BrandDNA: deep analysis — {len(_pages)} pages crawled")
+
+                # Build text corpus (cap each page at 1000 chars to fit context)
+                _corpus_parts = []
+                for _pg in _pages:
+                    _snippet = (_pg.get('content') or '')[:1000].strip()
+                    if _snippet:
+                        _corpus_parts.append(
+                            f"--- PAGE: {_pg.get('title') or _pg.get('url', '')} ---\n{_snippet}"
+                        )
+                _full_corpus = '\n\n'.join(_corpus_parts)
+
+                _analysis_prompt = f"""You have been given the full text content of every page on this brand's website.
+
+WEBSITE URL: {url}
+
+FULL TEXT CORPUS ({len(_pages)} pages crawled):
+{_full_corpus[:20000]}
+
+TASK: Read the entire corpus above and extract a 20-field Brand DNA profile as a single JSON object.
+
+<output_fields>
+1. brand_name — Official brand name as displayed
+2. tagline — Primary tagline or slogan
+3. industry — Industry vertical and sub-category
+4. description — 2-3 sentence brand description
+5. products_services — Every specific offering mentioned (detailed list)
+6. target_audience — Who the brand speaks to (demographics + psychographics + pain points)
+7. unique_selling_points — 3-5 very specific differentiators
+8. brand_voice — Detailed voice description (sentence rhythm, vocabulary level, personality)
+9. brand_values — Core values demonstrated through content
+10. color_theme — Dominant colors mentioned or implied
+11. content_themes — Recurring topics and themes across the content
+12. cta_style — How the brand asks for action (aggressive, soft, value-led, urgency-based)
+13. social_platforms — Social media platforms linked or mentioned
+14. keywords — 10-15 high-relevance keywords for content creation
+15. competitor_positioning — How the brand positions itself vs. alternatives
+16. visual_style — Infer overall aesthetic from the writing and any design descriptions (e.g. "Clean minimalist with warm earth tones")
+17. color_palette_hex — Infer 3-6 hex color codes from any color names, CSS hints, or brand identity signals found in the text (e.g. ["#1A2B3C", "#E74C3C"])
+18. image_subjects — Infer what subjects likely appear in brand imagery from context (e.g. "professional headshots, product close-ups, lifestyle scenes")
+19. visual_mood — Infer emotional atmosphere from brand voice and descriptions (e.g. "Warm, premium, approachable")
+20. photography_style — Infer technical photography approach from any descriptions or context clues
+</output_fields>
+
+<constraints>
+- All 20 fields required — leave none empty.
+- Be extremely specific — generic answers destroy strategic value.
+- Return ONLY valid JSON. No markdown fences, no commentary.
+</constraints>"""
+
+                _dna_system = (
+                    'You are a senior brand strategist. You receive the complete text from every '
+                    'page of a brand website and extract a deep 20-field Brand DNA profile that '
+                    'will power AI content and image generation for this brand.\n\n'
+                    '- Read the copy the way a strategist reads — find positioning signals, not just words.\n'
+                    '- Be specific: "authoritative but approachable, short sentences, active voice" not "professional".\n'
+                    '- For visual inference fields (16-20): use every text clue available — color names, '
+                    'design descriptions, product descriptions, mood words, alt text hints in URLs.\n\n'
+                    'Return ONLY valid JSON with exactly 20 keys. No markdown. No commentary.'
+                )
+
+                _t0 = _time.monotonic()
+                result = service.chat_completion(
+                    messages=[
+                        {'role': 'system', 'content': _dna_system},
+                        {'role': 'user', 'content': _analysis_prompt},
+                    ],
+                    model='claude-opus-4-8',
+                    temperature=0.2,
+                    max_tokens=8000,
+                    thinking_budget=16000,
+                )
+                _latency_ms = int((_time.monotonic() - _t0) * 1000)
+
+                _prompt = _analysis_prompt
+                _dna_was_override = False
+                _save_dna_exec(
+                    request.user, 'brand_dna_website',
+                    f"SYSTEM:\n{_dna_system}\n\nUSER:\n{_analysis_prompt[:500]}...",
+                    response_received=(result.content if result.success else ''),
+                    was_override=_dna_was_override,
+                    model_used=getattr(result, 'model', ''),
+                    tokens_in=getattr(result, 'input_tokens', 0),
+                    tokens_out=getattr(result, 'output_tokens', 0),
+                    latency_ms=_latency_ms, success=result.success,
+                    error_message=result.error or '',
+                    brand=brand,
+                )
 
             if not result.success:
                 return Response({'error': result.error}, status=status.HTTP_400_BAD_REQUEST)
@@ -2842,6 +2987,7 @@ Return ONLY a single JSON object with all 15 fields as keys.
             _array_fields = [
                 'products_services', 'unique_selling_points', 'brand_values',
                 'content_themes', 'keywords', 'color_theme', 'social_platforms',
+                'color_palette_hex',  # new visual field
             ]
             for _field in _array_fields:
                 val = dna_data.get(_field)
@@ -2849,6 +2995,11 @@ Return ONLY a single JSON object with all 15 fields as keys.
                     dna_data[_field] = [item.strip() for item in val.split(',') if item.strip()]
                 elif not isinstance(val, list):
                     dna_data[_field] = []
+
+            # Ensure new visual string fields default to empty string rather than None
+            for _vf in ('visual_style', 'visual_mood', 'photography_style', 'image_subjects'):
+                if not dna_data.get(_vf):
+                    dna_data[_vf] = ''
 
             # Save to brand
             dna_data['website_url'] = url
@@ -2874,7 +3025,7 @@ Return ONLY a single JSON object with all 15 fields as keys.
 
             # Save prompt to history
             from brands.models import PromptHistory
-            PromptHistory.save_prompt(brand, 'brand_dna', prompt)
+            PromptHistory.save_prompt(brand, 'brand_dna', _prompt)
 
             # Deduct Diamond Tokens (auto-extracts provider/model/tokens from LLMResponse)
             deduct_diamonds(user=request.user, feature='brand_dna', result=result)
@@ -2884,9 +3035,11 @@ Return ONLY a single JSON object with all 15 fields as keys.
                 'brand_dna': dna_data,
                 'generated_at': brand.brand_dna_generated_at.isoformat(),
                 'message': 'Brand DNA generated successfully from your website!',
-                'used_prompt': prompt,
+                'used_prompt': _prompt,
                 'provider': getattr(result, 'provider', 'claude'),
                 'model_used': getattr(result, 'model', ''),
+                'dna_method': 'deep_crawl' if not use_fallback else 'web_search_fallback',
+                'pages_crawled': len(_pages) if not use_fallback else 0,
             })
 
         except json.JSONDecodeError:
@@ -4386,10 +4539,17 @@ class VideoGenerateAPIView(APIView):
         copy_text = (request.data.get('copy_text', '') or '').strip()
         if with_copy and copy_text:
             prompt += (
-                f'\n\nIMPORTANT: This video MUST prominently feature the following marketing copy '
-                f'text rendered artistically as part of the composition: "{copy_text}". '
-                f'The text should be professionally designed, clearly readable, and integrated '
-                f'into the visual layout. Keep the text on-screen for the duration of the clip.'
+                f'\n\n=== TYPOGRAPHY OVERLAY — CRITICAL REQUIREMENT ===\n'
+                f'The video MUST display this text with PREMIUM motion-graphic quality:\n'
+                f'"{copy_text}"\n\n'
+                f'Typography requirements:\n'
+                f'• ALL-CAPS bold extended sans-serif, wide letter-spacing\n'
+                f'• Pure white text (#FFFFFF) with a subtle soft drop shadow\n'
+                f'• Dark gradient scrim behind the text zone (top of frame, 60–70% opacity, feathered)\n'
+                f'• Text fades in smoothly over the first 0.5s and remains on-screen throughout\n'
+                f'• Area behind text is clean/dark — no busy elements competing with the copy\n'
+                f'• Text must be PERFECTLY legible and CORRECTLY SPELLED: "{copy_text}"\n'
+                f'Quality: premium food brand TV commercial / Deliveroo campaign standard\n'
             )
         elif not with_copy:
             prompt += (

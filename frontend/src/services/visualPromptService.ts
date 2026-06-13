@@ -29,6 +29,39 @@ export interface BuildImagePromptPayload {
   } | null;
 }
 
+export interface BuildMagicPromptPayload {
+  brand_id: number;
+  idea: { title: string; hook?: string; angle?: string };
+  platform: string;
+  tone: string;
+  questions_answers: {
+    industry?: string;
+    goal?: string;
+    tone?: string;
+    platforms?: string[];
+    colors?: string[];
+  };
+  trending_topics?: string[];
+  color_choices?: string[];
+  product_context?: {
+    product_type?: string;
+    features?: string;
+    background_style?: string;
+  } | null;
+  has_product_image?: boolean;
+  with_copy?: boolean;
+  overlay_text?: string;
+  content_type?: 'image' | 'video';
+  fallback_caption?: string;
+  fallback_prompt?: string;
+}
+
+export interface MagicPromptResult {
+  caption: string;
+  hashtags: string[];
+  prompt: string;
+}
+
 export interface BuildVideoPromptPayload {
   brand_id: number;
   user_prompt: string;
@@ -45,6 +78,22 @@ const visualPromptService = {
       return out || null;
     } catch (err) {
       console.warn('[visualPromptService] buildImagePrompt failed:', err);
+      return null;
+    }
+  },
+
+  async buildMagicPrompt(payload: BuildMagicPromptPayload): Promise<MagicPromptResult | null> {
+    try {
+      const res = await api.post('/visual-prompt/magic/', payload);
+      const data = res.data as MagicPromptResult;
+      if (!data?.caption && !data?.prompt) return null;
+      return {
+        caption: (data.caption || '').trim(),
+        hashtags: Array.isArray(data.hashtags) ? data.hashtags : [],
+        prompt: (data.prompt || '').trim(),
+      };
+    } catch (err) {
+      console.warn('[visualPromptService] buildMagicPrompt failed:', err);
       return null;
     }
   },

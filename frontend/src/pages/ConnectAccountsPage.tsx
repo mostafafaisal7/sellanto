@@ -12,7 +12,6 @@ import {
   BoltIcon,
   CpuChipIcon,
   QuestionMarkCircleIcon,
-  PencilSquareIcon,
   CheckIcon,
   ChevronDownIcon,
 } from '@heroicons/react/24/outline';
@@ -513,9 +512,9 @@ export default function ConnectAccountsPage() {
                   });
                   setPageMetaList((prev) => prev.map((p) => p.id === page.id ? { ...p, ...draft } : p));
                   setPageMetaEdit((prev) => { const n = { ...prev }; delete n[page.id]; return n; });
-                  showToast('Page metadata updated', 'success');
+                  showToast.success('Page metadata updated');
                 } catch {
-                  showToast('Failed to update page metadata', 'error');
+                  showToast.error('Failed to update page metadata');
                 }
               };
 
@@ -556,7 +555,7 @@ export default function ConnectAccountsPage() {
                               <label className="text-[10px] font-semibold text-text-muted uppercase tracking-wider block mb-1">{label}</label>
                               <div className="flex items-center gap-2">
                                 <input
-                                  value={draft[key] ?? (page as Record<string, string>)[key] ?? ''}
+                                  value={draft[key] ?? (page as unknown as Record<string, string>)[key] ?? ''}
                                   onChange={(e) => setPageMetaEdit((prev) => ({
                                     ...prev,
                                     [page.id]: { ...(prev[page.id] || {}), [key]: e.target.value },

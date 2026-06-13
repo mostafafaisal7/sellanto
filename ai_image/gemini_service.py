@@ -117,28 +117,25 @@ Ensure professional quality with clear composition, consistent lighting, and a c
             # Parse size
             width, height = map(int, size.split('x'))
             
-            # Try Gemini Flash models (latest first, then fallback)
-            result = self._generate_with_gemini_flash(final_prompt, width, height)
+            # 1st choice: Imagen 4 Ultra — most powerful confirmed model for this key
+            imagen_result = self._generate_with_imagen(final_prompt, width, height)
+            if imagen_result.get('success'):
+                imagen_result['enhanced_prompt'] = final_prompt
+                imagen_result['processing_time'] = time.time() - start_time
+                return imagen_result
 
-            if result.get('success'):
-                result['enhanced_prompt'] = final_prompt
-                result['processing_time'] = time.time() - start_time
-                return result
+            imagen_error = imagen_result.get('error', 'Imagen failed')
 
-            # Preserve the Gemini Flash error for better diagnostics.
-            gemini_error = result.get('error', 'Gemini image generation failed')
+            # 2nd choice: Gemini Flash image models (pro → flash → lite)
+            flash_result = self._generate_with_gemini_flash(final_prompt, width, height)
+            if flash_result.get('success'):
+                flash_result['enhanced_prompt'] = final_prompt
+                flash_result['processing_time'] = time.time() - start_time
+                return flash_result
 
-            # Imagen 3 requires Vertex AI — only attempt if a Vertex AI endpoint
-            # is configured (base_url override), otherwise skip to avoid a
-            # misleading "Imagen not available" error hiding the real cause.
-            if 'aiplatform.googleapis.com' in (self.base_url or ''):
-                imagen_result = self._generate_with_imagen(final_prompt, width, height)
-                if imagen_result.get('success'):
-                    imagen_result['enhanced_prompt'] = final_prompt
-                    imagen_result['processing_time'] = time.time() - start_time
-                    return imagen_result
+            gemini_error = flash_result.get('error', 'Gemini image generation failed')
 
-            # Free fallback: Pollinations.ai (FLUX model, no extra API key needed)
+            # 3rd choice: Pollinations.ai (FLUX model, free, no API key needed)
             pollinations_result = self._generate_with_pollinations(final_prompt, width, height)
             if pollinations_result.get('success'):
                 pollinations_result['enhanced_prompt'] = final_prompt
@@ -147,10 +144,9 @@ Ensure professional quality with clear composition, consistent lighting, and a c
 
             pollinations_error = pollinations_result.get('error', 'Pollinations failed')
 
-            # All providers failed — include all errors so the caller can diagnose
             return {
                 'success': False,
-                'error': f'{gemini_error} | Pollinations: {pollinations_error}',
+                'error': f'Imagen: {imagen_error} | Gemini: {gemini_error} | Pollinations: {pollinations_error}',
                 'processing_time': time.time() - start_time
             }
                 
@@ -173,39 +169,28 @@ Ensure professional quality with clear composition, consistent lighting, and a c
 
     def _generate_with_gemini_flash(self, prompt, width, height):
         """Generate using Gemini Flash with image output (tries multiple models)."""
-        # Each tuple is (model_name, payload) — different models need slightly
-        # different payload structures for responseModalities.
+        # Gemini image models — ordered by quality (pro > flash > lite).
+        # Used as fallback after Imagen 4 Ultra.
         candidates = [
-            # gemini-2.0-flash-preview-image-generation: modalities at top level
             (
-                'gemini-2.0-flash-preview-image-generation',
+                'gemini-3-pro-image',
                 {
                     'contents': [{'parts': [{'text': prompt}]}],
                     'generationConfig': {'responseModalities': ['IMAGE'], 'temperature': 1.0},
                 },
             ),
-            # gemini-2.0-flash-exp: modalities inside generationConfig
             (
-                'gemini-2.0-flash-exp',
+                'gemini-3.1-flash-image',
                 {
                     'contents': [{'parts': [{'text': prompt}]}],
-                    'generationConfig': {
-                        'responseModalities': ['TEXT', 'IMAGE'],
-                        'temperature': 1.0,
-                        'topP': 0.95,
-                    },
+                    'generationConfig': {'responseModalities': ['IMAGE'], 'temperature': 1.0},
                 },
             ),
-            # gemini-2.0-flash (stable GA, try both modality configs)
             (
-                'gemini-2.0-flash',
+                'gemini-2.5-flash-image',
                 {
                     'contents': [{'parts': [{'text': prompt}]}],
-                    'generationConfig': {
-                        'responseModalities': ['TEXT', 'IMAGE'],
-                        'temperature': 1.0,
-                        'topP': 0.95,
-                    },
+                    'generationConfig': {'responseModalities': ['IMAGE'], 'temperature': 1.0},
                 },
             ),
         ]
@@ -323,10 +308,10 @@ Ensure professional quality with clear composition, consistent lighting, and a c
             else:
                 aspect = "9:16"
             
-            # Try Imagen 3 models
+            # Imagen 4 Ultra is the most powerful — confirmed available for this key
             models = [
-                'imagen-3.0-generate-001',
-                'imagen-3.0-fast-generate-001',
+                'imagen-4.0-ultra-generate-001',
+                'imagen-4.0-generate-001',
             ]
             
             for model in models:

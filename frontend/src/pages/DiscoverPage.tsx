@@ -27,7 +27,6 @@ import {
   ShareIcon,
   ExclamationCircleIcon,
   SparklesIcon,
-  ArrowPathIcon,
   PhotoIcon,
   VideoCameraIcon,
   ClockIcon,

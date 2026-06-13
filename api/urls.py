@@ -511,6 +511,7 @@ urlpatterns = [
     # into a single rich prompt before image/video generation.
     path('visual-prompt/image/', visual_prompt_views.BuildImageVisualPromptView.as_view(), name='api-visual-prompt-image'),
     path('visual-prompt/video/', visual_prompt_views.BuildVideoVisualPromptView.as_view(), name='api-visual-prompt-video'),
+    path('visual-prompt/magic/', visual_prompt_views.BuildMagicPromptView.as_view(), name='api-visual-prompt-magic'),
 
     # Magic Mode History
     path('magic/history/', views.MagicHistoryView.as_view(), name='api-magic-history'),

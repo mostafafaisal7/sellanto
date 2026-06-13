@@ -3,7 +3,6 @@ import { useMagicModeStore, type MagicPost, type MagicCaptionData } from '../../
 import { useAuthStore } from '../../store';
 import api from '../../services/api';
 import strategyService from '../../services/strategyService';
-import captionService from '../../services/captionService';
 import imageService from '../../services/imageService';
 import hashtagService from '../../services/hashtagService';
 import visualPromptService from '../../services/visualPromptService';
@@ -178,6 +177,20 @@ export function AIWorkingScreen({ onComplete, onStop }: AIWorkingScreenProps) {
           // Non-fatal — continue without logo
         }
       }
+      // Fallback: use an existing logo BrandAsset if none was uploaded this session
+      if (!brandLogoId) {
+        try {
+          const assetsRes = await api.get(`/brand-assets/?brand=${brandId}&asset_type=logo`);
+          const assets = Array.isArray(assetsRes.data)
+            ? assetsRes.data
+            : (assetsRes.data?.results || []);
+          if (assets.length > 0) {
+            brandLogoId = (assets[0].id as number) || null;
+          }
+        } catch {
+          // Non-fatal — continue without logo
+        }
+      }
       if (cancelledRef.current) return;
 
       // Step 1: Generate DNA (if URL provided and brand lacks sufficient DNA)
@@ -254,7 +267,8 @@ export function AIWorkingScreen({ onComplete, onStop }: AIWorkingScreenProps) {
       );
       if (cancelledRef.current) return;
 
-      // Step 4: Generate captions for each idea
+      // Steps 4+5 (combined): MagicPromptBuilder generates caption + image/video
+      // prompt in one Claude Opus call using full context (brand DNA, Q&A, trending).
       setStep(4);
       const toneMap: Record<string, CaptionTone> = {
         'professional & authoritative': 'professional',
@@ -265,7 +279,6 @@ export function AIWorkingScreen({ onComplete, onStop }: AIWorkingScreenProps) {
       };
       const toneAnswer = store.answers.tone ? String(store.answers.tone).toLowerCase() : '';
       const captionTone: CaptionTone = toneMap[toneAnswer] || 'professional';
-      // Build user-selected platforms list — enforce these instead of backend's idea.platform
       const rawPlatforms = store.answers.platforms;
       const userPlatforms: CaptionPlatform[] = Array.isArray(rawPlatforms) && rawPlatforms.length > 0
         ? rawPlatforms.map((p: string) => p.replace(' / X', '').toLowerCase() as CaptionPlatform)
@@ -273,73 +286,69 @@ export function AIWorkingScreen({ onComplete, onStop }: AIWorkingScreenProps) {
 
       const posts: MagicPost[] = [];
       const captionsAccum: MagicCaptionData[] = [];
+      // Per-post enriched prompts from MagicPromptBuilder (used in image generation below).
+      const magicPrompts: (string | null)[] = [];
       const slicedIdeas = ideas.slice(0, count);
       for (let idx = 0; idx < slicedIdeas.length; idx++) {
         const idea = slicedIdeas[idx];
         if (cancelledRef.current) return;
 
-        // Use user's selected platform(s) via round-robin; fall back to idea.platform or 'linkedin'
         const captionPlatform: CaptionPlatform = userPlatforms.length > 0
           ? userPlatforms[idx % userPlatforms.length]
           : (idea.platform?.toLowerCase() as CaptionPlatform) || 'linkedin';
         const displayPlatform = captionPlatform.charAt(0).toUpperCase() + captionPlatform.slice(1);
 
-        try {
-          const caption = await captionService.generate({
-            topic: idea.title + (idea.hook ? ': ' + idea.hook : ''),
-            tone: captionTone,
-            length: 'medium',
-            platform: captionPlatform,
-            include_hashtags: true,
-            include_emojis: true,
-            include_cta: true,
-          });
+        // Build fallback strings in case the LLM call fails.
+        const fallbackCaption = idea.hook || 'Caption could not be generated. Click "Give feedback" to retry.';
+        const fallbackPrompt = `Create a professional social media image for: "${idea.title}". ${idea.hook || ''}`;
 
-          // 🆕 The caption API returns hashtags in a SEPARATE field
-          // (`generated_hashtags`) — merge them into the caption text now so
-          // the final post.caption already carries the hashtags. Mirrors the
-          // pattern in MagicHistoryPage.tsx:337-341 and VideoResultScreen.tsx:227.
-          const generatedBody = (caption.generated_caption || '').trim();
-          const generatedHashtags = (caption.generated_hashtags || '').trim();
-          const mergedCaption = generatedHashtags && !generatedBody.includes('#')
-            ? `${generatedBody}\n\n${generatedHashtags}`
-            : generatedBody;
+        const magicResult = await visualPromptService.buildMagicPrompt({
+          brand_id: brandId,
+          idea: { title: idea.title, hook: idea.hook || '', angle: idea.angle || '' },
+          platform: captionPlatform,
+          tone: captionTone,
+          questions_answers: {
+            industry: store.answers.industry ? String(store.answers.industry) : undefined,
+            goal: store.answers.goal ? String(store.answers.goal) : undefined,
+            tone: store.answers.tone ? String(store.answers.tone) : undefined,
+            platforms: Array.isArray(store.answers.platforms)
+              ? store.answers.platforms.map(String)
+              : store.answers.platforms ? [String(store.answers.platforms)] : [],
+            colors: Array.isArray(store.answers.colors)
+              ? store.answers.colors.map(String)
+              : store.answers.colors ? [String(store.answers.colors)] : [],
+          },
+          trending_topics: trendingTopics,
+          color_choices: [],  // resolved per-post below after colorChoices is built
+          fallback_caption: fallbackCaption,
+          fallback_prompt: fallbackPrompt,
+        });
 
-          posts.push({
-            id: idea.id,
-            title: idea.title,
-            platform: displayPlatform,
-            imageOverlay: idea.title,
-            imageStyle: idea.hook || idea.angle || '',
-            caption: mergedCaption,
-            status: 'ready' as const,
-            captionId: caption.id,
-            ideaId: idea.id,
-          });
-          captionsAccum.push({
-            captionId: caption.id,
-            ideaId: idea.id,
-            text: mergedCaption,
-            platform: captionPlatform,
-          });
-        } catch {
-          // Skip failed caption generation, still include the idea
-          posts.push({
-            id: idea.id,
-            title: idea.title,
-            platform: displayPlatform,
-            imageOverlay: idea.title,
-            imageStyle: idea.hook || idea.angle || '',
-            caption: idea.hook || 'Caption could not be generated. Click "Give feedback" to retry.',
-            status: 'ready' as const,
-            ideaId: idea.id,
-          });
-        }
+        const caption = magicResult?.caption || fallbackCaption;
+        const enrichedPrompt = magicResult?.prompt || null;
+        magicPrompts.push(enrichedPrompt);
+
+        posts.push({
+          id: idea.id,
+          title: idea.title,
+          platform: displayPlatform,
+          imageOverlay: idea.title,
+          imageStyle: idea.hook || idea.angle || '',
+          caption,
+          status: 'ready' as const,
+          ideaId: idea.id,
+        });
+        captionsAccum.push({
+          captionId: undefined,
+          ideaId: idea.id,
+          text: caption,
+          platform: captionPlatform,
+        });
       }
       store.setCaptionsData(captionsAccum);
       if (cancelledRef.current) return;
 
-      // Step 5: Generate images for each post
+      // Step 5: Generate images for each post (prompts already built in step 4 via MagicPromptBuilder)
       setStep(5);
 
       // Copy/text-overlay toggle (from the `include_copy` magic-mode question).
@@ -430,33 +439,15 @@ export function AIWorkingScreen({ onComplete, onStop }: AIWorkingScreenProps) {
 
             const fallbackProductPrompt = `Professional empty ${backgroundStyle} photography studio background for a social media post about "${post.title}". The background setting should complement a ${productType} with features: ${productFeatures}. The visual style is ${post.imageStyle}.${colorHint} IMPORTANT: The center of the image must be completely empty as a product will be placed there. Do NOT generate the product itself.`;
 
-            // 🆕 Ask the backend to synthesise brand DNA + idea + caption +
-            // trending into one focused prompt. Falls back to the template
-            // literal if the LLM call fails.
-            const richProductPrompt = await visualPromptService.buildImagePrompt({
-              brand_id: brandId,
-              idea: { title: post.title, hook: post.imageStyle, platform: post.platform.toLowerCase() },
-              caption: post.caption || captionsAccum[i]?.text || '',
-              platform: post.platform.toLowerCase(),
-              color_choices: colorChoices,
-              trending_topics: trendingTopics,
-              image_style_hint: post.imageStyle,
-              with_copy: wantsCopy,
-              copy_text: wantsCopy ? post.title : undefined,
-              product_context: {
-                product_type: productType,
-                features: productFeatures,
-                background_style: backgroundStyle,
-              },
-            });
-            const productPrompt = richProductPrompt || fallbackProductPrompt;
+            // Use the prompt already generated by MagicPromptBuilder (step 4).
+            const productPrompt = magicPrompts[i] || fallbackProductPrompt;
 
             const imgReq: Parameters<typeof imageService.generate>[0] = {
               prompt: productPrompt,
               title: post.title,
               provider: 'gemini',
               style: 'modern',
-              enhance_prompt: true,
+              enhance_prompt: false,
               product_image: productImage,
               product_type: productType,
               background_style: backgroundStyle,
@@ -487,44 +478,19 @@ export function AIWorkingScreen({ onComplete, onStop }: AIWorkingScreenProps) {
         // AI-ONLY IMAGE GENERATION (Current flow)
         console.log('[AIWorkingScreen] Using AI-only image generation');
 
-        // Extract products_services from brand DNA to anchor images to the
-        // actual business when no product photos were uploaded.
-        const dnaProductsServices = (brandDNA.products_services as string | undefined) || '';
-        const dnaProductContext = dnaProductsServices
-          ? {
-              product_type: dnaProductsServices.split('\n')[0].slice(0, 80),
-              features: dnaProductsServices.slice(0, 400),
-              background_style: 'clean',
-            }
-          : undefined;
-
         for (let i = 0; i < posts.length; i++) {
           if (cancelledRef.current) return;
           try {
             const post = posts[i];
             const fallbackAiPrompt = `Create a professional social media image for: "${post.title}". ${post.imageStyle}${colorHint}`;
 
-            // Synthesise brand DNA + idea + caption + trending into a focused
-            // prompt. Pass products_services so the backend visual prompt
-            // builder can make the image represent the actual business.
-            const richAiPrompt = await visualPromptService.buildImagePrompt({
-              brand_id: brandId,
-              idea: { title: post.title, hook: post.imageStyle, platform: post.platform.toLowerCase() },
-              caption: post.caption || captionsAccum[i]?.text || '',
-              platform: post.platform.toLowerCase(),
-              color_choices: colorChoices,
-              trending_topics: trendingTopics,
-              image_style_hint: post.imageStyle,
-              with_copy: wantsCopy,
-              copy_text: wantsCopy ? post.title : undefined,
-              product_context: dnaProductContext,
-            });
+            // Use the prompt already generated by MagicPromptBuilder (step 4).
             const imgReq: Parameters<typeof imageService.generate>[0] = {
-              prompt: richAiPrompt || fallbackAiPrompt,
+              prompt: magicPrompts[i] || fallbackAiPrompt,
               title: post.title,
               provider: 'gemini',
               style: 'modern',
-              enhance_prompt: true,
+              enhance_prompt: false,
               with_copy: wantsCopy,
             };
             if (wantsCopy) imgReq.copy_text = post.title;
@@ -573,6 +539,18 @@ export function AIWorkingScreen({ onComplete, onStop }: AIWorkingScreenProps) {
           console.error('[AIWorkingScreen] Failed to save post:', post.title, err);
           // Continue with next post - don't let one failure block others
         }
+      }
+
+      // Pre-populate localStorage so ResultsScreen's auto-save guard finds these
+      // posts and skips re-creation (prevents duplicate posts 403/404).
+      if (savedPostIds.length > 0) {
+        const draftMap: Record<string, { draftId: number; imageUrl: string | null }> = {};
+        posts.forEach((p) => {
+          if (p.id && savedPostIds.includes(p.id as number)) {
+            draftMap[String(p.id)] = { draftId: p.id as number, imageUrl: p.imageUrl || null };
+          }
+        });
+        localStorage.setItem('magic_draft_post_ids', JSON.stringify(draftMap));
       }
 
       // 🗃️ Save cache mapping to enable "Previous Posts" button reuse
