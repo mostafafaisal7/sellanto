@@ -97,10 +97,10 @@ export function Navbar({ onMenuClick, onChatToggle, isChatOpen, isImpersonating 
                   background: 'linear-gradient(135deg, rgb(var(--c-blue)), rgb(var(--c-purple)))',
                 }}
               >
-                {user ? getInitials(user.username) : 'U'}
+                {user ? getInitials(`${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username) : 'U'}
               </div>
               <span className="hidden lg:block text-sm font-medium text-text-secondary">
-                {user?.username || 'User'}
+                {user ? (`${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username) : 'User'}
               </span>
             </button>
 

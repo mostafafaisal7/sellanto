@@ -474,6 +474,39 @@ class CurrentUserView(generics.RetrieveUpdateAPIView):
     def get_object(self):
         return self.request.user
 
+    def update(self, request, *args, **kwargs):
+        import re
+        user = self.get_object()
+        serializer = UpdateProfileSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        if data.get('username'):
+            new_username = data['username'].strip()
+            if len(new_username) < 3:
+                return Response({'username': ['Username must be at least 3 characters.']}, status=400)
+            if not re.match(r'^[a-zA-Z0-9_]+$', new_username):
+                return Response({'username': ['Letters, numbers, and underscores only.']}, status=400)
+            if User.objects.filter(username=new_username).exclude(pk=user.pk).exists():
+                return Response({'username': ['This username is already taken.']}, status=400)
+            user.username = new_username
+        if 'first_name' in data:
+            user.first_name = data['first_name']
+        if 'last_name' in data:
+            user.last_name = data['last_name']
+        if 'email' in data:
+            user.email = data['email']
+        user.save()
+
+        profile = user.profile
+        if 'phone' in data:
+            profile.phone = data['phone']
+        if 'company' in data:
+            profile.company = data['company']
+        profile.save()
+
+        return Response(UserSerializer(user).data)
+
 
 # ===================== PASSWORD MANAGEMENT VIEWS =====================
 
@@ -1456,6 +1489,16 @@ class UserProfileView(generics.RetrieveUpdateAPIView):
         data = serializer.validated_data
 
         # Update User fields
+        if data.get('username'):
+            import re
+            new_username = data['username'].strip()
+            if len(new_username) < 3:
+                return Response({'username': ['Username must be at least 3 characters.']}, status=400)
+            if not re.match(r'^[a-zA-Z0-9_]+$', new_username):
+                return Response({'username': ['Letters, numbers, and underscores only.']}, status=400)
+            if User.objects.filter(username=new_username).exclude(pk=user.pk).exists():
+                return Response({'username': ['This username is already taken.']}, status=400)
+            user.username = new_username
         if 'first_name' in data:
             user.first_name = data['first_name']
         if 'last_name' in data:
@@ -4725,3 +4768,346 @@ class VideoHistoryAPIView(APIView):
                 'created_at': v.created_at.isoformat(),
             })
         return Response({'results': data})
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Meta App Review — 10 endpoints for reviewer verification
+# ──────────────────────────────────────────────────────────────────────────────
+
+import requests as _requests
+
+
+def _detect_sentiment(text: str) -> str:
+    t = text.lower()
+    pos = ['love', 'great', 'amazing', 'awesome', 'excellent', 'good', 'thanks', 'thank', 'nice', 'beautiful', 'perfect', 'best']
+    neg = ['hate', 'terrible', 'awful', 'bad', 'worst', 'horrible', 'ugly', 'scam', 'fake', 'disgusting', 'poor', 'waste']
+    if any(w in t for w in pos):
+        return 'positive'
+    if any(w in t for w in neg):
+        return 'negative'
+    return 'neutral'
+
+
+class LeadsFormsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        fb = SocialAccount.objects.filter(user=request.user, platform='facebook', is_active=True).first()
+        if not fb:
+            return Response({'error': 'Facebook account not connected'}, status=400)
+        resp = _requests.get(
+            f'https://graph.facebook.com/v21.0/{fb.facebook_page_id}/leadgen_forms',
+            params={'fields': 'id,name,status,leads_count,created_time', 'access_token': fb.facebook_access_token},
+            timeout=30,
+        )
+        data = resp.json()
+        if 'error' in data:
+            return Response({'error': data['error'].get('message', 'Graph API error')}, status=400)
+        forms = [{
+            'id': f['id'],
+            'name': f.get('name', ''),
+            'page_id': fb.facebook_page_id,
+            'page_name': fb.account_name or '',
+            'status': f.get('status', 'active').lower(),
+            'leads_count': f.get('leads_count', 0),
+            'created_time': f.get('created_time', ''),
+        } for f in data.get('data', [])]
+        return Response({'forms': forms})
+
+
+class LeadsSubmissionsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, form_id):
+        fb = SocialAccount.objects.filter(user=request.user, platform='facebook', is_active=True).first()
+        if not fb:
+            return Response({'error': 'Facebook account not connected'}, status=400)
+        resp = _requests.get(
+            f'https://graph.facebook.com/v21.0/{form_id}/leads',
+            params={'fields': 'id,created_time,field_data', 'access_token': fb.facebook_access_token},
+            timeout=30,
+        )
+        data = resp.json()
+        if 'error' in data:
+            return Response({'error': data['error'].get('message', 'Graph API error')}, status=400)
+        return Response({'submissions': data.get('data', [])})
+
+
+class LeadsSyncView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        fb = SocialAccount.objects.filter(user=request.user, platform='facebook', is_active=True).first()
+        if not fb:
+            return Response({'error': 'Facebook account not connected'}, status=400)
+        resp = _requests.get(
+            f'https://graph.facebook.com/v21.0/{fb.facebook_page_id}/leadgen_forms',
+            params={'fields': 'id,leads_count', 'access_token': fb.facebook_access_token},
+            timeout=30,
+        )
+        data = resp.json()
+        if 'error' in data:
+            return Response({'error': data['error'].get('message', 'Graph API error')}, status=400)
+        total = sum(f.get('leads_count', 0) for f in data.get('data', []))
+        return Response({'synced': total})
+
+
+class InstagramContentView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        ig = SocialAccount.objects.filter(user=request.user, platform='instagram', is_active=True).first()
+        if not ig:
+            return Response({'error': 'Instagram account not connected'}, status=400)
+        after = request.query_params.get('after')
+        params = {
+            'fields': 'id,media_type,media_url,thumbnail_url,permalink,caption,timestamp,like_count,comments_count',
+            'access_token': ig.instagram_access_token,
+            'limit': 20,
+        }
+        if after:
+            params['after'] = after
+        resp = _requests.get(
+            f'https://graph.facebook.com/v21.0/{ig.instagram_business_account_id}/media',
+            params=params,
+            timeout=30,
+        )
+        data = resp.json()
+        if 'error' in data:
+            return Response({'error': data['error'].get('message', 'Graph API error')}, status=400)
+        media = [{
+            'id': m['id'],
+            'media_type': m.get('media_type', 'IMAGE'),
+            'media_url': m.get('media_url', ''),
+            'thumbnail_url': m.get('thumbnail_url'),
+            'permalink': m.get('permalink', ''),
+            'caption': m.get('caption', ''),
+            'timestamp': m.get('timestamp', ''),
+            'like_count': m.get('like_count', 0),
+            'comments_count': m.get('comments_count', 0),
+            'is_archived': False,
+        } for m in data.get('data', [])]
+        cursor = data.get('paging', {}).get('cursors', {}).get('after')
+        return Response({'media': media, 'next_cursor': cursor})
+
+
+class InstagramContentArchiveView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, media_id):
+        ig = SocialAccount.objects.filter(user=request.user, platform='instagram', is_active=True).first()
+        if not ig:
+            return Response({'error': 'Instagram account not connected'}, status=400)
+        resp = _requests.delete(
+            f'https://graph.facebook.com/v21.0/{media_id}',
+            params={'access_token': ig.instagram_access_token},
+            timeout=30,
+        )
+        data = resp.json()
+        if 'error' in data:
+            return Response({'error': data['error'].get('message', 'Could not archive media')}, status=400)
+        return Response({'archived': True})
+
+
+class FacebookPagesMetadataView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        accounts = SocialAccount.objects.filter(user=request.user, platform='facebook', is_active=True)
+        if not accounts.exists():
+            return Response({'pages': []})
+        pages = []
+        for acc in accounts:
+            resp = _requests.get(
+                f'https://graph.facebook.com/v21.0/{acc.facebook_page_id}',
+                params={'fields': 'id,name,category,about,website,phone', 'access_token': acc.facebook_access_token},
+                timeout=30,
+            )
+            data = resp.json()
+            if 'error' not in data:
+                pages.append({
+                    'id': data.get('id', acc.facebook_page_id),
+                    'name': data.get('name', acc.account_name or ''),
+                    'category': data.get('category', ''),
+                    'about': data.get('about', ''),
+                    'website': data.get('website', ''),
+                    'phone': data.get('phone', ''),
+                })
+        return Response({'pages': pages})
+
+
+class FacebookPageMetadataUpdateView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, page_id):
+        acc = SocialAccount.objects.filter(
+            user=request.user, platform='facebook', facebook_page_id=page_id, is_active=True
+        ).first()
+        if not acc:
+            return Response({'error': 'Page not found or not connected'}, status=404)
+        allowed = {'about', 'website', 'phone', 'name'}
+        payload = {k: v for k, v in request.data.items() if k in allowed}
+        if not payload:
+            return Response({'error': 'No valid fields to update'}, status=400)
+        payload['access_token'] = acc.facebook_access_token
+        resp = _requests.post(
+            f'https://graph.facebook.com/v21.0/{page_id}',
+            data=payload,
+            timeout=30,
+        )
+        data = resp.json()
+        if 'error' in data:
+            return Response({'error': data['error'].get('message', 'Graph API error')}, status=400)
+        return Response({'success': True})
+
+
+class PostCommentsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, post_id):
+        from posts.models import Post as PostModel, Comment
+        try:
+            post = PostModel.objects.get(id=post_id, user=request.user)
+        except PostModel.DoesNotExist:
+            return Response({'error': 'Post not found'}, status=404)
+
+        platforms_raw = post.platforms or '[]'
+        try:
+            platform_list = json.loads(platforms_raw) if isinstance(platforms_raw, str) else platforms_raw
+        except (json.JSONDecodeError, TypeError):
+            platform_list = []
+
+        platforms_str = str(platform_list)
+        if 'facebook' in platforms_str and post.facebook_post_id:
+            platform = 'facebook'
+            ext_post_id = post.facebook_post_id
+        elif 'instagram' in platforms_str and post.instagram_post_id:
+            platform = 'instagram'
+            ext_post_id = post.instagram_post_id
+        else:
+            return Response(list(post.comments.values(
+                'id', 'author_name', 'body', 'sentiment', 'created_at',
+                'reply_body', 'reply_type', 'replied_at'
+            )))
+
+        if platform == 'facebook':
+            acc = SocialAccount.objects.filter(user=request.user, platform='facebook', is_active=True).first()
+            if not acc:
+                return Response({'error': 'Facebook not connected'}, status=400)
+            resp = _requests.get(
+                f'https://graph.facebook.com/v21.0/{ext_post_id}/comments',
+                params={'fields': 'id,from,message,created_time', 'access_token': acc.facebook_access_token, 'limit': 50},
+                timeout=30,
+            )
+            for c in resp.json().get('data', []):
+                Comment.objects.update_or_create(
+                    external_id=c['id'],
+                    defaults={
+                        'post': post,
+                        'platform': 'facebook',
+                        'author_name': c.get('from', {}).get('name', 'User'),
+                        'body': c.get('message', ''),
+                        'sentiment': _detect_sentiment(c.get('message', '')),
+                        'created_at': c.get('created_time'),
+                    }
+                )
+        else:
+            acc = SocialAccount.objects.filter(user=request.user, platform='instagram', is_active=True).first()
+            if not acc:
+                return Response({'error': 'Instagram not connected'}, status=400)
+            resp = _requests.get(
+                f'https://graph.facebook.com/v21.0/{ext_post_id}/comments',
+                params={'fields': 'id,username,text,timestamp', 'access_token': acc.instagram_access_token, 'limit': 50},
+                timeout=30,
+            )
+            for c in resp.json().get('data', []):
+                Comment.objects.update_or_create(
+                    external_id=c['id'],
+                    defaults={
+                        'post': post,
+                        'platform': 'instagram',
+                        'author_name': c.get('username', 'User'),
+                        'body': c.get('text', ''),
+                        'sentiment': _detect_sentiment(c.get('text', '')),
+                        'created_at': c.get('timestamp'),
+                    }
+                )
+
+        comments = list(post.comments.order_by('-created_at').values(
+            'id', 'author_name', 'body', 'sentiment', 'created_at',
+            'reply_body', 'reply_type', 'replied_at'
+        ))
+        return Response(comments)
+
+
+class CommentReplyView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, comment_id):
+        from posts.models import Comment
+        try:
+            comment = Comment.objects.get(id=comment_id, post__user=request.user)
+        except Comment.DoesNotExist:
+            return Response({'error': 'Comment not found'}, status=404)
+
+        reply_body = request.data.get('reply_body', '').strip()
+        if not reply_body:
+            return Response({'error': 'reply_body required'}, status=400)
+
+        if comment.platform == 'facebook':
+            acc = SocialAccount.objects.filter(user=request.user, platform='facebook', is_active=True).first()
+            if not acc:
+                return Response({'error': 'Facebook not connected'}, status=400)
+            resp = _requests.post(
+                f'https://graph.facebook.com/v21.0/{comment.external_id}/comments',
+                data={'message': reply_body, 'access_token': acc.facebook_access_token},
+                timeout=30,
+            )
+        else:
+            acc = SocialAccount.objects.filter(user=request.user, platform='instagram', is_active=True).first()
+            if not acc:
+                return Response({'error': 'Instagram not connected'}, status=400)
+            resp = _requests.post(
+                f'https://graph.facebook.com/v21.0/{comment.external_id}/replies',
+                data={'message': reply_body, 'access_token': acc.instagram_access_token},
+                timeout=30,
+            )
+
+        data = resp.json()
+        if 'error' in data:
+            return Response({'error': data['error'].get('message', 'Reply failed')}, status=400)
+
+        comment.reply_body = reply_body
+        comment.reply_type = 'human'
+        comment.replied_at = timezone.now()
+        comment.save(update_fields=['reply_body', 'reply_type', 'replied_at'])
+        return Response({'success': True, 'reply_body': reply_body, 'reply_type': 'human'})
+
+
+class CommentAIReplyView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, comment_id):
+        from posts.models import Comment
+        try:
+            comment = Comment.objects.get(id=comment_id, post__user=request.user)
+        except Comment.DoesNotExist:
+            return Response({'error': 'Comment not found'}, status=404)
+
+        override_prompt = request.data.get('override_prompt')
+        system = override_prompt or (
+            'You are a helpful social media manager. Write a short, friendly, professional reply '
+            'to the following comment. Be concise (1-2 sentences max). Do not use hashtags.'
+        )
+        service = get_llm_service(request.user)
+        result = service.chat_completion(
+            messages=[
+                {'role': 'system', 'content': system},
+                {'role': 'user', 'content': f'Comment: "{comment.body}"\n\nWrite a reply:'},
+            ],
+            max_tokens=150,
+        )
+        if not result.success:
+            return Response({'error': result.error or 'AI generation failed'}, status=500)
+
+        return Response({'reply_body': result.content.strip(), 'used_prompt': system})

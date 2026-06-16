@@ -16,6 +16,8 @@ export interface AdAccount {
   is_active: boolean;
   last_synced_at: string | null;
   created_at: string;
+  business_id?: string;
+  business_name?: string;
 }
 
 export interface AdCampaign {

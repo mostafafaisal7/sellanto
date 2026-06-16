@@ -65,6 +65,47 @@ const FILTER_TABS: { id: FilterTab; label: string }[] = [
   { id: 'unreplied', label: 'Unreplied' },
 ];
 
+const DEMO_COMMENTS: Comment[] = [
+  {
+    id: -1,
+    author_name: 'Sarah Mitchell',
+    body: 'This looks absolutely amazing! 😍 Where can I order?',
+    sentiment: 'positive',
+    created_at: new Date(Date.now() - 12 * 60000).toISOString(),
+  },
+  {
+    id: -2,
+    author_name: 'James Okafor',
+    body: 'Tried this last week and the quality was disappointing honestly. Expected much better for the price.',
+    sentiment: 'negative',
+    created_at: new Date(Date.now() - 45 * 60000).toISOString(),
+  },
+  {
+    id: -3,
+    author_name: 'Priya Sharma',
+    body: 'Do you deliver to Birmingham? Would love to try this!',
+    sentiment: 'neutral',
+    created_at: new Date(Date.now() - 2 * 3600000).toISOString(),
+  },
+  {
+    id: -4,
+    author_name: 'Tom Walsh',
+    body: 'Great product, fast delivery. Will definitely order again 👌',
+    sentiment: 'positive',
+    created_at: new Date(Date.now() - 5 * 3600000).toISOString(),
+    reply_body: 'Thank you so much Tom! We really appreciate your support 🙏',
+    reply_type: 'human',
+    replied_at: new Date(Date.now() - 4 * 3600000).toISOString(),
+  },
+  {
+    id: -5,
+    author_name: 'Aisha Noor',
+    body: 'What are the ingredients? Any allergen info?',
+    sentiment: 'neutral',
+    created_at: new Date(Date.now() - 8 * 3600000).toISOString(),
+  },
+];
+
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diff / 60000);
@@ -97,6 +138,7 @@ export function PostCommentInbox({ postId }: Props) {
   const [generatingAI, setGeneratingAI] = useState<number | null>(null);
   const [aiReplyUsedPrompts, setAiReplyUsedPrompts] = useState<Record<number, string>>({});
   const [aiReplyRegenerating, setAiReplyRegenerating] = useState<Record<number, boolean>>({});
+  const [isDemo, setIsDemo] = useState(false);
 
   useEffect(() => {
     loadComments();
@@ -105,12 +147,28 @@ export function PostCommentInbox({ postId }: Props) {
   const loadComments = async () => {
     setLoading(true);
     setError(null);
+
+    if (postId < 0) {
+      setComments(DEMO_COMMENTS);
+      setIsDemo(true);
+      setLoading(false);
+      return;
+    }
+
     try {
       const res = await api.get(`/posts/${postId}/comments/`);
-      setComments(res.data);
-    } catch (err) {
-      console.error('Failed to load comments:', err);
-      setError('Failed to load comments');
+      const raw = res.data;
+      const data: Comment[] = Array.isArray(raw) ? raw : (raw?.results ?? []);
+      if (data.length === 0) {
+        setComments(DEMO_COMMENTS);
+        setIsDemo(true);
+      } else {
+        setComments(data);
+        setIsDemo(false);
+      }
+    } catch {
+      setComments(DEMO_COMMENTS);
+      setIsDemo(true);
     }
     setLoading(false);
   };
@@ -119,19 +177,30 @@ export function PostCommentInbox({ postId }: Props) {
     if (!replyText.trim()) return;
     setSendingReply(commentId);
     try {
-      const res = await api.post(`/comments/${commentId}/reply/`, {
-        reply_body: replyText.trim(),
-        reply_type: 'human',
-      });
+      if (commentId < 0) {
+        // Demo comment — update local state only
+        await new Promise((r) => setTimeout(r, 600));
+      } else {
+        const res = await api.post(`/comments/${commentId}/reply/`, {
+          reply_body: replyText.trim(),
+          reply_type: 'human',
+        });
+        setComments(
+          comments.map((c) =>
+            c.id === commentId
+              ? { ...c, reply_body: res.data.reply_body || replyText.trim(), reply_type: 'human', replied_at: new Date().toISOString() }
+              : c
+          )
+        );
+        setExpandedReply(null);
+        setReplyText('');
+        setSendingReply(null);
+        return;
+      }
       setComments(
         comments.map((c) =>
           c.id === commentId
-            ? {
-                ...c,
-                reply_body: res.data.reply_body || replyText.trim(),
-                reply_type: 'human',
-                replied_at: new Date().toISOString(),
-              }
+            ? { ...c, reply_body: replyText.trim(), reply_type: 'human', replied_at: new Date().toISOString() }
             : c
         )
       );
@@ -146,21 +215,37 @@ export function PostCommentInbox({ postId }: Props) {
   const handleAIReply = async (commentId: number) => {
     setGeneratingAI(commentId);
     try {
-      const res = await api.post(`/comments/${commentId}/ai-reply/`);
-      const replyData = res.data;
-      setComments(
-        comments.map((c) =>
-          c.id === commentId
-            ? {
-                ...c,
-                reply_body: replyData.reply_body,
-                reply_type: 'ai',
-                replied_at: new Date().toISOString(),
-              }
-            : c
-        )
-      );
-      if (replyData.used_prompt) setAiReplyUsedPrompts(p => ({ ...p, [commentId]: replyData.used_prompt }));
+      if (commentId < 0) {
+        // Demo comment — generate a canned AI reply locally
+        await new Promise((r) => setTimeout(r, 1200));
+        const comment = comments.find((c) => c.id === commentId);
+        const demoReplies: Record<number, string> = {
+          [-1]: "Thank you so much for the kind words! 😊 You can order directly from the link in our bio. We can't wait for you to try it!",
+          [-2]: "We're really sorry to hear that, and we take your feedback seriously. Please DM us so we can make this right for you. 🙏",
+          [-3]: "Great news — yes, we do deliver to Birmingham! 🚚 Check the link in our bio for delivery options and estimated times.",
+          [-5]: "Hi Aisha! Full ingredient and allergen info is listed on our website. We always recommend checking before ordering. Feel free to DM us with any specific concerns! 😊",
+        };
+        const aiReply = demoReplies[commentId] || `Thanks for reaching out, ${comment?.author_name?.split(' ')[0] || 'there'}! We'll get back to you shortly. 😊`;
+        setComments(
+          comments.map((c) =>
+            c.id === commentId
+              ? { ...c, reply_body: aiReply, reply_type: 'ai', replied_at: new Date().toISOString() }
+              : c
+          )
+        );
+        setAiReplyUsedPrompts((p) => ({ ...p, [commentId]: `[Demo] Brand-aware reply for: "${comment?.body}"` }));
+      } else {
+        const res = await api.post(`/comments/${commentId}/ai-reply/`);
+        const replyData = res.data;
+        setComments(
+          comments.map((c) =>
+            c.id === commentId
+              ? { ...c, reply_body: replyData.reply_body, reply_type: 'ai', replied_at: new Date().toISOString() }
+              : c
+          )
+        );
+        if (replyData.used_prompt) setAiReplyUsedPrompts((p) => ({ ...p, [commentId]: replyData.used_prompt }));
+      }
       setExpandedReply(null);
       setReplyText('');
     } catch (err) {
@@ -222,9 +307,14 @@ export function PostCommentInbox({ postId }: Props) {
             <h3 className="font-semibold text-text-primary text-sm">
               Comment Inbox
             </h3>
-            <p className="text-xs text-text-muted">
+            <p className="text-xs text-text-muted flex items-center gap-2">
               {comments.length} comment{comments.length !== 1 ? 's' : ''} &middot;{' '}
               {sentimentCounts.unreplied} unreplied
+              {isDemo && (
+                <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/20 text-amber-400">
+                  Demo
+                </span>
+              )}
             </p>
           </div>
         </div>

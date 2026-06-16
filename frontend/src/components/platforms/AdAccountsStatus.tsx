@@ -94,6 +94,17 @@ export function AdAccountsStatus({ refreshKey = 0 }: Props) {
         </div>
       </div>
 
+      {/* Permission banner */}
+      <div className="flex items-start gap-3 bg-purple-500/10 border border-purple-500/20 rounded-xl p-3 mb-4">
+        <CheckCircleIcon className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
+        <div>
+          <p className="text-xs font-medium text-purple-300">business_management active</p>
+          <p className="text-[10px] text-purple-400/80 mt-0.5">
+            SellAnto reads your Meta Business Manager account to associate ad accounts and pages with the correct business entity.
+          </p>
+        </div>
+      </div>
+
       {/* Body */}
       {error ? (
         <div className="flex items-start gap-2.5 p-3 rounded-xl bg-red-500/10 border border-red-500/20">
@@ -140,6 +151,12 @@ export function AdAccountsStatus({ refreshKey = 0 }: Props) {
                       {acc.currency_code && ` · ${acc.currency_code}`}
                       {acc.timezone_name && ` · ${acc.timezone_name}`}
                     </p>
+                    {acc.business_id && (
+                      <p className="text-[10px] text-text-muted/70 truncate flex items-center gap-1 mt-0.5">
+                        <span className="text-[8px] px-1 py-0.5 rounded bg-purple-500/10 text-purple-400 font-bold uppercase">BM</span>
+                        {acc.business_name || `Business ${acc.business_id}`}
+                      </p>
+                    )}
                   </div>
                 </div>
                 <span

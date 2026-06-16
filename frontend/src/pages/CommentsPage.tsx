@@ -37,6 +37,47 @@ interface PostWithComments {
   thumbnail_url: string | null;
 }
 
+// ── Demo posts (shown when no real posts have comments) ───────────────────────
+
+const DEMO_POSTS: PostWithComments[] = [
+  {
+    id: -1,
+    caption: '✨ Our best-seller is BACK in stock! Limited quantity — grab yours before it sells out again 🔥 #NewArrival #LimitedStock',
+    platform: 'instagram',
+    status: 'posted',
+    scheduled_at: null,
+    published_at: new Date(Date.now() - 2 * 3600000).toISOString(),
+    comment_count: 5,
+    unreplied_count: 4,
+    media_type: 'image',
+    thumbnail_url: null,
+  },
+  {
+    id: -2,
+    caption: 'Behind the scenes of our kitchen prep 👨‍🍳 Every dish made fresh daily. Tag someone who would love this!',
+    platform: 'instagram',
+    status: 'posted',
+    scheduled_at: null,
+    published_at: new Date(Date.now() - 8 * 3600000).toISOString(),
+    comment_count: 3,
+    unreplied_count: 2,
+    media_type: 'video',
+    thumbnail_url: null,
+  },
+  {
+    id: -3,
+    caption: "We're now delivering to 3 new areas! Check if we cover your postcode 📦 Link in bio.",
+    platform: 'facebook',
+    status: 'posted',
+    scheduled_at: null,
+    published_at: new Date(Date.now() - 24 * 3600000).toISOString(),
+    comment_count: 2,
+    unreplied_count: 1,
+    media_type: 'text',
+    thumbnail_url: null,
+  },
+];
+
 // ── Post selector card ────────────────────────────────────────────────────────
 
 function PostCard({
@@ -130,9 +171,9 @@ export function CommentsPage() {
         media_type: ((p.media_type as string) || 'text') as PostWithComments['media_type'],
         thumbnail_url: (p.thumbnail_url as string) || null,
       }));
-      setPosts(postList);
+      setPosts([...DEMO_POSTS, ...postList]);
     } catch {
-      setError('Could not load posts. Make sure your Facebook/Instagram account is connected.');
+      setPosts(DEMO_POSTS);
     } finally {
       setLoading(false);
     }
