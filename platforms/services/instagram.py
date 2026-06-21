@@ -435,6 +435,29 @@ class InstagramService:
             return False, str(e)
 
     @staticmethod
+    def delete_post(access_token, media_id):
+        """Delete an Instagram media object from Instagram.
+
+        Args:
+            access_token: Instagram/Facebook access token
+            media_id: The Instagram media ID stored after publishing
+
+        Returns:
+            tuple: (success: bool, message: str)
+        """
+        try:
+            url = f"https://graph.facebook.com/v18.0/{media_id}"
+            params = {'access_token': access_token}
+            response = requests.delete(url, params=params, timeout=30)
+            data = response.json()
+
+            if 'error' in data:
+                return False, data['error'].get('message', 'Delete failed')
+            return True, 'Deleted from Instagram'
+        except Exception as e:
+            return False, str(e)
+
+    @staticmethod
     def validate_credentials(access_token, business_account_id):
         """Validate Instagram credentials"""
         try:

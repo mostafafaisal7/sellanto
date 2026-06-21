@@ -1100,6 +1100,33 @@ class PostViewSet(viewsets.ModelViewSet):
         post.save()
         return Response(PostSerializer(post, context={'request': request}).data)
 
+    def destroy(self, request, *args, **kwargs):
+        """Delete a post from Instagram (if published) and then from the local DB."""
+        post = self.get_object()
+
+        if post.instagram_post_id:
+            ig = SocialAccount.objects.filter(
+                user=request.user, platform='instagram', is_active=True
+            ).first()
+            if ig and ig.instagram_access_token:
+                from platforms.services.instagram import InstagramService
+                success, message = InstagramService.delete_post(
+                    ig.instagram_access_token, post.instagram_post_id
+                )
+                if not success:
+                    # If the media is already gone on Instagram, proceed with local delete.
+                    already_gone = any(
+                        phrase in (message or '').lower()
+                        for phrase in ('does not exist', 'cannot be loaded', 'unsupported get request', 'not found')
+                    )
+                    if not already_gone:
+                        return Response(
+                            {'error': f'Could not delete from Instagram: {message}'},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+
+        return super().destroy(request, *args, **kwargs)
+
     @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):
         """Cancel a scheduled post"""

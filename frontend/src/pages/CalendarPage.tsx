@@ -9,12 +9,14 @@ import {
   CheckCircleIcon,
   XCircleIcon,
   PencilIcon,
+  TrashIcon,
 } from '@heroicons/react/24/outline';
 import { format } from 'date-fns';
 import calendarService from '../services/calendarService';
 import postService from '../services/postService';
+import { toast } from '../store/toastStore';
 import { BestTimeSuggestionOverlay } from '../components/BestTimeSuggestionOverlay';
-import { Modal, StatusBadge, PlatformBadge, Button } from '../components/ui';
+import { Modal, ConfirmModal, StatusBadge, PlatformBadge, Button } from '../components/ui';
 import type { Post } from '../types';
 
 interface CalendarEvent {
@@ -47,6 +49,8 @@ export function CalendarPage() {
   const [rescheduling, setRescheduling] = useState(false);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [postLoading, setPostLoading] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     loadEvents();
@@ -63,6 +67,23 @@ export function CalendarPage() {
       console.error('Failed to load calendar events:', err);
     }
     setLoading(false);
+  };
+
+  const handleDeletePost = async () => {
+    if (!selectedPost) return;
+    setDeleting(true);
+    try {
+      await postService.delete(selectedPost.id);
+      setEvents((prev) => prev.filter((e) => e.id !== selectedPost.id));
+      toast.success('Post deleted.');
+      setConfirmDelete(false);
+      setSelectedPost(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to delete post';
+      toast.error(message);
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const getViewStart = () => {
@@ -418,6 +439,13 @@ export function CalendarPage() {
                   </Button>
                 </Link>
               )}
+              <Button
+                variant="danger"
+                onClick={() => setConfirmDelete(true)}
+                leftIcon={<TrashIcon className="w-5 h-5" />}
+              >
+                Delete
+              </Button>
               <Button variant="secondary" onClick={() => setSelectedPost(null)}>
                 Close
               </Button>
@@ -425,6 +453,17 @@ export function CalendarPage() {
           </div>
         ) : null}
       </Modal>
+
+      <ConfirmModal
+        isOpen={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        onConfirm={handleDeletePost}
+        title="Delete post"
+        message="This will permanently delete the post from Instagram and from Sellanto. This action cannot be undone."
+        confirmText="Delete"
+        variant="danger"
+        isLoading={deleting}
+      />
     </div>
   );
 }

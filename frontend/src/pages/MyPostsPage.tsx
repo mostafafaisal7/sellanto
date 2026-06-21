@@ -464,7 +464,7 @@ export function MyPostsPage() {
         onClose={() => setDeleteModalPost(null)}
         onConfirm={handleDelete}
         title="Delete Post"
-        message="Are you sure you want to delete this post? This action cannot be undone and all associated data will be permanently removed."
+        message="Are you sure you want to delete this post? If it was published, it will also be removed from Instagram. This action cannot be undone and all associated data will be permanently removed."
         confirmText="Delete Post"
         variant="danger"
         isLoading={isDeleting}

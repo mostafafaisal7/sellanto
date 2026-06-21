@@ -17,10 +17,13 @@ import {
   PhotoIcon,
   VideoCameraIcon,
   DocumentTextIcon,
+  TrashIcon,
 } from '@heroicons/react/24/outline';
-import { Button, Card, Spinner, PlatformIcon } from '../components/ui';
+import { Button, Card, Spinner, PlatformIcon, ConfirmModal } from '../components/ui';
 import { PostCommentInbox } from '../components/PostCommentInbox';
 import api from '../services/api';
+import postService from '../services/postService';
+import { toast } from '../store/toastStore';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -152,6 +155,8 @@ export function CommentsPage() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [platformFilter, setPlatformFilter] = useState<string>('all');
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchPosts = useCallback(async () => {
     setLoading(true);
@@ -180,6 +185,27 @@ export function CommentsPage() {
   }, []);
 
   useEffect(() => { fetchPosts(); }, [fetchPosts]);
+
+  const handleDeletePost = async () => {
+    if (confirmDeleteId === null) return;
+    const id = confirmDeleteId;
+    setDeleting(true);
+    try {
+      // Demo posts (negative ids) are not persisted — remove locally only.
+      if (id > 0) {
+        await postService.delete(id);
+      }
+      setPosts((prev) => prev.filter((p) => p.id !== id));
+      if (selectedPostId === id) setSelectedPostId(null);
+      toast.success('Post deleted.');
+      setConfirmDeleteId(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to delete post';
+      toast.error(message);
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const platforms = ['all', ...Array.from(new Set(posts.map((p) => p.platform)))];
 
@@ -320,7 +346,16 @@ export function CommentsPage() {
                 {selectedPost && (
                   <div className="flex items-center gap-2 px-1">
                     <PlatformIcon platform={selectedPost.platform as never} className="w-4 h-4" />
-                    <p className="text-sm text-text-secondary line-clamp-1">{selectedPost.caption}</p>
+                    <p className="flex-1 text-sm text-text-secondary line-clamp-1">{selectedPost.caption}</p>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-danger hover:bg-danger/10 flex-shrink-0"
+                      leftIcon={<TrashIcon className="w-4 h-4" />}
+                      onClick={() => setConfirmDeleteId(selectedPost.id)}
+                    >
+                      Delete
+                    </Button>
                   </div>
                 )}
                 <PostCommentInbox postId={selectedPostId} />
@@ -337,6 +372,17 @@ export function CommentsPage() {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={confirmDeleteId !== null}
+        onClose={() => setConfirmDeleteId(null)}
+        onConfirm={handleDeletePost}
+        title="Delete post"
+        message="This will permanently delete the post from Instagram and from Sellanto, including all of its comments. This action cannot be undone."
+        confirmText="Delete"
+        variant="danger"
+        isLoading={deleting}
+      />
     </div>
   );
 }
