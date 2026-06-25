@@ -477,6 +477,7 @@ class SystemNotification(models.Model):
         ('token_expiring', 'Platform Token Expiring'),
         ('daily_limit_warning', 'Daily Limit Approaching (80%)'),
         ('reply_sla_breach', 'Reply SLA Breach'),
+        ('ad_rule_triggered', 'Ad Automation Rule Triggered'),
     ]
 
     CHANNEL_CHOICES = [

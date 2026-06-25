@@ -2190,6 +2190,164 @@ class YouTubeSettingsView(APIView):
         return Response(response)
 
 
+class GoogleBusinessSettingsView(APIView):
+    """GET/POST /api/v1/admin/google-business-settings/ — GBP OAuth config.
+
+    Uses a SEPARATE OAuth client from YouTube so Business Profile scopes stay
+    isolated from YouTube scopes.
+    """
+    permission_classes = [IsAdminUser]
+
+    KEYS = {
+        'google_business_client_id':     'Google Client ID for the Business Profile OAuth client',
+        'google_business_client_secret': 'Google Client Secret (keep this private)',
+        'google_business_redirect_uri':  'OAuth Redirect URI (must match Google Cloud Console exactly)',
+        'frontend_url':                  'Frontend URL (your React app URL)',
+    }
+
+    def get(self, request):
+        data = {}
+        for key, description in self.KEYS.items():
+            raw = SiteConfiguration.get(key, '')
+            if key == 'google_business_client_secret' and raw:
+                display = '•' * (len(raw) - 6) + raw[-6:] if len(raw) > 6 else '•' * 6
+            else:
+                display = raw
+            data[key] = {'value': display, 'is_set': bool(raw), 'description': description}
+
+        client_id     = SiteConfiguration.get('google_business_client_id', '')
+        client_secret = SiteConfiguration.get('google_business_client_secret', '')
+        redirect_uri  = SiteConfiguration.get('google_business_redirect_uri', '')
+
+        is_configured = bool(client_id and client_secret and redirect_uri)
+        missing = []
+        if not client_id:      missing.append('Client ID')
+        if not client_secret:  missing.append('Client Secret')
+        if not redirect_uri:   missing.append('Redirect URI')
+
+        return Response({
+            'settings': data, 'is_configured': is_configured, 'missing': missing,
+            'help': {
+                'where_to_find': 'https://console.cloud.google.com → APIs & Services → Credentials (create a separate OAuth client)',
+                'redirect_uri_note': 'Must match Google Cloud Console → Authorized redirect URIs exactly. '
+                                     'Default: http://localhost:8000/api/v1/platforms/google-business/callback/',
+                'scope_note': 'Requires the https://www.googleapis.com/auth/business.manage scope and '
+                              'Business Profile API access (request via Google Cloud Console).',
+            },
+        })
+
+    def post(self, request):
+        updated = []
+        errors  = []
+        for key in self.KEYS:
+            if key not in request.data:
+                continue
+            value = str(request.data[key]).strip()
+            if key in ('google_business_redirect_uri', 'frontend_url') and value:
+                if not (value.startswith('http://') or value.startswith('https://')):
+                    errors.append(f'{key} must start with http:// or https://')
+                    continue
+            try:
+                SiteConfiguration.set(key, value, self.KEYS[key])
+                updated.append(key)
+            except Exception as e:
+                errors.append(f'Could not save {key}: {str(e)}')
+
+        if errors and not updated:
+            return Response({'error': 'Failed to save.', 'details': errors}, status=status.HTTP_400_BAD_REQUEST)
+
+        client_id     = SiteConfiguration.get('google_business_client_id', '')
+        client_secret = SiteConfiguration.get('google_business_client_secret', '')
+        redirect_uri  = SiteConfiguration.get('google_business_redirect_uri', '')
+        is_configured = bool(client_id and client_secret and redirect_uri)
+
+        response = {
+            'success': True, 'updated_keys': updated, 'is_configured': is_configured,
+            'message': 'Google Business OAuth is now configured.' if is_configured else 'Settings saved. Some fields still missing.',
+        }
+        if errors:
+            response['warnings'] = errors
+        return Response(response)
+
+
+class GoogleAdsSettingsView(APIView):
+    """GET/POST /api/v1/admin/google-ads-settings/ — Google Ads API config.
+
+    Google Ads needs more than an OAuth client: a Developer Token (applied for
+    inside a Google Ads Manager/MCC account) and, when operating client accounts
+    under an MCC, a login_customer_id. Uses a SEPARATE OAuth client from
+    YouTube/GBP so the `adwords` scope stays isolated.
+    """
+    permission_classes = [IsAdminUser]
+
+    KEYS = {
+        'google_ads_developer_token':    'Google Ads Developer Token (from your Manager account → API Center)',
+        'google_ads_client_id':          'Google OAuth Client ID for the Ads OAuth client',
+        'google_ads_client_secret':      'Google OAuth Client Secret (keep this private)',
+        'google_ads_redirect_uri':       'OAuth Redirect URI (must match Google Cloud Console exactly)',
+        'google_ads_login_customer_id':  'Manager (MCC) customer ID — digits only, no hyphens (optional)',
+        'frontend_url':                  'Frontend URL (your React app URL)',
+    }
+    SECRET_KEYS = ('google_ads_client_secret', 'google_ads_developer_token')
+    REQUIRED = ('google_ads_developer_token', 'google_ads_client_id',
+                'google_ads_client_secret', 'google_ads_redirect_uri')
+
+    def get(self, request):
+        data = {}
+        for key, description in self.KEYS.items():
+            raw = SiteConfiguration.get(key, '')
+            if key in self.SECRET_KEYS and raw:
+                display = '•' * (len(raw) - 4) + raw[-4:] if len(raw) > 4 else '•' * 6
+            else:
+                display = raw
+            data[key] = {'value': display, 'is_set': bool(raw), 'description': description}
+
+        missing = [k for k in self.REQUIRED if not SiteConfiguration.get(k, '')]
+        return Response({
+            'settings': data,
+            'is_configured': not missing,
+            'missing': missing,
+            'help': {
+                'developer_token': 'Apply inside a Google Ads Manager account → Tools → API Center. '
+                                   'Starts as a Test token (test accounts only) until Google approves Basic access.',
+                'redirect_uri_note': 'Must match Google Cloud Console exactly. '
+                                     'Default: http://localhost:8000/api/v1/ads/google/callback/',
+                'scope_note': 'Requires the https://www.googleapis.com/auth/adwords scope.',
+                'mcc_note': 'login_customer_id is only needed when your client accounts sit under a Manager (MCC).',
+            },
+        })
+
+    def post(self, request):
+        updated, errors = [], []
+        for key in self.KEYS:
+            if key not in request.data:
+                continue
+            value = str(request.data[key]).strip()
+            if key in ('google_ads_redirect_uri', 'frontend_url') and value:
+                if not (value.startswith('http://') or value.startswith('https://')):
+                    errors.append(f'{key} must start with http:// or https://')
+                    continue
+            if key == 'google_ads_login_customer_id' and value:
+                value = ''.join(ch for ch in value if ch.isdigit())
+            try:
+                SiteConfiguration.set(key, value, self.KEYS[key])
+                updated.append(key)
+            except Exception as e:
+                errors.append(f'Could not save {key}: {str(e)}')
+
+        if errors and not updated:
+            return Response({'error': 'Failed to save.', 'details': errors}, status=status.HTTP_400_BAD_REQUEST)
+
+        missing = [k for k in self.REQUIRED if not SiteConfiguration.get(k, '')]
+        response = {
+            'success': True, 'updated_keys': updated, 'is_configured': not missing,
+            'message': 'Google Ads API is now configured.' if not missing else 'Settings saved. Some required fields still missing.',
+        }
+        if errors:
+            response['warnings'] = errors
+        return Response(response)
+
+
 class AdminYouTubeAccountsView(APIView):
     """GET /api/v1/admin/youtube-accounts/ — all users' YouTube accounts."""
     permission_classes = [IsAdminUser]

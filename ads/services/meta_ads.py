@@ -289,6 +289,132 @@ def boost_post(
     }
 
 
+# ───────────────────────────── From-scratch campaign ────────────────────────
+
+
+# Sellanto objective → Meta ODAX objective + a sensible ad-set optimization goal.
+_META_OBJECTIVE_MAP = {
+    'awareness':  ('OUTCOME_AWARENESS', 'REACH'),
+    'traffic':    ('OUTCOME_TRAFFIC',   'LINK_CLICKS'),
+    'engagement': ('OUTCOME_ENGAGEMENT', 'POST_ENGAGEMENT'),
+    'leads':      ('OUTCOME_LEADS',     'LEAD_GENERATION'),
+    'sales':      ('OUTCOME_SALES',     'OFFSITE_CONVERSIONS'),
+}
+
+
+def create_link_campaign(
+    ad_account: AdAccount,
+    page_id: str,
+    objective: str,
+    name: str,
+    daily_budget_cents: int,
+    duration_days: int,
+    targeting: dict,
+    link_url: str,
+    message: str = '',
+    headline: str = '',
+    description: str = '',
+    image_url: str = '',
+    page_access_token: str = '',
+    status_active: bool = False,
+) -> dict:
+    """Create a from-scratch Meta campaign (link/website ad) end-to-end.
+
+    Unlike boost_post (which promotes an existing organic post), this builds a
+    brand-new link ad: Campaign → Ad Set → Ad Creative (link_data) → Ad.
+
+    objective: one of awareness|traffic|engagement|leads|sales.
+    `link_url` is required (the destination). `image_url` is optional; without it
+    Meta uses a link preview image. Created PAUSED unless status_active=True.
+
+    Returns {campaign_id, adset_id, creative_id, ad_id}.
+    """
+    import json as _json
+
+    token = decrypt_token(ad_account.encrypted_token)
+    if not token:
+        raise MetaAdsError('No token on AdAccount -- re-authenticate.')
+    if objective not in _META_OBJECTIVE_MAP:
+        raise MetaAdsError(f'Unsupported objective {objective!r}.')
+    if not link_url:
+        raise MetaAdsError('A destination link_url is required.')
+
+    act_id = f'act_{ad_account.external_id}'
+    meta_objective, opt_goal = _META_OBJECTIVE_MAP[objective]
+    name = name or f'Sellanto {objective.title()} Campaign'
+    eff_status = 'ACTIVE' if status_active else 'PAUSED'
+
+    # 1. Campaign
+    try:
+        camp = _post(
+            f'{act_id}/campaigns', token,
+            name=name, objective=meta_objective, status='PAUSED',
+            special_ad_categories='[]', buying_type='AUCTION',
+            is_adset_budget_sharing_enabled='false',
+        )
+        campaign_id = camp['id']
+    except MetaAdsError as e:
+        raise MetaAdsError(f'Step 1 (campaign): {e}', code=e.code, subcode=e.subcode, raw=e.raw)
+
+    # 2. Ad Set
+    start_time_ts = int(time.time()) + 300
+    end_time_ts = start_time_ts + (max(1, duration_days) * 86400)
+    try:
+        adset = _post(
+            f'{act_id}/adsets', token,
+            name=f'{name} - Ad Set', campaign_id=campaign_id,
+            daily_budget=daily_budget_cents, billing_event='IMPRESSIONS',
+            optimization_goal=opt_goal, bid_strategy='LOWEST_COST_WITHOUT_CAP',
+            targeting=_json.dumps(targeting),
+            start_time=start_time_ts, end_time=end_time_ts,
+            status='PAUSED', promoted_object=_json.dumps({'page_id': page_id}),
+        )
+        adset_id = adset['id']
+    except MetaAdsError as e:
+        raise MetaAdsError(f'Step 2 (adset): {e}', code=e.code, subcode=e.subcode, raw=e.raw)
+
+    # 3. Ad Creative — link_data referencing the Page.
+    link_data = {'link': link_url, 'message': message or ''}
+    if headline:
+        link_data['name'] = headline[:255]
+    if description:
+        link_data['description'] = description[:255]
+    if image_url:
+        link_data['picture'] = image_url
+    object_story_spec = {'page_id': page_id, 'link_data': link_data}
+    try:
+        creative = _post(
+            f'{act_id}/adcreatives', token,
+            name=f'{name} - Creative',
+            object_story_spec=_json.dumps(object_story_spec),
+        )
+        creative_id = creative['id']
+    except MetaAdsError as e:
+        raise MetaAdsError(f'Step 3 (creative): {e}', code=e.code, subcode=e.subcode, raw=e.raw)
+
+    # 4. Ad
+    try:
+        ad = _post(
+            f'{act_id}/ads', token,
+            name=f'{name} - Ad', adset_id=adset_id,
+            creative=_json.dumps({'creative_id': creative_id}),
+            status=eff_status,
+        )
+        ad_id = ad['id']
+    except MetaAdsError as e:
+        raise MetaAdsError(f'Step 4 (ad): {e}', code=e.code, subcode=e.subcode, raw=e.raw)
+
+    if status_active:
+        try:
+            _post(f'{adset_id}', token, status='ACTIVE')
+            _post(f'{campaign_id}', token, status='ACTIVE')
+        except MetaAdsError as e:
+            logger.warning(f'[create_link_campaign] flip-to-ACTIVE failed (non-fatal): {e}')
+
+    return {'campaign_id': campaign_id, 'adset_id': adset_id,
+            'creative_id': creative_id, 'ad_id': ad_id}
+
+
 # ───────────────────────────── Status + Insights ────────────────────────────
 
 
@@ -345,6 +471,44 @@ def resume_campaign(campaign: AdCampaign) -> bool:
     if not token or not campaign.external_campaign_id:
         return False
     _post(campaign.external_campaign_id, token, status='ACTIVE')
+    return True
+
+
+def update_campaign_name(campaign: AdCampaign, new_name: str) -> bool:
+    """Rename a live Meta campaign."""
+    token = decrypt_token(campaign.ad_account.encrypted_token)
+    if not token or not campaign.external_campaign_id:
+        return False
+    _post(campaign.external_campaign_id, token, name=new_name)
+    return True
+
+
+def update_campaign_budget(campaign: AdCampaign, new_daily_minor: int) -> bool:
+    """Update a Meta campaign's daily budget.
+
+    Meta carries the daily budget on the ad set (or the campaign, for CBO). We
+    set it on the ad set (the level the Boost flow uses). `new_daily_minor` is
+    cents in the account currency.
+    """
+    token = decrypt_token(campaign.ad_account.encrypted_token)
+    if not token:
+        return False
+    target = campaign.external_adset_id or campaign.external_campaign_id
+    if not target:
+        return False
+    _post(target, token, daily_budget=int(new_daily_minor))
+    return True
+
+
+def remove_campaign(campaign: AdCampaign) -> bool:
+    """Delete a Meta campaign (DELETE on the campaign node)."""
+    token = decrypt_token(campaign.ad_account.encrypted_token)
+    if not token or not campaign.external_campaign_id:
+        return False
+    url = f'{GRAPH}/{campaign.external_campaign_id}'
+    resp = requests.delete(url, params={'access_token': token}, timeout=REQUEST_TIMEOUT)
+    body = resp.json()
+    _check_error(body)
     return True
 
 

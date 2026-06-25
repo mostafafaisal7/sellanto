@@ -97,6 +97,15 @@ def start_scheduler():
         replace_existing=True
     )
 
+    # Ads: evaluate automation rules every 30 minutes
+    scheduler.add_job(
+        run_ad_rules,
+        'interval',
+        minutes=30,
+        id='ad_rules',
+        replace_existing=True
+    )
+
     scheduler.start()
     print("[SCHEDULER] Auto-posting scheduler active (checks every 60 seconds)")
     print("[SCHEDULER] SLA checker active (checks every 30 minutes)")
@@ -114,6 +123,15 @@ def run_sla_check():
         call_command('check_sla')
     except Exception as e:
         print(f"[SLA CHECK] Error: {e}")
+
+
+def run_ad_rules():
+    """Evaluate all active ad-automation rules."""
+    try:
+        from ads.services.rule_engine import evaluate_all_active_rules
+        evaluate_all_active_rules()
+    except Exception as e:
+        print(f"[AD RULES] Error: {e}")
 
 
 def run_analytics_sync():

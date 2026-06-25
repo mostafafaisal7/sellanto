@@ -20,6 +20,7 @@ class SocialAccount(models.Model):
         ('reddit', 'Reddit'),
         ('telegram', 'Telegram'),
         ('messenger', 'Facebook Messenger'),
+        ('google_business', 'Google Business Profile'),
     ]
     
     STATUS_CHOICES = [
@@ -121,6 +122,20 @@ class SocialAccount(models.Model):
         help_text='Telegram Channel ID (e.g., @channel or -100123456)')
     
     # ========================================
+    # GOOGLE BUSINESS PROFILE CREDENTIALS
+    # ========================================
+    gbp_access_token = models.TextField(blank=True, null=True,
+        help_text='Google Business Profile Access Token')
+    gbp_refresh_token = models.TextField(blank=True, null=True,
+        help_text='Google Business Profile Refresh Token')
+    gbp_account_id = models.CharField(max_length=200, blank=True, null=True,
+        help_text='GBP Account resource ID (accounts/{id})')
+    gbp_location_id = models.CharField(max_length=200, blank=True, null=True,
+        help_text='GBP Location resource ID (locations/{id})')
+    gbp_location_name = models.CharField(max_length=300, blank=True, null=True,
+        help_text='Human-readable business location name (e.g. "Seven Door Spa")')
+
+    # ========================================
     # COMMON FIELDS
     # ========================================
     token_expires_at = models.DateTimeField(blank=True, null=True,
@@ -211,7 +226,16 @@ class SocialAccount(models.Model):
                 'bot_token': self.telegram_bot_token,
                 'channel_id': self.telegram_channel_id,
             }
-        
+
+        elif self.platform == 'google_business':
+            credentials = {
+                'access_token': self.gbp_access_token,
+                'refresh_token': self.gbp_refresh_token,
+                'account_id': self.gbp_account_id,
+                'location_id': self.gbp_location_id,
+                'location_name': self.gbp_location_name,
+            }
+
         return credentials
     
     def is_token_expired(self):

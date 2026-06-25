@@ -14,6 +14,8 @@ import {
   ReceiptRefundIcon,
   EnvelopeIcon,
   AdjustmentsHorizontalIcon,
+  BuildingStorefrontIcon,
+  MegaphoneIcon,
 } from '@heroicons/react/24/outline';
 
 interface AdminSidebarProps {
@@ -86,6 +88,8 @@ const mainNavItems: NavItem[] = [
   { name: 'YouTube Settings',   href: '/admin-panel/youtube-settings',   icon: YouTubeIcon },
   { name: 'Reddit Settings',    href: '/admin-panel/reddit-settings',    icon: RedditIcon },
   { name: 'TikTok Settings',    href: '/admin-panel/tiktok-settings',    icon: TikTokIcon },
+  { name: 'Google Business',    href: '/admin-panel/google-business-settings', icon: BuildingStorefrontIcon },
+  { name: 'Google Ads',         href: '/admin-panel/google-ads-settings', icon: MegaphoneIcon },
   { name: 'Email Settings',    href: '/admin-panel/email-settings',    icon: EnvelopeIcon },
 ];
 

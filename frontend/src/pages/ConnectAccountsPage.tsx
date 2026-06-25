@@ -25,6 +25,7 @@ import { PinterestConnect } from '../components/platforms/PinterestConnect';
 import { YouTubeConnect } from '../components/platforms/YouTubeConnect';
 import { RedditConnect } from '../components/platforms/RedditConnect';
 import { TikTokConnect } from '../components/platforms/TikTokConnect';
+import { GoogleBusinessConnect } from '../components/platforms/GoogleBusinessConnect';
 
 // PLATFORM CONSTANTS MAPPED FROM DJANGO TEMPLATE
 const platformFeatures: Record<string, string[]> = {
@@ -35,6 +36,7 @@ const platformFeatures: Record<string, string[]> = {
   tiktok: ['Videos', 'Photo Mode', 'Duets'],
   pinterest: ['Pins', 'Idea Pins', 'Boards'],
   youtube: ['Video Upload', 'Shorts', 'Community Posts'],
+  google_business: ['Google Posts', 'Locations', 'CTA Buttons'],
   telegram: ['Messages', 'Channels', 'Groups'],
   snapchat: ['Stories', 'Spotlight', 'Ads Manager'],
   reddit: ['Text Posts', 'Link Sharing', 'Media Posts'],
@@ -57,6 +59,7 @@ const platformDescriptions: Record<string, string> = {
   tiktok: 'Schedule and publish engaging short-form videos to TikTok for Business.',
   pinterest: 'Pin your creative content and reach millions of users looking for inspiration.',
   youtube: 'Upload and schedule videos, shorts, and community posts to your YouTube channel.',
+  google_business: 'Publish Google Posts to your business listing on Google Search and Maps.',
   telegram: 'Broadcast updates and automate posts to your Telegram channels and groups.',
   snapchat: "Share Stories and Spotlight content with Snapchat's engaged audience.",
   reddit: 'Post to subreddits and engage with communities on the front page of the internet.',
@@ -67,7 +70,7 @@ const platformDescriptions: Record<string, string> = {
 };
 
 const postingPlatforms: PlatformType[] = ['facebook', 'instagram', 'twitter', 'linkedin'];
-const secondaryPlatforms: PlatformType[] = ['tiktok', 'youtube', 'pinterest', 'reddit', 'telegram'];
+const secondaryPlatforms: PlatformType[] = ['tiktok', 'youtube', 'google_business', 'pinterest', 'reddit', 'telegram'];
 const roadmapPlatforms: PlatformType[] = ['snapchat', 'medium', 'tumblr', 'mastodon', 'twitch'];
 
 const chatbotPlatforms = [
@@ -576,6 +579,35 @@ export default function ConnectAccountsPage() {
                     </div>
                   </div>
                   <TikTokConnect onConnected={fetchData} compact />
+                </motion.div>
+              );
+            }
+
+            // Google Business Profile uses OAuth — render dedicated component
+            if (p === 'google_business') {
+              const gbpAccounts = accounts.filter(a => a.platform === 'google_business');
+              const gbpActive = gbpAccounts.filter(a => a.status === 'active').length;
+              return (
+                <motion.div
+                  key={p}
+                  className={clsx(
+                    "group relative p-4 rounded-xl border transition-all flex flex-col gap-3",
+                    gbpActive > 0 ? "border-success/30 bg-success/5" : "border-white/10 bg-dark-800/50"
+                  )}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={clsx("w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0", gbpActive > 0 ? platformColors[p]?.bg : "bg-dark-700")}>
+                      <PlatformIcon platform={p} className={gbpActive > 0 ? "text-white" : "text-text-muted"} size="md" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <h4 className="text-sm font-bold text-text-primary truncate">{platformNames[p]}</h4>
+                        {gbpActive > 0 && <span className="px-1.5 py-0.5 rounded-full bg-success/20 text-success text-[8px] font-bold">{gbpActive}</span>}
+                      </div>
+                      <p className="text-[10px] text-text-muted">Google Posts · Locations</p>
+                    </div>
+                  </div>
+                  <GoogleBusinessConnect onConnected={fetchData} compact />
                 </motion.div>
               );
             }

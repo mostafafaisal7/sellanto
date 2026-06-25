@@ -81,6 +81,13 @@ DIAMOND_COSTS = {
     'ads_audience_create': 30,        # upload custom audience / build lookalike
     'ads_ai_targeting_suggest': 20,   # AI suggests targeting from Brand DNA
     'ads_insights_pull': 2,           # pull fresh insights (cheap, runs often)
+    'ads_google_campaign': 100,       # create a Google Ads campaign (Search/Display/PMax)
+    'ads_ai_campaign_suggest': 15,    # AI proposes a full Google Ads campaign (LLM)
+
+    # Google Business Profile
+    'gbp_post': 2,                    # publish a Google Post (non-AI, cheap)
+    'gbp_ai_caption': 5,              # AI-write a Google Post caption (LLM)
+    'gbp_review_reply': 3,            # AI-generate a reply to a review (LLM)
 }
 
 # Plan-based diamond grants

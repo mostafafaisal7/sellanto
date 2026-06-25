@@ -46,17 +46,17 @@ OPENAI_TO_GEMINI = {
 GEMINI_TO_OPENAI = {v: k for k, v in OPENAI_TO_GEMINI.items()}
 
 OPENAI_TO_CLAUDE = {
-    'gpt-4o': 'claude-sonnet-4-20250514',
+    'gpt-4o': 'claude-sonnet-4-6',
     'gpt-4o-mini': 'claude-haiku-4-5-20251001',
-    'gpt-4-turbo': 'claude-sonnet-4-20250514',
+    'gpt-4-turbo': 'claude-sonnet-4-6',
 }
 
 CLAUDE_TO_OPENAI = {v: k for k, v in OPENAI_TO_CLAUDE.items()}
 
 GEMINI_TO_CLAUDE = {
-    'gemini-2.0-flash': 'claude-sonnet-4-20250514',
+    'gemini-2.0-flash': 'claude-sonnet-4-6',
     'gemini-2.0-flash-lite': 'claude-haiku-4-5-20251001',
-    'gemini-1.5-pro': 'claude-sonnet-4-20250514',
+    'gemini-1.5-pro': 'claude-sonnet-4-6',
 }
 
 CLAUDE_TO_GEMINI = {v: k for k, v in GEMINI_TO_CLAUDE.items()}
@@ -216,7 +216,7 @@ class UnifiedLLMService:
         preferred_provider: str = 'claude',
         openai_model: str = 'gpt-4o-mini',
         gemini_model: str = 'gemini-2.0-flash',
-        claude_model: str = 'claude-sonnet-4-20250514',
+        claude_model: str = 'claude-sonnet-4-6',
     ):
         self.openai_key = openai_key
         self.gemini_key = gemini_key
@@ -709,14 +709,14 @@ def get_llm_service(user) -> UnifiedLLMService:
     preferred_provider = 'claude'
     openai_model = 'gpt-4o-mini'
     gemini_model = 'gemini-2.0-flash'
-    claude_model = 'claude-sonnet-4-20250514'
+    claude_model = 'claude-sonnet-4-6'
 
     try:
         from ai_caption.models import UserAPISettings
         settings = UserAPISettings.objects.get(user=user)
         openai_model = settings.default_model or 'gpt-4o-mini'
         gemini_model = getattr(settings, 'default_gemini_model', 'gemini-2.0-flash')
-        claude_model = getattr(settings, 'default_claude_model', 'claude-sonnet-4-20250514')
+        claude_model = getattr(settings, 'default_claude_model', 'claude-sonnet-4-6')
     except Exception:
         pass
 

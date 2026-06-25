@@ -36,6 +36,19 @@ from platforms.tiktok_oauth_views import (
     tiktok_oauth_callback,
     tiktok_connection_status,
 )
+from platforms.google_business_oauth_views import (
+    gbp_oauth_initiate,
+    gbp_oauth_callback,
+    gbp_connection_status,
+    gbp_list_locations,
+    gbp_select_location,
+    gbp_create_post,
+    gbp_generate_caption,
+    gbp_generate_image,
+    gbp_list_reviews,
+    gbp_generate_review_reply,
+    gbp_reply_to_review,
+)
 from . import admin_views
 from . import strategy_views
 from . import caption_views
@@ -112,6 +125,19 @@ urlpatterns = [
     path('platforms/tiktok/initiate/', tiktok_oauth_initiate, name='tt-oauth-initiate'),
     path('platforms/tiktok/callback/', tiktok_oauth_callback, name='tt-oauth-callback'),
     path('platforms/tiktok/status/',   tiktok_connection_status, name='tt-conn-status'),
+
+    # ── Google Business Profile OAuth, Locations & Posting ────────────────
+    path('platforms/google-business/initiate/',        gbp_oauth_initiate,     name='gbp-oauth-initiate'),
+    path('platforms/google-business/callback/',        gbp_oauth_callback,     name='gbp-oauth-callback'),
+    path('platforms/google-business/status/',          gbp_connection_status,  name='gbp-conn-status'),
+    path('platforms/google-business/locations/',       gbp_list_locations,     name='gbp-locations'),
+    path('platforms/google-business/select-location/', gbp_select_location,    name='gbp-select-location'),
+    path('platforms/google-business/post/',            gbp_create_post,        name='gbp-create-post'),
+    path('platforms/google-business/ai/caption/',      gbp_generate_caption,   name='gbp-ai-caption'),
+    path('platforms/google-business/ai/image/',        gbp_generate_image,     name='gbp-ai-image'),
+    path('platforms/google-business/reviews/',         gbp_list_reviews,       name='gbp-reviews'),
+    path('platforms/google-business/reviews/ai-reply/', gbp_generate_review_reply, name='gbp-review-ai-reply'),
+    path('platforms/google-business/reviews/reply/',   gbp_reply_to_review,    name='gbp-review-reply'),
 
     # Auth endpoints
     path('auth/register/', views.RegisterView.as_view(), name='api-register'),
@@ -317,6 +343,8 @@ urlpatterns = [
     path('admin/linkedin-accounts/',    admin_views.AdminLinkedInAccountsView.as_view(),   name='api-admin-linkedin-accounts'),
     path('admin/youtube-settings/',     admin_views.YouTubeSettingsView.as_view(),         name='api-admin-yt-settings'),
     path('admin/youtube-accounts/',     admin_views.AdminYouTubeAccountsView.as_view(),    name='api-admin-youtube-accounts'),
+    path('admin/google-business-settings/', admin_views.GoogleBusinessSettingsView.as_view(), name='api-admin-gbp-settings'),
+    path('admin/google-ads-settings/', admin_views.GoogleAdsSettingsView.as_view(), name='api-admin-gads-settings'),
     path('admin/pinterest-settings/',   admin_views.PinterestSettingsView.as_view(),       name='api-admin-pin-settings'),
     path('admin/pinterest-accounts/',   admin_views.AdminPinterestAccountsView.as_view(),  name='api-admin-pinterest-accounts'),
     path('admin/reddit-settings/',      admin_views.RedditSettingsView.as_view(),          name='api-admin-reddit-settings'),

@@ -112,6 +112,37 @@ export const adsService = {
     return res.data;
   },
 
+  /** Create a from-scratch Meta link/website campaign (awareness/traffic/leads/sales). */
+  async createMetaCampaign(params: {
+    ad_account_id: number;
+    objective: 'awareness' | 'traffic' | 'engagement' | 'leads' | 'sales';
+    name?: string;
+    daily_budget_usd: number;
+    duration_days?: number;
+    link_url: string;
+    message?: string;
+    headline?: string;
+    description?: string;
+    image_url?: string;
+    targeting?: Record<string, unknown>;
+    activate?: boolean;
+  }): Promise<AdCampaign> {
+    const res = await api.post('/ads/meta/campaigns/create/', params);
+    return res.data;
+  },
+
+  /** Edit a live campaign — rename and/or change daily budget (USD). Works for both providers. */
+  async updateCampaign(id: number, changes: { name?: string; daily_budget_usd?: number }): Promise<AdCampaign> {
+    const res = await api.patch(`/ads/campaigns/${id}/`, changes);
+    return res.data;
+  },
+
+  /** Archive/remove a campaign on the provider. */
+  async deleteCampaign(id: number): Promise<{ archived?: boolean; deleted?: boolean }> {
+    const res = await api.delete(`/ads/campaigns/${id}/`);
+    return res.data;
+  },
+
   /**
    * Path A — One-click "Publish + Boost" video ad.
    * Uploads a video to the user's FB Page AND boosts it as a paid ad in a

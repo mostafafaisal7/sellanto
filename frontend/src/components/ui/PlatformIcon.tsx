@@ -27,7 +27,8 @@ export type PlatformType =
   | 'sms'
   | 'signal'
   | 'intercom'
-  | 'messenger';
+  | 'messenger'
+  | 'google_business';
 
 interface PlatformIconProps {
   platform: PlatformType;
@@ -92,6 +93,12 @@ export function PlatformIcon({ platform, className, size = 'md' }: PlatformIconP
       return (
         <svg className={baseClass} viewBox="0 0 24 24" fill="currentColor">
           <path d="M23.498 6.186a3.016 3.016 0 00-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 00.502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 002.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 002.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+        </svg>
+      );
+    case 'google_business':
+      return (
+        <svg className={baseClass} viewBox="0 0 24 24" fill="currentColor">
+          <path d="M3 3h18l1 6.5a3.25 3.25 0 0 1-6.25 1.2 3.25 3.25 0 0 1-5.5 0 3.25 3.25 0 0 1-6.25-1.2L3 3Zm1 9.4a4.74 4.74 0 0 0 3.13-.2A4.73 4.73 0 0 0 12 13.2a4.73 4.73 0 0 0 4.87-1 4.74 4.74 0 0 0 3.13.2V21H4v-8.6Zm5 3.1V21h6v-5.5H9Z" />
         </svg>
       );
     case 'telegram':
@@ -227,6 +234,7 @@ export const platformColors: Record<string, { bg: string; text: string; gradient
   tiktok: { bg: 'bg-black', text: 'text-white', gradient: 'from-[#00f2ea] via-black to-[#ff0050]' },
   pinterest: { bg: 'bg-[#E60023]', text: 'text-[#E60023]', gradient: 'from-[#E60023] to-[#bd001c]' },
   youtube: { bg: 'bg-[#FF0000]', text: 'text-[#FF0000]', gradient: 'from-[#FF0000] to-[#cc0000]' },
+  google_business: { bg: 'bg-[#4285F4]', text: 'text-[#4285F4]', gradient: 'from-[#4285F4] to-[#3367D6]' },
   telegram: { bg: 'bg-[#0088cc]', text: 'text-[#0088cc]', gradient: 'from-[#0088cc] to-[#006699]' },
   threads: { bg: 'bg-black', text: 'text-white', gradient: 'from-black to-gray-800' },
   whatsapp: { bg: 'bg-[#25D366]', text: 'text-[#25D366]', gradient: 'from-[#25D366] to-[#128C7E]' },
@@ -257,6 +265,7 @@ export const platformNames: Record<string, string> = {
   tiktok: 'TikTok',
   pinterest: 'Pinterest',
   youtube: 'YouTube',
+  google_business: 'Google Business',
   telegram: 'Telegram',
   messenger: 'Messenger',
   threads: 'Threads',

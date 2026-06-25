@@ -46,8 +46,8 @@ class UserAPISettings(models.Model):
     ])
 
     # Claude model preference (Claude key is global/admin-managed, not per-user)
-    default_claude_model = models.CharField(max_length=80, default='claude-sonnet-4-20250514', choices=[
-        ('claude-sonnet-4-20250514', 'Claude Sonnet 4 (Recommended)'),
+    default_claude_model = models.CharField(max_length=80, default='claude-sonnet-4-6', choices=[
+        ('claude-sonnet-4-6', 'Claude Sonnet 4.6 (Recommended)'),
         ('claude-haiku-4-5-20251001', 'Claude Haiku 4.5 (Faster & Cheaper)'),
     ])
     

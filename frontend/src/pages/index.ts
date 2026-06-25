@@ -12,6 +12,7 @@ export { DiamondAnalyticsPage } from './DiamondAnalyticsPage';
 export { MyPostsPage } from './MyPostsPage';
 export { CreatePostPage } from './CreatePostPage';
 export { default as ConnectAccountsPage } from './ConnectAccountsPage';
+export { GoogleAdsPage } from './GoogleAdsPage';
 export { ProfilePage } from './ProfilePage';
 export { SettingsPage } from './SettingsPage';
 export { OnboardingPage } from './OnboardingPage';

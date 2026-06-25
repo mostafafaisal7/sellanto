@@ -22,6 +22,7 @@ import {
   ChatBubbleBottomCenterTextIcon,
   ArrowUpCircleIcon,
   ChartBarSquareIcon,
+  MegaphoneIcon,
 } from '@heroicons/react/24/outline';
 import { useAuthStore } from '../../store';
 
@@ -79,6 +80,7 @@ const mainNavItems: NavItem[] = [
   { name: 'Messenger Bot', href: '/messenger', icon: ChatBubbleBottomCenterTextIcon },
   { name: 'Calendar', href: '/calendar', icon: CalendarDaysIcon },
   { name: 'Connect Account', href: '/platforms', icon: LinkIcon },
+  { name: 'Google Ads', href: '/google-ads', icon: MegaphoneIcon },
 ];
 
 const settingsNavItems: NavItem[] = [

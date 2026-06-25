@@ -13,4 +13,6 @@ export { AdminPinterestSettingsPage } from './AdminPinterestSettingsPage';
 export { AdminYouTubeSettingsPage } from './AdminYouTubeSettingsPage';
 export { AdminRedditSettingsPage } from './AdminRedditSettingsPage';
 export { AdminTikTokSettingsPage } from './AdminTikTokSettingsPage';
+export { AdminGoogleBusinessSettingsPage } from './AdminGoogleBusinessSettingsPage';
+export { AdminGoogleAdsSettingsPage } from './AdminGoogleAdsSettingsPage';
 export { AdminEmailSettingsPage } from './AdminEmailSettingsPage';

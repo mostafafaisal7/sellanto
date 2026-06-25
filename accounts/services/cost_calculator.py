@@ -64,7 +64,7 @@ LLM_RATES: dict[str, tuple[Decimal, Decimal]] = {
 }
 
 # Default LLM model when transaction.model_used is empty
-DEFAULT_LLM_MODEL = 'claude-sonnet-4-20250514'
+DEFAULT_LLM_MODEL = 'claude-sonnet-4-6'
 
 # OpenAI embeddings per-million-token rates (input only)
 EMBEDDING_RATES: dict[str, Decimal] = {

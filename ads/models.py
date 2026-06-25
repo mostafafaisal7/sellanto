@@ -256,3 +256,101 @@ class AdAudience(models.Model):
 
     def __str__(self):
         return f'{self.name} [{self.audience_type}]'
+
+
+class AdCampaignDraft(models.Model):
+    """A persisted, AI-generated campaign draft so generated content survives a
+    page reload and can be re-generated on demand.
+
+    One draft per (user, brand, campaign_type) — the AI-suggest endpoint upserts
+    it on every run, and the frontend loads it on mount. This is pre-launch UX
+    state only; once the user actually creates the campaign it becomes an
+    AdCampaign. Drafts are disposable and never sync to Google.
+    """
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='ad_campaign_drafts',
+    )
+    brand = models.ForeignKey(
+        Brand, on_delete=models.CASCADE, related_name='ad_campaign_drafts',
+    )
+    campaign_type = models.CharField(max_length=20, default='search')
+    topic = models.CharField(max_length=300, blank=True)
+    # The full suggestion payload returned to the frontend (name, objective,
+    # headlines, descriptions, keywords, business_name, daily_budget_usd, etc.).
+    suggestion = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'ad_campaign_drafts'
+        ordering = ['-updated_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['user', 'brand', 'campaign_type'],
+                name='uniq_draft_per_user_brand_type',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['user', 'brand', '-updated_at']),
+        ]
+
+    def __str__(self):
+        return f'Draft({self.campaign_type}) for {self.brand_id} / user {self.user_id}'
+
+
+RULE_METRIC_CHOICES = [
+    ('spend',       'Spend (last N days)'),
+    ('cpc',         'Average CPC'),
+    ('ctr',         'CTR'),
+    ('conversions', 'Conversions'),
+    ('cpa',         'Cost per conversion (CPA)'),
+]
+RULE_OPERATOR_CHOICES = [('gt', '>'), ('lt', '<'), ('gte', '≥'), ('lte', '≤')]
+RULE_ACTION_CHOICES = [
+    ('pause',           'Pause the campaign'),
+    ('notify',          'Notify only'),
+    ('increase_budget', 'Increase daily budget by %'),
+    ('decrease_budget', 'Decrease daily budget by %'),
+]
+
+
+class AdRule(models.Model):
+    """An automation rule evaluated periodically against a campaign's metrics.
+
+    Example: "if CPA > $50 over the last 7 days, pause the campaign" or
+    "if spend > $100 today, notify me". Budget pacing is a spend rule with a
+    notify/decrease action. Evaluated by the scheduler (every 30 min).
+    """
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name='ad_rules',
+    )
+    campaign = models.ForeignKey(
+        AdCampaign, on_delete=models.CASCADE, related_name='rules',
+    )
+    name = models.CharField(max_length=200)
+    metric = models.CharField(max_length=20, choices=RULE_METRIC_CHOICES)
+    operator = models.CharField(max_length=4, choices=RULE_OPERATOR_CHOICES)
+    # Threshold in the metric's natural unit: USD for spend/cpc/cpa, fraction
+    # for ctr (0.05 = 5%), integer for conversions.
+    threshold = models.FloatField()
+    lookback_days = models.IntegerField(default=7)
+    action = models.CharField(max_length=20, choices=RULE_ACTION_CHOICES)
+    action_value = models.FloatField(
+        default=0, help_text='Percent for budget actions (e.g. 20 = ±20%).')
+    is_active = models.BooleanField(default=True)
+    last_evaluated_at = models.DateTimeField(null=True, blank=True)
+    last_triggered_at = models.DateTimeField(null=True, blank=True)
+    trigger_count = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'ad_rules'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', '-created_at']),
+            models.Index(fields=['is_active']),
+        ]
+
+    def __str__(self):
+        return f'{self.name} ({self.metric} {self.operator} {self.threshold})'

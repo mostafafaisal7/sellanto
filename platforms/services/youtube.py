@@ -282,6 +282,50 @@ class YouTubeService:
             return False, str(e)
 
     # ──────────────────────────────────────────────────────────────────────────
+    # Account helper — resolve a user's connected YouTube account + fresh token
+    # ──────────────────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def get_active_account(user):
+        """Return the user's most-recent connected YouTube SocialAccount, or None."""
+        from platforms.models import SocialAccount
+        return (SocialAccount.objects
+                .filter(user=user, platform='youtube')
+                .exclude(youtube_access_token='')
+                .order_by('-connected_at')
+                .first())
+
+    @staticmethod
+    def get_fresh_access_token(account):
+        """Return a valid access token for a YouTube account, refreshing if expired.
+
+        Returns (access_token, error). On success error is None. Persists a
+        refreshed token back to the account. Reuses the same client config and
+        refresh flow as the OAuth status view.
+        """
+        if not account or not account.youtube_access_token:
+            return None, 'No connected YouTube account.'
+
+        if account.is_token_expired():
+            if not account.youtube_refresh_token:
+                return None, 'YouTube session expired — reconnect YouTube.'
+            from platforms.youtube_oauth_views import _get_yt_config
+            from django.utils import timezone
+            from datetime import timedelta
+            cfg = _get_yt_config()
+            ok, result = YouTubeService.refresh_access_token(
+                account.youtube_refresh_token, cfg['client_id'], cfg['client_secret'])
+            if not ok:
+                return None, f'Could not refresh YouTube token: {result}'
+            account.youtube_access_token = result['access_token']
+            account.token_expires_at = timezone.now() + timedelta(seconds=result.get('expires_in', 3600))
+            if result.get('refresh_token'):
+                account.youtube_refresh_token = result['refresh_token']
+            account.save(update_fields=['youtube_access_token', 'youtube_refresh_token',
+                                        'token_expires_at'])
+        return account.youtube_access_token, None
+
+    # ──────────────────────────────────────────────────────────────────────────
     # List Channel Info
     # ──────────────────────────────────────────────────────────────────────────
 

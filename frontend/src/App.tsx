@@ -17,6 +17,7 @@ import {
   MyPostsPage,
   CreatePostPage,
   ConnectAccountsPage,
+  GoogleAdsPage,
   ProfilePage,
   SettingsPage,
   OnboardingPage,
@@ -65,6 +66,8 @@ import {
   AdminYouTubeSettingsPage,
   AdminRedditSettingsPage,
   AdminTikTokSettingsPage,
+  AdminGoogleBusinessSettingsPage,
+  AdminGoogleAdsSettingsPage,
   AdminEmailSettingsPage,
 } from './pages/admin';
 import { LoadingScreen } from './components/ui';
@@ -236,6 +239,7 @@ function App() {
           <Route path="/posts/create" element={<CreatePostPage />} />
           <Route path="/posts/:id/edit" element={<CreatePostPage />} />
           <Route path="/platforms" element={<ConnectAccountsPage />} />
+          <Route path="/google-ads" element={<GoogleAdsPage />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/settings" element={<SettingsPage />} />
 
@@ -301,6 +305,8 @@ function App() {
           <Route path="/admin-panel/youtube-settings" element={<AdminYouTubeSettingsPage />} />
           <Route path="/admin-panel/reddit-settings" element={<AdminRedditSettingsPage />} />
           <Route path="/admin-panel/tiktok-settings" element={<AdminTikTokSettingsPage />} />
+          <Route path="/admin-panel/google-business-settings" element={<AdminGoogleBusinessSettingsPage />} />
+          <Route path="/admin-panel/google-ads-settings" element={<AdminGoogleAdsSettingsPage />} />
           <Route path="/admin-panel/email-settings" element={<AdminEmailSettingsPage />} />
         </Route>
 

@@ -320,7 +320,8 @@ export type PlatformType =
   | 'viber'
   | 'sms'
   | 'signal'
-  | 'intercom';
+  | 'intercom'
+  | 'google_business';
 
 export interface SocialAccount {
   id: number;

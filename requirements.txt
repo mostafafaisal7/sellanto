@@ -82,3 +82,6 @@ pytrends==4.9.2
 
 # -- Google Auth (YouTube OAuth) --
 google-auth==2.40.3
+
+# -- Google Ads (paid ads automation) --
+google-ads==31.0.0
