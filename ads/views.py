@@ -972,7 +972,12 @@ class GoogleAdsSuggestCampaignView(APIView):
             'Destinations, Insurance coverage, Amenities, Shows, Neighborhoods), '
             'snippet_values (array of 3-6 strings ≤25 chars matching the header), '
             'search_themes (array of 3-6 short phrases your customers would search for, '
-            'used as Performance Max audience signals — most relevant for pmax campaigns).'
+            'used as Performance Max audience signals — most relevant for pmax campaigns). '
+            'Also propose targeting: geo_targets (array of 1-5 ISO-3166 country codes, e.g. '
+            '["US","GB"]), languages (array of 1-3 ISO language codes, e.g. ["en"]), '
+            'devices (array, subset of ["MOBILE","DESKTOP","TABLET"] — omit or empty to target '
+            'all devices), audience_themes (array of 2-5 short interest/affinity phrases that '
+            'describe the ideal customer, e.g. ["fitness enthusiasts","marathon runners"]).'
         )
         user_msg = (
             f'Brand: {_json.dumps(brand_ctx)}\n'
@@ -1024,6 +1029,24 @@ class GoogleAdsSuggestCampaignView(APIView):
         suggestion['snippet_header'] = str(suggestion.get('snippet_header', ''))[:25]
         suggestion['snippet_values'] = [str(v)[:25] for v in (suggestion.get('snippet_values') or [])][:6]
         suggestion['search_themes'] = [str(t)[:80] for t in (suggestion.get('search_themes') or [])][:6]
+        # Targeting suggestions (clamped). Geo to 2-letter upper, langs to lower,
+        # devices to the known enum set.
+        suggestion['geo_targets'] = [
+            str(g).strip().upper()[:2] for g in (suggestion.get('geo_targets') or [])
+            if str(g).strip()
+        ][:5]
+        suggestion['languages'] = [
+            str(l).strip().lower() for l in (suggestion.get('languages') or [])
+            if str(l).strip()
+        ][:3]
+        _DEVICES = {'MOBILE', 'DESKTOP', 'TABLET'}
+        suggestion['devices'] = [
+            d for d in (str(x).strip().upper() for x in (suggestion.get('devices') or []))
+            if d in _DEVICES
+        ][:3]
+        suggestion['audience_themes'] = [
+            str(t)[:60] for t in (suggestion.get('audience_themes') or []) if str(t).strip()
+        ][:5]
         suggestion['campaign_type'] = campaign_type
 
         try:

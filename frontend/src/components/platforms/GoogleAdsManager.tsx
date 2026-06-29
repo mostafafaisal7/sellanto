@@ -147,6 +147,13 @@ export default function GoogleAdsManager() {
   const [genImageKind, setGenImageKind] = useState<'marketing' | 'square' | null>(null);
   const [genVideoLoading, setGenVideoLoading] = useState(false);
   const [videoNote, setVideoNote] = useState('');
+  // AI generate panel inside Targeting & extensions: a manual prompt that
+  // refines Brand DNA for text/extensions/targeting/creative generation.
+  const [genPrompt, setGenPrompt] = useState('');
+  // Audience theme hints returned by the AI (user runs them through the picker).
+  const [audienceThemes, setAudienceThemes] = useState<string[]>([]);
+  // Lightbox: full-size preview of a generated/uploaded image URL.
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   const popupRef = useRef<Window | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -377,14 +384,23 @@ export default function GoogleAdsManager() {
     if (g.snippet_header) setSnippetHeader(g.snippet_header);
     if (g.snippet_values?.length) setSnippetValuesText(g.snippet_values.join('\n'));
     if (g.search_themes?.length) setSearchThemesText(g.search_themes.join('\n'));
+    // Targeting suggestions (brand-DNA driven).
+    if (g.geo_targets?.length) setGeoText(g.geo_targets.join(', '));
+    if (g.languages?.length) setLanguagesText(g.languages.join(', '));
+    if (g.devices?.length) setDevices(g.devices.map((d) => d.toUpperCase()));
+    // Surface audience themes as a hint the user can run through the picker.
+    if (g.audience_themes?.length) setAudienceThemes(g.audience_themes);
   };
 
   const runSuggest = async () => {
     setAiLoading(true); setError(''); setCreateMsg('');
     try {
-      const { suggestion: g } = await googleAdsService.suggestCampaign(aiTopic.trim(), campaignType);
+      // Combine the topic bar with the manual prompt (if any) so a single call
+      // fills copy, extensions, AND targeting from Brand DNA + the user's intent.
+      const topic = [aiTopic.trim(), genPrompt.trim()].filter(Boolean).join('. ');
+      const { suggestion: g } = await googleAdsService.suggestCampaign(topic, campaignType);
       applySuggestion(g);
-      setCreateMsg('✓ AI filled the form — review and edit before creating.');
+      setCreateMsg('✓ AI filled copy, extensions & targeting — review and edit before creating.');
     } catch (err) {
       setError(googleAdsService.readError(err, 'AI suggestion failed.'));
     } finally {
@@ -434,8 +450,10 @@ export default function GoogleAdsManager() {
   const handleGenerateImage = async (kind: 'marketing' | 'square') => {
     setGenImageKind(kind); setError('');
     try {
+      // Manual prompt (genPrompt) refines Brand DNA; fall back to the topic bar.
+      const prompt = [genPrompt.trim(), aiTopic.trim()].filter(Boolean).join('. ');
       const { image_url } = await googleAdsService.generateImage({
-        prompt: aiTopic.trim(), kind, ad_account_id: form.ad_account_id || undefined,
+        prompt, kind, ad_account_id: form.ad_account_id || undefined,
       });
       setMarketingImagesText((t) => (t ? `${t}\n${image_url}` : image_url));
     } catch (err) {
@@ -450,8 +468,9 @@ export default function GoogleAdsManager() {
   const handleGenerateVideo = async () => {
     setGenVideoLoading(true); setError(''); setVideoNote('');
     try {
+      const prompt = [genPrompt.trim(), aiTopic.trim()].filter(Boolean).join('. ');
       const res = await googleAdsService.generateVideo({
-        prompt: aiTopic.trim(), aspect_ratio: '16:9', duration: 8,
+        prompt, aspect_ratio: '16:9', duration: 8,
       });
       // If it was auto-uploaded to YouTube, drop the URL straight into the field.
       if (res.youtube_url) {
@@ -505,6 +524,33 @@ export default function GoogleAdsManager() {
       if (parts.length < 2 || !parts[0] || !parts[1]) return null;
       return { text: parts[0], url: parts[1], description1: parts[2] || '', description2: parts[3] || '' };
     }).filter(Boolean) as { text: string; url: string; description1: string; description2: string }[];
+
+  // Thumbnail strip for an image-URL textarea: shows each URL as a clickable
+  // preview (opens the lightbox) with a × to remove it from the list.
+  const imageThumbs = (text: string, setText: (v: string) => void) => {
+    const urls = lines(text);
+    if (!urls.length) return null;
+    return (
+      <div className="mt-2 flex flex-wrap gap-2">
+        {urls.map((url, i) => (
+          <div key={`${url}-${i}`} className="relative group">
+            <button type="button" onClick={() => setLightboxUrl(url)}
+              className="block h-16 w-16 rounded-lg overflow-hidden border border-slate-700 bg-slate-900">
+              <img src={url} alt="" loading="lazy"
+                className="h-full w-full object-cover"
+                onError={(e) => { (e.currentTarget.style.opacity = '0.25'); }} />
+            </button>
+            <button type="button"
+              onClick={() => setText(urls.filter((_, j) => j !== i).join('\n'))}
+              title="Remove"
+              className="absolute -top-1.5 -right-1.5 bg-slate-900 border border-slate-600 text-slate-300 hover:text-white hover:border-red-500 rounded-full w-4 h-4 flex items-center justify-center text-[10px] leading-none">
+              ×
+            </button>
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   // ── Create campaign ──────────────────────────────────────────────────────────
   const submitCreate = async (dryRun: boolean) => {
@@ -1197,6 +1243,7 @@ export default function GoogleAdsManager() {
                         className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-sm text-white"
                         placeholder="https://…/banner.jpg"
                       />
+                      {imageThumbs(marketingImagesText, setMarketingImagesText)}
                     </label>
                     <label className="block">
                       <span className="text-slate-400 text-xs flex items-center justify-between gap-2">
@@ -1218,6 +1265,7 @@ export default function GoogleAdsManager() {
                         className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-sm text-white"
                         placeholder="https://…/logo.png"
                       />
+                      {imageThumbs(logoImagesText, setLogoImagesText)}
                     </label>
                   </div>
                   <p className="text-[10px] text-slate-500">
@@ -1250,6 +1298,69 @@ export default function GoogleAdsManager() {
                   Targeting{campaignType === 'search' ? ' & ad extensions' : ' & audiences'} (optional)
                 </summary>
                 <div className="space-y-3 mt-3">
+                  {/* ── AI generate: Brand DNA + optional manual prompt ──────────── */}
+                  <div className="bg-[#1a73e8]/10 border border-[#1a73e8]/30 rounded-lg p-3 space-y-2">
+                    <span className="text-[#8ab4f8] text-xs font-medium flex items-center gap-1">
+                      <SparklesIcon className="w-3.5 h-3.5" /> AI generate from Brand DNA
+                    </span>
+                    <p className="text-[10px] text-slate-400">
+                      Your Brand DNA is always used as context. Add a manual prompt below to steer
+                      tone, offer, or creative direction — then generate copy &amp; targeting,
+                      or an image / video.
+                    </p>
+                    <textarea
+                      value={genPrompt} onChange={(e) => setGenPrompt(e.target.value)} rows={2}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-sm text-white"
+                      placeholder="Manual prompt (optional) — e.g. emphasize free returns, bold energetic tone, summer vibe"
+                    />
+                    <div className="flex flex-wrap gap-2">
+                      <button type="button" onClick={runSuggest} disabled={aiLoading}
+                        className="bg-[#1a73e8]/20 border border-[#1a73e8]/40 text-[#8ab4f8] hover:bg-[#1a73e8]/30 disabled:opacity-50 px-3 py-1.5 rounded-lg text-xs font-medium inline-flex items-center gap-1">
+                        <SparklesIcon className="w-3 h-3" />
+                        {aiLoading ? 'Generating…' : 'Generate copy & targeting'}
+                      </button>
+                      {(campaignType === 'display' || campaignType === 'pmax') && (
+                        <>
+                          <button type="button" onClick={() => handleGenerateImage('marketing')}
+                            disabled={!!genImageKind}
+                            className="border border-slate-600 hover:bg-slate-700 disabled:opacity-50 text-slate-200 px-3 py-1.5 rounded-lg text-xs inline-flex items-center gap-1">
+                            <SparklesIcon className="w-3 h-3" />
+                            {genImageKind === 'marketing' ? 'Generating…' : 'Image 1.91:1'}
+                          </button>
+                          <button type="button" onClick={() => handleGenerateImage('square')}
+                            disabled={!!genImageKind}
+                            className="border border-slate-600 hover:bg-slate-700 disabled:opacity-50 text-slate-200 px-3 py-1.5 rounded-lg text-xs inline-flex items-center gap-1">
+                            <SparklesIcon className="w-3 h-3" />
+                            {genImageKind === 'square' ? 'Generating…' : 'Image 1:1'}
+                          </button>
+                        </>
+                      )}
+                      {(campaignType === 'video' || campaignType === 'pmax') && (
+                        <button type="button" onClick={handleGenerateVideo} disabled={genVideoLoading}
+                          className="border border-slate-600 hover:bg-slate-700 disabled:opacity-50 text-slate-200 px-3 py-1.5 rounded-lg text-xs inline-flex items-center gap-1">
+                          <SparklesIcon className="w-3 h-3" />
+                          {genVideoLoading ? 'Generating…' : 'Video'}
+                        </button>
+                      )}
+                    </div>
+                    {audienceThemes.length > 0 && (
+                      <div className="pt-1">
+                        <span className="text-[10px] text-slate-400 block mb-1">
+                          Suggested audiences (tap to search &amp; add{campaignType === 'search' ? ' — Search uses keywords, not audiences' : ''}):
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {audienceThemes.map((t) => (
+                            <button key={t} type="button"
+                              onClick={() => { setAudQuery(t); setAudKind('in_market'); runAudienceSearch(); }}
+                              className="text-[11px] rounded-full px-2 py-0.5 border border-[#1a73e8]/40 text-[#8ab4f8] hover:bg-[#1a73e8]/20">
+                              {t}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                   {/* Geo + schedule — universal */}
                   <div className="grid grid-cols-2 gap-3">
                     <label className="block">
@@ -1943,6 +2054,36 @@ export default function GoogleAdsManager() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Lightbox: full-size preview of a generated/uploaded image */}
+      {lightboxUrl && (
+        <div
+          className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm flex items-center justify-center p-6"
+          onClick={() => setLightboxUrl(null)}
+        >
+          <button
+            type="button"
+            onClick={() => setLightboxUrl(null)}
+            className="absolute top-4 right-4 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-full w-9 h-9 flex items-center justify-center text-xl leading-none"
+            aria-label="Close preview"
+          >
+            ×
+          </button>
+          <img
+            src={lightboxUrl}
+            alt="Ad creative preview"
+            onClick={(e) => e.stopPropagation()}
+            className="max-h-[85vh] max-w-[90vw] rounded-lg shadow-2xl object-contain"
+          />
+          <a
+            href={lightboxUrl} target="_blank" rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="absolute bottom-4 left-1/2 -translate-x-1/2 text-xs text-white/70 hover:text-white bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg"
+          >
+            Open original in new tab
+          </a>
         </div>
       )}
     </div>

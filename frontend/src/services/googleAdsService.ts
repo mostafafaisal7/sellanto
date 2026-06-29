@@ -131,6 +131,11 @@ export interface CampaignSuggestion {
   snippet_header?: string;
   snippet_values?: string[];
   search_themes?: string[];   // pmax — asset-group signals
+  // Targeting suggestions (brand-DNA driven).
+  geo_targets?: string[];     // ISO country codes
+  languages?: string[];       // ISO language codes
+  devices?: string[];         // MOBILE | DESKTOP | TABLET
+  audience_themes?: string[]; // interest/affinity phrases (Display/PMax/Video)
 }
 
 export interface CampaignDraft {

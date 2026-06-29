@@ -758,17 +758,60 @@ def _assert_safe_image_url(image_url):
             raise GoogleAdsError('Image URL resolves to a disallowed (internal) address.')
 
 
-def _upload_image_asset(client, customer_id, image_url, name, return_dimensions=False):
-    """Download an image from a public URL and create an Image Asset in Google.
+def _read_local_media_bytes(image_url):
+    """If image_url points at THIS server's MEDIA, return its bytes from disk.
 
-    Google's ImageAsset requires the raw bytes (it does NOT fetch a URL for you),
-    so we download the image server-side and upload the bytes. Returns the asset
-    resource name. Raises GoogleAdsError on download/validation failure.
+    Recognises both absolute URLs (http://host/media/…) and bare MEDIA paths
+    (/media/…). Returns None when the URL isn't one of ours (so the caller falls
+    back to the SSRF-guarded HTTP download). Path-traversal safe: the resolved
+    file must stay inside MEDIA_ROOT.
+    """
+    import os
+    from urllib.parse import urlparse, unquote
+    from django.conf import settings as dj_settings
 
-    SSRF-guarded: the host must be public, redirects are disabled, and the
-    response is size-capped.
+    media_url = (getattr(dj_settings, 'MEDIA_URL', '') or '/media/').rstrip('/')
+    media_root = getattr(dj_settings, 'MEDIA_ROOT', '')
+    if not media_root or not media_url:
+        return None
+
+    path = urlparse(image_url).path  # strips scheme/host; bare paths pass through
+    prefix = media_url + '/'
+    if not path.startswith(prefix):
+        return None
+
+    rel = unquote(path[len(prefix):])
+    abs_path = os.path.normpath(os.path.join(media_root, rel))
+    # Containment check — reject any traversal that escapes MEDIA_ROOT.
+    root_norm = os.path.normpath(media_root)
+    if os.path.commonpath([root_norm, abs_path]) != root_norm:
+        return None
+    if not os.path.isfile(abs_path):
+        return None
+    with open(abs_path, 'rb') as fh:
+        return fh.read()
+
+
+def _fetch_image_bytes(image_url):
+    """Return raw image bytes for a URL, reading local MEDIA from disk and
+    otherwise downloading over HTTP under the SSRF guard. Size-capped.
+
+    Raises GoogleAdsError on failure.
     """
     import requests
+
+    # Fast path: images WE generated/uploaded live under this server's MEDIA dir
+    # and are served at MEDIA_URL (often http://localhost:8000/media/…). Fetching
+    # that over HTTP would (a) be blocked by the SSRF guard (loopback) and
+    # (b) needlessly round-trip through our own web server. Read the bytes straight
+    # off disk instead — it's a file we just wrote, not a user-supplied host.
+    local_bytes = _read_local_media_bytes(image_url)
+    if local_bytes is not None:
+        if len(local_bytes) > _MAX_IMAGE_BYTES:
+            raise GoogleAdsError(f'Image at {image_url} exceeds 10 MB.')
+        if not local_bytes:
+            raise GoogleAdsError(f'Image at {image_url} was empty.')
+        return local_bytes
 
     _assert_safe_image_url(image_url)
     # Many image hosts/CDNs reject requests without a browser-like User-Agent
@@ -779,10 +822,8 @@ def _upload_image_asset(client, customer_id, image_url, name, return_dimensions=
         resp = requests.get(image_url, timeout=20, allow_redirects=True,
                             stream=True, headers=headers)
         resp.raise_for_status()
-        # If the request was redirected, re-validate where it actually landed.
         if resp.url and resp.url != image_url:
             _assert_safe_image_url(resp.url)
-        # Size-cap the download (defends against huge/never-ending responses).
         image_bytes = b''
         for chunk in resp.iter_content(8192):
             image_bytes += chunk
@@ -792,7 +833,59 @@ def _upload_image_asset(client, customer_id, image_url, name, return_dimensions=
         raise GoogleAdsError(f'Could not download image {image_url}: {e}')
     if not image_bytes:
         raise GoogleAdsError(f'Image at {image_url} was empty.')
+    return image_bytes
 
+
+# Canonical, guaranteed-valid Google Ads image-asset sizes. Google's
+# Responsive Display / PMax slots validate aspect ratio after their OWN integer
+# rounding, so a float-cropped 1.9104:1 image can still be rejected. We snap to
+# these EXACT pixel dimensions (each is an exact, recommended size) to remove all
+# drift: 1200/628 ≈ 1.9108 is Google's own canonical 1.91:1 landscape.
+_AD_ASSET_SIZES = {
+    'landscape':     (1200, 628),   # MARKETING_IMAGE        — 1.91:1, min 600x314
+    'square':        (1200, 1200),  # SQUARE_MARKETING_IMAGE — 1:1,    min 300x300
+    'logo_landscape': (1024, 256),  # LOGO (logo_images)     — 4:1,    min 512x128
+    'logo':          (1200, 1200),  # SQUARE_LOGO            — 1:1,    min 128x128
+}
+
+
+def _crop_to_size(image_bytes, shape):
+    """Center-crop, then resize image bytes to an EXACT canonical Google size.
+
+    shape ∈ {'landscape','square','logo'}. AI/uploaded images come in arbitrary
+    ratios (e.g. OpenAI 1536x1024 = 1.5:1); we center-crop to the slot's aspect
+    ratio and resize to the exact recommended pixel dimensions, so Google's
+    aspect-ratio check always passes. Returns PNG bytes; on failure returns the
+    original bytes unchanged (best-effort).
+    """
+    target_w, target_h = _AD_ASSET_SIZES[shape]
+    target_ratio = target_w / target_h
+    try:
+        from PIL import Image
+        import io
+        with Image.open(io.BytesIO(image_bytes)) as im:
+            im = im.convert('RGB')
+            w, h = im.size
+            cur = w / h
+            if cur > target_ratio:
+                new_w = int(round(h * target_ratio))
+                left = (w - new_w) // 2
+                box = (left, 0, left + new_w, h)
+            else:
+                new_h = int(round(w / target_ratio))
+                top = (h - new_h) // 2
+                box = (0, top, w, top + new_h)
+            im = im.crop(box).resize((target_w, target_h), Image.LANCZOS)
+            out = io.BytesIO()
+            im.save(out, format='PNG')
+            return out.getvalue()
+    except Exception as e:  # noqa: BLE001
+        logger.warning('image crop to %s failed, using original: %s', shape, e)
+        return image_bytes
+
+
+def _create_image_asset(client, customer_id, image_bytes, name, return_dimensions=False):
+    """Create a Google Image Asset from raw bytes; return its resource name."""
     op = client.get_type('AssetOperation')
     asset = op.create
     asset.name = name[:120]
@@ -812,6 +905,24 @@ def _upload_image_asset(client, customer_id, image_url, name, return_dimensions=
             w, h = 0, 0
         return resource_name, w, h
     return resource_name
+
+
+def _upload_image_asset(client, customer_id, image_url, name,
+                        return_dimensions=False, shape=None):
+    """Fetch an image (local or remote) and create an Image Asset in Google.
+
+    Google's ImageAsset requires the raw bytes (it does NOT fetch a URL for you),
+    so we download/read the image server-side and upload the bytes. When shape is
+    given ('landscape'|'square'|'logo'), the image is center-cropped and resized
+    to that slot's EXACT canonical size first (Display/PMax slots reject
+    mismatched ratios). SSRF-guarded for external hosts. Raises GoogleAdsError on
+    failure.
+    """
+    image_bytes = _fetch_image_bytes(image_url)
+    if shape:
+        image_bytes = _crop_to_size(image_bytes, shape)
+    return _create_image_asset(client, customer_id, image_bytes, name,
+                               return_dimensions=return_dimensions)
 
 
 def _classify_image(w, h):
@@ -989,15 +1100,35 @@ def create_display_campaign(
         ad_group_id = ad_group_resource.split('/')[-1].split('~')[-1]
 
         # 4. Image assets (download + upload bytes). A Responsive Display Ad
-        # REQUIRES both a landscape (1.91:1) AND a square (1:1) marketing image,
-        # so we classify each uploaded image by aspect ratio and route it.
+        # REQUIRES both a landscape (1.91:1) AND a square (1:1) marketing image
+        # at EXACT aspect ratios. AI/uploaded images rarely match exactly, so we
+        # center-crop each source image to BOTH ratios — this guarantees both
+        # required slots are filled even from a single source image, and never
+        # fails Google's "aspect ratio does not match" check.
+        if not marketing_image_urls:
+            raise GoogleAdsError('At least one marketing image is required for a Display ad.')
         landscape_assets, square_assets = [], []
         for i, u in enumerate(marketing_image_urls[:15]):
-            res, w, h = _upload_image_asset(client, customer_id, u, f'{name} marketing {i}',
-                                            return_dimensions=True)
-            (square_assets if _classify_image(w, h) == 'square' else landscape_assets).append(res)
-        logo_assets = [_upload_image_asset(client, customer_id, u, f'{name} logo {i}')
-                       for i, u in enumerate(logo_image_urls[:5])]
+            # Fetch once, crop to each canonical size (avoids two downloads).
+            src = _fetch_image_bytes(u)
+            land = _crop_to_size(src, 'landscape')
+            sq = _crop_to_size(src, 'square')
+            landscape_assets.append(
+                _create_image_asset(client, customer_id, land, f'{name} marketing L {i}'))
+            square_assets.append(
+                _create_image_asset(client, customer_id, sq, f'{name} marketing S {i}'))
+        # RDA logo slots: logo_images requires 4:1 (min 512x128); square_logo_images
+        # requires 1:1 (min 128x128). Crop each source to BOTH so both slots are
+        # filled and neither aspect check fails.
+        logo_landscape_assets, logo_square_assets = [], []
+        for i, u in enumerate(logo_image_urls[:5]):
+            src = _fetch_image_bytes(u)
+            logo_landscape_assets.append(_create_image_asset(
+                client, customer_id, _crop_to_size(src, 'logo_landscape'),
+                f'{name} logo 4x1 {i}'))
+            logo_square_assets.append(_create_image_asset(
+                client, customer_id, _crop_to_size(src, 'logo'),
+                f'{name} logo 1x1 {i}'))
 
         if not landscape_assets:
             raise GoogleAdsError('A landscape (1.91:1, e.g. 1200x628) marketing image is required.')
@@ -1021,8 +1152,10 @@ def create_display_campaign(
             img = client.get_type('AdImageAsset'); img.asset = res; rda.marketing_images.append(img)
         for res in square_assets:
             img = client.get_type('AdImageAsset'); img.asset = res; rda.square_marketing_images.append(img)
-        for res in logo_assets:
+        for res in logo_landscape_assets:
             img = client.get_type('AdImageAsset'); img.asset = res; rda.logo_images.append(img)
+        for res in logo_square_assets:
+            img = client.get_type('AdImageAsset'); img.asset = res; rda.square_logo_images.append(img)
         ad_resp = client.get_service('AdGroupAdService').mutate_ad_group_ads(
             customer_id=customer_id, operations=[ad_op])
         ad_resource = ad_resp.results[0].resource_name
@@ -1171,15 +1304,27 @@ def create_pmax_campaign(
         for d in descriptions[:5]:
             links.append((_add_text_asset(client, customer_id, d[:90]), FT.DESCRIPTION))
         links.append((_add_text_asset(client, customer_id, business_name[:25]), FT.BUSINESS_NAME))
+        # PMax requires BOTH a 1.91:1 MARKETING_IMAGE and a 1:1
+        # SQUARE_MARKETING_IMAGE at exact ratios. Crop each source image to both
+        # so the asset group is always complete and never trips the
+        # "aspect ratio does not match" / "not enough assets" errors.
         for i, u in enumerate(marketing_image_urls[:20]):
-            res, w, h = _upload_image_asset(client, customer_id, u, f'{name} mkt {i}',
-                                            return_dimensions=True)
-            # Route by aspect ratio so PMax gets both required formats:
-            # ~1:1 → SQUARE_MARKETING_IMAGE, otherwise → MARKETING_IMAGE (1.91:1).
-            field = FT.SQUARE_MARKETING_IMAGE if _classify_image(w, h) == 'square' else FT.MARKETING_IMAGE
-            links.append((res, field))
+            src = _fetch_image_bytes(u)
+            land = _crop_to_size(src, 'landscape')
+            sq = _crop_to_size(src, 'square')
+            links.append((_create_image_asset(client, customer_id, land, f'{name} mkt L {i}'),
+                          FT.MARKETING_IMAGE))
+            links.append((_create_image_asset(client, customer_id, sq, f'{name} mkt S {i}'),
+                          FT.SQUARE_MARKETING_IMAGE))
+        # PMax: LOGO must be 1:1; LANDSCAPE_LOGO 4:1. Provide both from each source.
         for i, u in enumerate(logo_image_urls[:5]):
-            links.append((_upload_image_asset(client, customer_id, u, f'{name} logo {i}'), FT.LOGO))
+            src = _fetch_image_bytes(u)
+            links.append((_create_image_asset(
+                client, customer_id, _crop_to_size(src, 'logo'),
+                f'{name} logo 1x1 {i}'), FT.LOGO))
+            links.append((_create_image_asset(
+                client, customer_id, _crop_to_size(src, 'logo_landscape'),
+                f'{name} logo 4x1 {i}'), FT.LANDSCAPE_LOGO))
 
         # 4. Create the asset group AND link every asset in ONE atomic mutate.
         #    Google validates an asset group's minimum-asset requirements at the
@@ -2302,10 +2447,22 @@ def search_audiences(ad_account, keyword, limit=15):
     client = _build_client(refresh_token, login_customer_id=ad_account.login_customer_id)
     customer_id = _digits(ad_account.external_id)
 
+    # Match on the single most significant word, not the whole phrase. GAQL LIKE
+    # takes one pattern and a multi-word query (e.g. "online shoppers") matches
+    # no audience verbatim, so we filter by the longest token (stemmed of a
+    # trailing 's') and rank the rest in Python. (Mirrors list_audiences.)
+    tokens = sorted([t for t in keyword.split() if len(t) >= 3], key=len, reverse=True)
+    stems = []
+    for t in tokens:
+        safe = t.replace('%', '').replace('_', '')
+        stems.append(safe[:-1] if safe.lower().endswith('s') and len(safe) > 4 else safe)
+    primary = stems[0] if stems else keyword
+    fetch_limit = max(int(limit), 200) if stems else int(limit)
+
     query = (
         'SELECT user_interest.user_interest_id, user_interest.name, '
         'user_interest.taxonomy_type FROM user_interest '
-        f'WHERE user_interest.name LIKE "%{keyword}%" LIMIT {int(limit)}'
+        f'WHERE user_interest.name LIKE "%{primary}%" LIMIT {fetch_limit}'
     )
 
     def _call():
@@ -2318,7 +2475,10 @@ def search_audiences(ad_account, keyword, limit=15):
                 'name': ui.name,
                 'taxonomy': ui.taxonomy_type.name,
             })
-        return out
+        if stems:
+            low = [s.lower() for s in stems]
+            out.sort(key=lambda a: -sum(s in a['name'].lower() for s in low))
+        return out[:int(limit)]
 
     return _run(_call, context='search audiences')
 

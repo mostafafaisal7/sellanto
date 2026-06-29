@@ -101,11 +101,27 @@ def list_audiences(ad_account, kind='in_market', keyword='', limit=50):
     if kind in ('in_market', 'affinity'):
         tax = 'IN_MARKET' if kind == 'in_market' else 'AFFINITY'
         where = f"user_interest.taxonomy_type = '{tax}'"
-        if kw:
-            where += f' AND user_interest.name LIKE "%{kw}%"'
+        # Match on the SINGLE most significant word, not the whole phrase: a
+        # LIKE "%online shoppers%" finds nothing because no audience is named
+        # exactly that, but "Shopping" audiences DO exist. GAQL's LIKE only
+        # supports a single pattern per field here (an OR group is rejected), so
+        # we filter Google-side by the longest token (stemmed of a trailing 's'
+        # so "shoppers" matches "Shopping"), fetch a wide set, then rank the
+        # remaining tokens in Python so the most relevant surface first.
+        tokens = sorted([t for t in (kw.split() if kw else []) if len(t) >= 3],
+                        key=len, reverse=True)
+        all_stems = []
+        for t in tokens:
+            safe = t.replace('%', '').replace('_', '').replace('"', '')
+            all_stems.append(safe[:-1] if safe.lower().endswith('s') and len(safe) > 4 else safe)
+        primary = all_stems[0] if all_stems else ''
+        if primary:
+            where += f' AND user_interest.name LIKE "%{primary}%"'
+        # Fetch wide when filtering so the Python ranking has candidates to sort.
+        fetch_limit = max(int(limit), 200) if primary else int(limit)
         query = (f'SELECT user_interest.user_interest_id, user_interest.name, '
                  f'user_interest.taxonomy_type FROM user_interest WHERE {where} '
-                 f'LIMIT {int(limit)}')
+                 f'LIMIT {fetch_limit}')
 
         def _call_ui():
             ga = client.get_service('GoogleAdsService')
@@ -114,7 +130,10 @@ def list_audiences(ad_account, kind='in_market', keyword='', limit=50):
                 ui = r.user_interest
                 out.append({'id': str(ui.user_interest_id), 'name': ui.name,
                             'type': ui.taxonomy_type.name, 'kind': kind})
-            return out
+            if all_stems:
+                low = [s.lower() for s in all_stems]
+                out.sort(key=lambda a: -sum(s in a['name'].lower() for s in low))
+            return out[:int(limit)]
         return _run(_call_ui, context=f'list {kind} audiences')
 
     if kind == 'custom':
