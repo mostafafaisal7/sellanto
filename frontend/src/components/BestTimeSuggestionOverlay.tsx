@@ -128,7 +128,7 @@ export function BestTimeSuggestionOverlay({ brandId, platform }: Props) {
           <div>
             <h3 className="font-semibold text-text-primary text-sm flex items-center gap-2">
               Best Posting Times
-              {timesUsedPrompt && <PromptInfoButton prompt={timesUsedPrompt} label="Best Times Computation Prompt" size="sm" onRegenerate={async (ep) => { setTimesRegenerating(true); try { const r = await calendarService.computeRecommendedTimes(brandId, selectedPlatform ? [selectedPlatform] : [], ep); if (r?.used_prompt) setTimesUsedPrompt(r.used_prompt); await loadBestTimes(); } catch {} setTimesRegenerating(false); }} regenerating={timesRegenerating} regenerateLabel="Recompute Times" />}
+              {timesUsedPrompt && <PromptInfoButton prompt={timesUsedPrompt} label="Best Times Computation Prompt" size="sm" onRegenerate={async (ep) => { setTimesRegenerating(true); try { const r = await calendarService.computeRecommendedTimes(brandId, selectedPlatform ? [selectedPlatform] : [], ep); if (r?.used_prompt) setTimesUsedPrompt(r.used_prompt); await loadBestTimes(); } catch (err) { console.error('Recompute times failed:', err); setError('Failed to recompute posting times'); } finally { setTimesRegenerating(false); } }} regenerating={timesRegenerating} regenerateLabel="Recompute Times" />}
             </h3>
             <p className="text-xs text-text-muted">
               Optimal time slots based on engagement data

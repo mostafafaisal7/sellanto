@@ -1661,7 +1661,7 @@ function TrendingSubStep({ brandId }: { brandId: number | null }) {
               <p className="text-xs text-primary-400/70 mt-0.5">Select topics for ideas &middot; Like/dislike to train AI</p>
             </div>
             <div className="flex items-center gap-3">
-              <button onClick={() => { selectedTrendingTopics.length === topics.length ? setSelectedTrendingTopics([]) : setSelectedTrendingTopics(topics.map((t) => t.topic)); }}
+              <button onClick={() => { if (selectedTrendingTopics.length === topics.length) { setSelectedTrendingTopics([]); } else { setSelectedTrendingTopics(topics.map((t) => t.topic)); } }}
                 className="text-xs text-primary-400 hover:text-primary-300 underline">
                 {selectedTrendingTopics.length === topics.length ? 'Deselect All' : 'Select All'}
               </button>

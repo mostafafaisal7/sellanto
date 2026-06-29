@@ -77,22 +77,25 @@ DEBUG = config('DJANGO_DEBUG', default=True, cast=bool)
 ALLOWED_HOSTS = [
     '127.0.0.1',
     'localhost',
+    'saleanto.com',
+    'www.saleanto.com',
     'abedintechllc.com',
     'www.abedintechllc.com',
     'yourbrandstar.com',
     'www.yourbrandstar.com',
     'lorilee-neediest-zina.ngrok-free.dev',
     'frances-vegetative-vincent.ngrok-free.dev',
-
 ]
 
 CSRF_TRUSTED_ORIGINS = [
+    'https://saleanto.com',
+    'https://www.saleanto.com',
     'https://abedintechllc.com',
     'https://www.abedintechllc.com',
     'https://yourbrandstar.com',
     'https://www.yourbrandstar.com',
     'https://lorilee-neediest-zina.ngrok-free.dev',
-    'https://frances-vegetative-vincent.ngrok-free.dev'
+    'https://frances-vegetative-vincent.ngrok-free.dev',
 ]
 
 # ─── Reverse-proxy awareness ──────────────────────────────────────────
@@ -406,9 +409,13 @@ SIMPLE_JWT = {
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:3000',
     'http://127.0.0.1:3000',
+    'https://saleanto.com',
+    'https://www.saleanto.com',
     'https://abedintechllc.com',
     'https://www.abedintechllc.com',
     'https://lorilee-neediest-zina.ngrok-free.dev',
+    'https://saleanto.com',
+    'https://www.saleanto.com',
 ]
 
 CORS_ALLOW_CREDENTIALS = True

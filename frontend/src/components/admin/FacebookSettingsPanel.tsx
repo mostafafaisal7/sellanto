@@ -213,9 +213,10 @@ export function FacebookSettingsPanel() {
         </div>
         <button
           onClick={async () => {
+            setError('');
             try {
               const token = localStorage.getItem('access_token');
-              await fetch('/api/v1/admin/facebook-settings/', {
+              const res = await fetch('/api/v1/admin/facebook-settings/', {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
@@ -225,8 +226,17 @@ export function FacebookSettingsPanel() {
                   messenger_feature_enabled: !s.messenger_feature_enabled,
                 }),
               });
+              if (!res.ok) {
+                throw new Error(`Request failed with status ${res.status}`);
+              }
               await load();
-            } catch {}
+            } catch (err) {
+              setError(
+                err instanceof Error
+                  ? `Failed to toggle Messenger feature: ${err.message}`
+                  : 'Failed to toggle Messenger feature.'
+              );
+            }
           }}
           className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
             s.messenger_feature_enabled ? 'bg-green-500' : 'bg-slate-600'

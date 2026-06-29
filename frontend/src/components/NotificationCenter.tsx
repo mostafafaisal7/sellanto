@@ -80,8 +80,8 @@ export function NotificationCenter() {
       await notificationService.markRead(id);
       setNotifications(notifications.map(n => n.id === id ? { ...n, is_read: true } : n));
       setUnreadCount(Math.max(0, unreadCount - 1));
-    } catch {
-      // Silent fail
+    } catch (err) {
+      console.error('Failed to mark notification as read:', err);
     }
   };
 
@@ -90,8 +90,8 @@ export function NotificationCenter() {
       await notificationService.markAllRead();
       setNotifications(notifications.map(n => ({ ...n, is_read: true })));
       setUnreadCount(0);
-    } catch {
-      // Silent fail
+    } catch (err) {
+      console.error('Failed to mark all notifications as read:', err);
     }
   };
 
@@ -101,8 +101,8 @@ export function NotificationCenter() {
       const n = notifications.find(x => x.id === id);
       setNotifications(notifications.filter(x => x.id !== id));
       if (n && !n.is_read) setUnreadCount(Math.max(0, unreadCount - 1));
-    } catch {
-      // Silent fail
+    } catch (err) {
+      console.error('Failed to delete notification:', err);
     }
   };
 

@@ -286,7 +286,7 @@ export function MessengerBotPage() {
       const data = await messengerService.getWebsiteStatus(selectedConnection.id);
       setWebsiteStatus(data);
       if (data.website_url) setWebsiteUrlInput(data.website_url);
-    } catch (error) {
+    } catch {
       // Website status may not exist - that's fine
     }
   };
@@ -461,7 +461,7 @@ export function MessengerBotPage() {
         const products = await messengerService.getProducts(selectedConnection.id);
         setEcomProducts(products);
       }
-    } catch (error) {
+    } catch {
       // E-Commerce settings may not exist yet - that's fine
     } finally {
       setEcomLoading(false);

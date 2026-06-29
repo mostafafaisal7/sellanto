@@ -795,7 +795,7 @@ export function StrategyHubPage() {
                 <h3 className="text-lg font-semibold text-gray-200 flex items-center gap-2">
                   <ChartPieIcon className="w-5 h-5 text-primary-400" />
                   Pillar Distribution
-                  {pillarsUsedPrompt && <PromptInfoButton prompt={pillarsUsedPrompt} label="Content Pillars Generation Prompt" regenerating={pillarsRegenerating} regenerateLabel="Regenerate Pillars" onRegenerate={async (ep) => { if (!brandId) return; setPillarsRegenerating(true); try { const focusAreas = pillarGenFocusAreas.split(',').map(s => s.trim()).filter(Boolean); const r = await strategyService.generatePillars(brandId, pillarGenCount, focusAreas, ep); if (r?.used_prompt) setPillarsUsedPrompt(r.used_prompt); if (r?.provider) setPillarsProvider(r.provider); if (r?.model_used) setPillarsModelUsed(r.model_used); loadData(); } catch {} setPillarsRegenerating(false); }} promptHistory={pillarsHistory.history} onLoadHistory={pillarsHistory.load} historyLoading={pillarsHistory.loading} />}
+                  {pillarsUsedPrompt && <PromptInfoButton prompt={pillarsUsedPrompt} label="Content Pillars Generation Prompt" regenerating={pillarsRegenerating} regenerateLabel="Regenerate Pillars" onRegenerate={async (ep) => { if (!brandId) return; setPillarsRegenerating(true); try { const focusAreas = pillarGenFocusAreas.split(',').map(s => s.trim()).filter(Boolean); const r = await strategyService.generatePillars(brandId, pillarGenCount, focusAreas, ep); if (r?.used_prompt) setPillarsUsedPrompt(r.used_prompt); if (r?.provider) setPillarsProvider(r.provider); if (r?.model_used) setPillarsModelUsed(r.model_used); loadData(); } catch (err) { console.error('Pillar regeneration failed:', err); } finally { setPillarsRegenerating(false); } }} promptHistory={pillarsHistory.history} onLoadHistory={pillarsHistory.load} historyLoading={pillarsHistory.loading} />}
                 </h3>
                 <span className="text-xs text-gray-400">
                   {compliance.total_posts} total post{compliance.total_posts !== 1 ? 's' : ''}
@@ -1105,9 +1105,11 @@ export function StrategyHubPage() {
                     if (result.used_prompt) setSuggestUsedPrompt(result.used_prompt);
                     setShowSuggestModal(true);
                   } catch (err) {
+                    console.error('Failed to suggest competitors:', err);
                     setAnalysisError('Failed to suggest competitors');
+                  } finally {
+                    setSuggestingCompetitors(false);
                   }
-                  setSuggestingCompetitors(false);
                 }}
                 disabled={suggestingCompetitors}
                 className="btn-secondary flex items-center gap-2"

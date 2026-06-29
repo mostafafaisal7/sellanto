@@ -162,8 +162,8 @@ export function IdeasHubPage() {
       if (result.ideas && result.ideas.length > 0) {
         const newIdea = result.ideas[0];
         setIdeas(ideas.map(i => i.id === ideaId ? { ...newIdea } : i));
-        // Delete old idea from DB
-        try { await api.delete(`/content-ideas/${ideaId}/`); } catch {}
+        // Delete old idea from DB (best-effort cleanup; non-blocking)
+        try { await api.delete(`/content-ideas/${ideaId}/`); } catch (err) { console.error('Failed to delete old idea after regeneration:', err); }
         setSuccess('Idea regenerated!');
         setTimeout(() => setSuccess(null), 3000);
       }

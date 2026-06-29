@@ -217,6 +217,7 @@ export default function ConnectAccountsPage() {
         setManualError(Object.values(err).flat().join(', ') || 'Connection failed. Please check your credentials.');
       }
     } catch (error) {
+      console.error('Manual platform connection failed:', error);
       setManualError('Server connection error. Please try again later.');
     } finally {
       setIsSubmitting(false);
@@ -237,7 +238,7 @@ export default function ConnectAccountsPage() {
         showToast.success('Platform disconnected.');
       }
     } catch (error) {
-      console.error('Disconnect failed');
+      console.error('Disconnect failed:', error);
     } finally {
       setIsDisconnecting(false);
     }
