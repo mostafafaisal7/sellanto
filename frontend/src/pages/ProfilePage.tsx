@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { motion } from 'framer-motion';
 import {
   UserCircleIcon,
+  AtSymbolIcon,
   CameraIcon,
   EnvelopeIcon,
   PhoneIcon,
@@ -23,6 +24,13 @@ import { authFetch } from '../services/api';
 import { toast } from '../store/toastStore';
 
 const profileSchema = z.object({
+  username: z.union([
+    z.literal(''),
+    z.string()
+      .min(3, 'At least 3 characters')
+      .max(30, 'Max 30 characters')
+      .regex(/^[a-zA-Z0-9_]+$/, 'Letters, numbers, and underscores only'),
+  ]).optional(),
   first_name: z.string().min(1, 'First name is required'),
   last_name: z.string().min(1, 'Last name is required'),
   email: z.string().email('Invalid email address'),
@@ -54,7 +62,7 @@ const planFeatures: Record<string, string[]> = {
 
 export function ProfilePage() {
   const navigate = useNavigate();
-  const { user } = useAuthStore();
+  const { user, fetchUser } = useAuthStore();
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
@@ -65,6 +73,7 @@ export function ProfilePage() {
   const profileForm = useForm<ProfileFormData>({
     resolver: zodResolver(profileSchema),
     defaultValues: {
+      username: '',
       first_name: user?.first_name || '',
       last_name: user?.last_name || '',
       email: user?.email || '',
@@ -79,20 +88,27 @@ export function ProfilePage() {
 
   const onSaveProfile = async (data: ProfileFormData) => {
     try {
-      // API call to update profile
+      const payload = { ...data };
+      if (!payload.username) delete payload.username;
       const response = await authFetch('/api/v1/auth/me/', {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${localStorage.getItem('access_token')}`,
         },
-        body: JSON.stringify(data),
+        body: JSON.stringify(payload),
       });
       if (response.ok) {
+        await fetchUser();
         setProfileSaved(true);
         setIsEditingProfile(false);
         toast.success('Profile updated!');
         setTimeout(() => setProfileSaved(false), 3000);
+        return;
+      }
+      const body = await response.json().catch(() => ({} as Record<string, string[]>));
+      if (body?.username) {
+        profileForm.setError('username', { message: body.username[0] });
       }
     } catch (error) {
       console.error('Failed to update profile:', error);
@@ -212,6 +228,15 @@ export function ProfilePage() {
             </div>
 
             <form onSubmit={profileForm.handleSubmit(onSaveProfile)} className="space-y-4">
+              <Input
+                label="Username"
+                placeholder="your_username"
+                disabled={!isEditingProfile}
+                leftIcon={<AtSymbolIcon className="w-5 h-5 text-text-muted" />}
+                error={profileForm.formState.errors.username?.message}
+                {...profileForm.register('username')}
+              />
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Input
                   label="First Name"

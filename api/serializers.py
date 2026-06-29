@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
+from django.core.validators import RegexValidator
 from accounts.models import UserProfile, SystemNotification, UserRole
 from posts.models import (
     Post, PostCaption, PostHashtag, HashtagGroup,
@@ -305,6 +306,8 @@ class PostSerializer(serializers.ModelSerializer):
     platforms = serializers.SerializerMethodField()
     media_files = serializers.SerializerMethodField()
     platform_results = serializers.SerializerMethodField()
+    comment_count = serializers.SerializerMethodField()
+    unreplied_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Post
@@ -319,6 +322,7 @@ class PostSerializer(serializers.ModelSerializer):
             'source',
             'hook',
             'ai_generated',
+            'caption_generation_id',
             'created_at',
             'updated_at',
             'posted_at',
@@ -329,12 +333,20 @@ class PostSerializer(serializers.ModelSerializer):
             'instagram_post_id',
             'twitter_post_id',
             'linkedin_post_id',
+            'comment_count',
+            'unreplied_count',
         ]
         read_only_fields = [
             'id', 'ai_generated', 'created_at', 'updated_at', 'posted_at',
             'facebook_post_id', 'instagram_post_id',
             'twitter_post_id', 'linkedin_post_id',
         ]
+
+    def get_comment_count(self, obj):
+        return obj.comments.count()
+
+    def get_unreplied_count(self, obj):
+        return obj.comments.filter(reply_body__isnull=True).count()
 
     def get_platforms(self, obj):
         try:
@@ -494,8 +506,20 @@ class UserDetailSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'is_staff', 'is_active', 'date_joined']
 
 
+_username_validator = RegexValidator(
+    r'^[a-zA-Z0-9_]+$',
+    'Username can only contain letters, numbers, and underscores.'
+)
+
+
 class UpdateProfileSerializer(serializers.Serializer):
     """Serializer for updating user profile"""
+    username = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        min_length=0,
+        max_length=150,
+    )
     first_name = serializers.CharField(required=False)
     last_name = serializers.CharField(required=False)
     email = serializers.EmailField(required=False)
@@ -1318,6 +1342,9 @@ class CopyOverlayGenerateSerializer(serializers.Serializer):
     brand_id = serializers.IntegerField(required=False)
     caption_text = serializers.CharField(required=False, default='')
     image_description = serializers.CharField(required=False, default='')
+    # The engineered visual prompt (from visual_prompt_builder) so copy text
+    # is grounded in what the image will actually show, not a generic context.
+    visual_prompt = serializers.CharField(required=False, default='')
     cta_text = serializers.CharField(required=False, default='')
     idea_context = serializers.CharField(required=False, default='')
     trending_topics = serializers.CharField(required=False, default='')

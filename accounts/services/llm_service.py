@@ -334,7 +334,16 @@ class UnifiedLLMService:
                            response_format, thinking_budget=0, tools=None) -> LLMResponse:
         try:
             import anthropic
-            client = anthropic.Anthropic(api_key=self.claude_key)
+            import httpx as _httpx
+            # Extended thinking requires an unbounded timeout — the SDK raises a
+            # pre-flight error if the client has a finite timeout and thinking is on.
+            if thinking_budget >= 1024:
+                client = anthropic.Anthropic(
+                    api_key=self.claude_key,
+                    timeout=_httpx.Timeout(None),
+                )
+            else:
+                client = anthropic.Anthropic(api_key=self.claude_key)
 
             # Convert OpenAI-format messages to Anthropic format
             system_text, claude_messages = self._to_claude_messages(messages)
@@ -359,11 +368,13 @@ class UnifiedLLMService:
 
             # Extended thinking: when budget >= 1024, enable thinking mode
             if thinking_budget >= 1024:
-                params['thinking'] = {
-                    'type': 'enabled',
-                    'budget_tokens': thinking_budget,
-                }
-                # API requirement: temperature must be omitted when thinking
+                params['thinking'] = {'type': 'adaptive'}
+                if thinking_budget >= 10000:
+                    params['output_config'] = {'effort': 'high'}
+                elif thinking_budget >= 3000:
+                    params['output_config'] = {'effort': 'medium'}
+                else:
+                    params['output_config'] = {'effort': 'low'}
                 # Also ensure max_tokens > thinking_budget
                 if max_tokens <= thinking_budget:
                     params['max_tokens'] = thinking_budget + max_tokens

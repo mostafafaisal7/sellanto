@@ -22,7 +22,11 @@ import {
   ChatBubbleBottomCenterTextIcon,
   ArrowUpCircleIcon,
   ChartBarSquareIcon,
+  ChatBubbleLeftRightIcon,
+  HashtagIcon,
+  UserGroupIcon,
   MegaphoneIcon,
+  PhotoIcon,
 } from '@heroicons/react/24/outline';
 import { useAuthStore } from '../../store';
 
@@ -81,6 +85,16 @@ const mainNavItems: NavItem[] = [
   { name: 'Calendar', href: '/calendar', icon: CalendarDaysIcon },
   { name: 'Connect Account', href: '/platforms', icon: LinkIcon },
   { name: 'Google Ads', href: '/google-ads', icon: MegaphoneIcon },
+  {
+    name: 'Engage', href: '#engage', icon: ChatBubbleLeftRightIcon,
+    children: [
+      { name: 'Comments', href: '/comments', icon: ChatBubbleLeftRightIcon },
+      { name: 'Instagram Content', href: '/instagram-content', icon: PhotoIcon },
+      { name: 'Discover', href: '/discover', icon: HashtagIcon },
+      { name: 'Leads', href: '/leads', icon: UserGroupIcon },
+      { name: 'Ads', href: '/ads', icon: MegaphoneIcon },
+    ],
+  },
 ];
 
 const settingsNavItems: NavItem[] = [

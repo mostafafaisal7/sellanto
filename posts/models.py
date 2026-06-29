@@ -69,6 +69,13 @@ class Post(models.Model):
         help_text='Links Magic Mode post to its corresponding Draft post for "Add to Calendar" flow'
     )
 
+    # Caption generation linkage — persists the CaptionGeneration DB ID so feedback
+    # regeneration works even after the in-memory Zustand store is cleared on page reload.
+    caption_generation_id = models.IntegerField(
+        null=True, blank=True,
+        help_text='ID of the CaptionGeneration record that produced this post caption'
+    )
+
     # V1.2.1 - Draft/Strategy fields
     idea = models.ForeignKey(
         'brands.ContentIdea', on_delete=models.SET_NULL,
@@ -222,6 +229,26 @@ class Post(models.Model):
         """Check if all required checklist items are complete"""
         required = ['caption', 'platform_mapping']
         return all(self.checklist_status.get(k, False) for k in required)
+
+
+class Comment(models.Model):
+    post         = models.ForeignKey('Post', on_delete=models.CASCADE, related_name='comments')
+    platform     = models.CharField(max_length=20)
+    external_id  = models.CharField(max_length=200, unique=True)
+    author_name  = models.CharField(max_length=200, default='User')
+    author_avatar= models.URLField(blank=True, null=True)
+    body         = models.TextField()
+    sentiment    = models.CharField(max_length=20, default='neutral')
+    created_at   = models.DateTimeField()
+    reply_body   = models.TextField(blank=True, null=True)
+    reply_type   = models.CharField(max_length=20, blank=True, null=True)
+    replied_at   = models.DateTimeField(blank=True, null=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.author_name} on Post {self.post_id}: {self.body[:50]}"
 
 
 class MagicModeCache(models.Model):

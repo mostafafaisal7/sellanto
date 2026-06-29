@@ -78,7 +78,7 @@ export function DashboardPage() {
   return (
     <div className="max-w-7xl mx-auto">
       {/* Welcome Section */}
-      <WelcomeSection username={user?.username || 'User'} />
+      <WelcomeSection username={`${user?.first_name || ''} ${user?.last_name || ''}`.trim() || user?.username || 'User'} />
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">

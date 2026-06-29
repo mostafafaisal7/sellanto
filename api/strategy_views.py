@@ -1004,8 +1004,34 @@ class RegenerateIdeaView(APIView):
             pillar_context = f", Content Pillar: {idea.pillar.name}"
 
         additional_instructions = request.data.get("instructions", "")
+        # Structured feedback category lets us give the LLM targeted guidance
+        # instead of a vague string-interpolated instruction.
+        feedback_category = request.data.get('feedback_category', '')  # topic | image | tone | other
         override_prompt = request.data.get('override_prompt', '')
         think_harder = request.data.get('think_harder', False)
+
+        # Build category-specific regeneration constraint
+        category_instruction = ''
+        if feedback_category == 'topic':
+            category_instruction = (
+                "5. TOPIC CHANGE: The new idea must be about a COMPLETELY DIFFERENT "
+                "topic — not related to the original at all. Pick a fresh theme from "
+                "the brand's content pillars."
+            )
+        elif feedback_category == 'tone':
+            category_instruction = (
+                "5. TONE CHANGE: Keep the same topic but change the tone dramatically. "
+                "If the original was inspirational, make the new version factual or "
+                "humorous. If it was educational, make it emotional or conversational."
+            )
+        elif feedback_category == 'image':
+            category_instruction = (
+                "5. VISUAL DIRECTION: Keep the topic but change the visual framing. "
+                "Think about a different scene, setting, or visual metaphor that would "
+                "illustrate the same message in a fresh way."
+            )
+        elif additional_instructions:
+            category_instruction = f"5. FOLLOW these additional instructions: {additional_instructions}"
 
         prompt = f"""<task>
 Regenerate this content idea with a completely fresh creative direction.
@@ -1031,7 +1057,7 @@ Think step by step:
    - Different angle (if original was educational, try emotional or contrarian)
    - Different emotional appeal (if original used curiosity, try FOMO or empathy)
 4. WRITE the new version — it should feel like it came from a different creative team.
-{f'5. FOLLOW these additional instructions: {additional_instructions}' if additional_instructions else ''}
+{category_instruction}
 </instructions>
 
 <output_format>

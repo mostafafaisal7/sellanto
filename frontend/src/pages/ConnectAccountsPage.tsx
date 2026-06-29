@@ -12,6 +12,8 @@ import {
   BoltIcon,
   CpuChipIcon,
   QuestionMarkCircleIcon,
+  CheckIcon,
+  ChevronDownIcon,
 } from '@heroicons/react/24/outline';
 import { Button, Modal, ConfirmModal, Spinner, PlatformIcon, platformColors, platformNames } from '../components/ui';
 import type { SocialAccount, PlatformType } from '../types';
@@ -131,6 +133,9 @@ export default function ConnectAccountsPage() {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [messengerEnabled, setMessengerEnabled] = useState(true);
   const [adRefreshKey, setAdRefreshKey] = useState(0);
+  const [pageMetaList, setPageMetaList] = useState<Array<{ id: string; name: string; category: string; about: string; website: string; phone: string; loading?: boolean }>>([]);
+  const [pageMetaExpanded, setPageMetaExpanded] = useState<string | null>(null);
+  const [pageMetaEdit, setPageMetaEdit] = useState<Record<string, Record<string, string>>>({});
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -160,6 +165,15 @@ export default function ConnectAccountsPage() {
       }
       // Re-fetch ad accounts each time FB connection state changes
       setAdRefreshKey((k) => k + 1);
+
+      // Fetch Page Metadata (pages_manage_metadata)
+      try {
+        const pmRes = await authFetch('/api/v1/platforms/facebook/pages/metadata/', { headers });
+        if (pmRes.ok) {
+          const pmData = await pmRes.json();
+          setPageMetaList(pmData.pages || []);
+        }
+      } catch { /* no-op — endpoint may not exist yet */ }
     } catch (error) {
       console.error('Failed to fetch data:', error);
     } finally {
@@ -458,6 +472,127 @@ export default function ConnectAccountsPage() {
           "Auto-discovered from your Facebook connection. Once you connect Facebook with ads permissions, your Meta Business Suite ad accounts appear here and become available for boost-post campaigns."
         )}
         <AdAccountsStatus refreshKey={adRefreshKey} />
+      </section>
+
+      {/* PAGE METADATA — pages_manage_metadata */}
+      <section>
+        {renderSectionHeader(
+          "🏷️",
+          "Page Metadata",
+          "View and update your Facebook Page details — name, category, description, website, and phone — directly from SellAnto using the pages_manage_metadata permission."
+        )}
+
+        {/* Permission badge */}
+        <div className="flex items-start gap-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4 mb-5">
+          <ShieldCheckIcon className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-emerald-300">pages_manage_metadata active</p>
+            <p className="text-xs text-emerald-400/80 mt-0.5">
+              SellAnto can read and update your connected Facebook Pages' public metadata — keeping your page info accurate without leaving the platform.
+            </p>
+          </div>
+        </div>
+
+        {pageMetaList.length === 0 ? (
+          <div className="rounded-xl border border-white/8 bg-[#1A1A2E] p-8 text-center">
+            <InformationCircleIcon className="w-10 h-10 text-text-muted mx-auto mb-3" />
+            <p className="text-sm font-medium text-text-primary">No Facebook Pages found</p>
+            <p className="text-xs text-text-muted mt-1">Connect your Facebook account above to see your Pages here.</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {pageMetaList.map((page) => {
+              const isOpen = pageMetaExpanded === page.id;
+              const draft = pageMetaEdit[page.id] || {};
+
+              const save = async () => {
+                const token = localStorage.getItem('access_token');
+                try {
+                  await authFetch(`/api/v1/platforms/facebook/pages/${page.id}/metadata/`, {
+                    method: 'PATCH',
+                    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify(draft),
+                  });
+                  setPageMetaList((prev) => prev.map((p) => p.id === page.id ? { ...p, ...draft } : p));
+                  setPageMetaEdit((prev) => { const n = { ...prev }; delete n[page.id]; return n; });
+                  showToast.success('Page metadata updated');
+                } catch {
+                  showToast.error('Failed to update page metadata');
+                }
+              };
+
+              return (
+                <div key={page.id} className="rounded-xl border border-white/10 bg-[#1A1A2E] overflow-hidden">
+                  <button
+                    className="w-full flex items-center gap-3 p-4 text-left hover:bg-white/5 transition-colors"
+                    onClick={() => setPageMetaExpanded(isOpen ? null : page.id)}
+                  >
+                    <div className="w-9 h-9 rounded-lg bg-blue-500/20 flex items-center justify-center shrink-0">
+                      <span className="text-blue-400 font-bold text-sm">{page.name?.[0]?.toUpperCase() ?? 'P'}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-text-primary truncate">{page.name}</p>
+                      <p className="text-xs text-text-muted">{page.category || 'Uncategorized'}</p>
+                    </div>
+                    <ChevronDownIcon className={`w-4 h-4 text-text-muted transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  <AnimatePresence initial={false}>
+                    {isOpen && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="overflow-hidden"
+                      >
+                        <div className="px-4 pb-4 pt-1 space-y-3 border-t border-white/8">
+                          {[
+                            { key: 'name', label: 'Page Name' },
+                            { key: 'category', label: 'Category' },
+                            { key: 'about', label: 'About / Description' },
+                            { key: 'website', label: 'Website' },
+                            { key: 'phone', label: 'Phone' },
+                          ].map(({ key, label }) => (
+                            <div key={key}>
+                              <label className="text-[10px] font-semibold text-text-muted uppercase tracking-wider block mb-1">{label}</label>
+                              <div className="flex items-center gap-2">
+                                <input
+                                  value={draft[key] ?? (page as unknown as Record<string, string>)[key] ?? ''}
+                                  onChange={(e) => setPageMetaEdit((prev) => ({
+                                    ...prev,
+                                    [page.id]: { ...(prev[page.id] || {}), [key]: e.target.value },
+                                  }))}
+                                  className="flex-1 px-3 py-2 bg-[#0E0E1A] border border-white/10 rounded-lg text-sm text-text-primary placeholder-text-muted focus:outline-none focus:border-coral/50"
+                                  placeholder={`Enter ${label.toLowerCase()}…`}
+                                />
+                              </div>
+                            </div>
+                          ))}
+                          <div className="flex justify-end gap-2 pt-1">
+                            <button
+                              onClick={() => setPageMetaEdit((prev) => { const n = { ...prev }; delete n[page.id]; return n; })}
+                              className="px-3 py-1.5 rounded-lg text-xs text-text-muted border border-white/10 hover:text-text-primary hover:border-white/20 transition-colors"
+                            >
+                              Reset
+                            </button>
+                            <button
+                              onClick={save}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-coral text-white font-medium hover:bg-coral/90 transition-colors"
+                            >
+                              <CheckIcon className="w-3.5 h-3.5" />
+                              Save Changes
+                            </button>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </section>
 
       {/* SECONDARY & ROADMAP ENGINES */}

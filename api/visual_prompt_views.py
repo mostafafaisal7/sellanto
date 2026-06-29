@@ -19,6 +19,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from brands.models import Brand
+from posts.services.magic_prompt_builder import MagicPromptBuilder
 from posts.services.visual_prompt_builder import (
     ImageVisualPromptBuilder,
     VideoVisualPromptBuilder,
@@ -128,6 +129,61 @@ class BuildImageVisualPromptView(APIView):
             fallback=fallback,
         )
         return Response({'prompt': rich})
+
+
+class BuildMagicPromptView(APIView):
+    """Unified caption + visual prompt generator for the Magic Link pipeline.
+
+    POST /visual-prompt/magic/
+
+    Payload:
+    {
+      "brand_id":        int,
+      "idea":            {"title": str, "hook"?: str, "angle"?: str},
+      "platform":        str,
+      "tone":            str,
+      "questions_answers": {"industry": str, "goal": str, "tone": str,
+                            "platforms": [...], "colors": [...]},
+      "trending_topics": [str, ...],
+      "color_choices":   [str, ...],
+      "product_context": {"product_type": str, "features": str,
+                          "background_style": str} | null,
+      "has_product_image": bool,
+      "with_copy":       bool,
+      "overlay_text":    str,
+      "content_type":    "image" | "video",
+      "fallback_caption": str,
+      "fallback_prompt":  str
+    }
+
+    Response: {"caption": str, "hashtags": [str], "prompt": str}
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        d = request.data
+        brand = _resolve_brand(request.user, d.get('brand_id'))
+        if brand is None:
+            return Response({'error': 'Brand not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        result = MagicPromptBuilder.build(
+            user=request.user,
+            brand=brand,
+            idea=d.get('idea') or {},
+            platform=(d.get('platform') or 'instagram').strip().lower(),
+            tone=(d.get('tone') or 'professional').strip(),
+            questions_answers=d.get('questions_answers') or {},
+            trending_topics=d.get('trending_topics') or [],
+            color_choices=d.get('color_choices') or [],
+            product_context=d.get('product_context') or None,
+            has_product_image=_truthy(d.get('has_product_image', False)),
+            with_copy=_truthy(d.get('with_copy', False)),
+            overlay_text=(d.get('overlay_text') or '').strip(),
+            content_type=(d.get('content_type') or 'image').strip().lower(),
+            fallback_caption=(d.get('fallback_caption') or '').strip(),
+            fallback_prompt=(d.get('fallback_prompt') or '').strip(),
+        )
+        return Response(result)
 
 
 class BuildVideoVisualPromptView(APIView):

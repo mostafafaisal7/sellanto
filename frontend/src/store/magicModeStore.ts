@@ -53,7 +53,7 @@ export interface MagicIdeaData {
 }
 
 export interface MagicCaptionData {
-  captionId: number;
+  captionId?: number;
   ideaId: number;
   text: string;
   platform: string;

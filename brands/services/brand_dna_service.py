@@ -4,6 +4,8 @@ Crawls a brand's website, extracts text, chunks it, and creates embeddings
 for use as additional RAG knowledge alongside PDF documents.
 """
 
+import base64
+import io
 import logging
 import re
 import time
@@ -170,6 +172,174 @@ class BrandDNAService:
                 break
 
         return chunks
+
+    def crawl_full_website(self, base_url: str, max_pages: int = 40) -> Dict:
+        """
+        Full website crawl that collects both text content and image URLs.
+        Returns {pages: [{url, title, content}], image_urls: [list of absolute URLs]}
+        """
+        parsed_base = urlparse(base_url)
+        base_domain = parsed_base.netloc
+
+        visited = set()
+        to_visit = [base_url]
+        pages = []
+        image_urls = []
+        seen_images = set()
+
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (compatible; SocialSyncBot/1.0; Brand DNA Crawler)'
+        }
+
+        # Patterns to skip for images
+        skip_img_patterns = re.compile(
+            r'\.(css|js|zip|tar|gz|ico|svg|woff|woff2|ttf|eot|pdf|mp4|mp3|webm)$',
+            re.IGNORECASE
+        )
+
+        while to_visit and len(pages) < max_pages:
+            url = to_visit.pop(0)
+            url = url.split('#')[0].rstrip('/')
+            if url in visited:
+                continue
+            visited.add(url)
+
+            try:
+                response = requests.get(url, headers=headers, timeout=15, allow_redirects=True)
+                if response.status_code != 200:
+                    continue
+                content_type = response.headers.get('Content-Type', '')
+                if 'text/html' not in content_type:
+                    continue
+
+                soup = BeautifulSoup(response.text, 'html.parser')
+
+                # Collect image URLs before removing tags
+                for img in soup.find_all('img', src=True):
+                    src = img.get('src', '')
+                    if src:
+                        full = urljoin(url, src).split('?')[0].split('#')[0]
+                        if full not in seen_images and not skip_img_patterns.search(full):
+                            seen_images.add(full)
+                            image_urls.append(full)
+
+                # Also collect srcset images
+                for tag in soup.find_all(['img', 'source'], srcset=True):
+                    for part in tag.get('srcset', '').split(','):
+                        src = part.strip().split(' ')[0]
+                        if src:
+                            full = urljoin(url, src).split('?')[0].split('#')[0]
+                            if full not in seen_images and not skip_img_patterns.search(full):
+                                seen_images.add(full)
+                                image_urls.append(full)
+
+                # CSS background-image extraction
+                for style_tag in soup.find_all('style'):
+                    for match in re.finditer(r'url\(["\']?([^)"\']+)["\']?\)', style_tag.string or ''):
+                        src = match.group(1)
+                        full = urljoin(url, src).split('?')[0].split('#')[0]
+                        if full not in seen_images and not skip_img_patterns.search(full):
+                            seen_images.add(full)
+                            image_urls.append(full)
+
+                # Remove noise tags before text extraction
+                for tag in soup(['script', 'style', 'noscript', 'iframe']):
+                    tag.decompose()
+
+                title = ''
+                if soup.title and soup.title.string:
+                    title = soup.title.string.strip()
+
+                main_content = soup.find('main') or soup.find('article') or soup.find('body')
+                text = main_content.get_text(separator='\n', strip=True) if main_content else soup.get_text(separator='\n', strip=True)
+                text = self._clean_text(text)
+
+                if len(text) > 100:
+                    pages.append({'url': url, 'title': title, 'content': text})
+                    logger.info(f"Crawled: {url} ({len(text)} chars, {len(image_urls)} imgs so far)")
+
+                # Discover same-domain links
+                for link in soup.find_all('a', href=True):
+                    href = link['href']
+                    full_url = urljoin(url, href).split('#')[0].rstrip('/')
+                    parsed = urlparse(full_url)
+                    if (parsed.netloc == base_domain
+                            and full_url not in visited
+                            and parsed.scheme in ('http', 'https')
+                            and not self._should_skip_url(full_url)):
+                        to_visit.append(full_url)
+
+                time.sleep(0.3)
+
+            except Exception as e:
+                logger.warning(f"Error crawling {url}: {e}")
+                continue
+
+        logger.info(f"Full crawl complete: {len(pages)} pages, {len(image_urls)} images from {base_domain}")
+        return {'pages': pages, 'image_urls': image_urls}
+
+    def download_brand_images(self, image_urls: List[str], max_count: int = 25) -> List[Dict]:
+        """
+        Download, filter, resize, and base64-encode brand images for visual analysis.
+        Skips icons (<80px), oversized files (>3MB), and non-image responses.
+        Returns [{url, base64, width, height, mime_type}]
+        """
+        try:
+            from PIL import Image as PILImage
+        except ImportError:
+            logger.warning("Pillow not installed — skipping image download")
+            return []
+
+        results = []
+        for url in image_urls:
+            if len(results) >= max_count:
+                break
+            try:
+                resp = requests.get(url, timeout=10, headers={
+                    'User-Agent': 'Mozilla/5.0 (compatible; SocialSyncBot/1.0)'
+                })
+                if resp.status_code != 200:
+                    continue
+                if len(resp.content) > 3 * 1024 * 1024:  # skip >3MB
+                    continue
+                content_type = resp.headers.get('Content-Type', '')
+                if not content_type.startswith('image/'):
+                    continue
+
+                img = PILImage.open(io.BytesIO(resp.content))
+                w, h = img.size
+                if w < 80 or h < 80:  # skip icons
+                    continue
+
+                # Resize to max 1024px on longest side
+                if max(w, h) > 1024:
+                    scale = 1024 / max(w, h)
+                    img = img.resize((int(w * scale), int(h * scale)), PILImage.Resampling.LANCZOS)
+                    w, h = img.size
+
+                # Convert to RGB PNG
+                if img.mode not in ('RGB', 'RGBA'):
+                    img = img.convert('RGB')
+
+                buf = io.BytesIO()
+                img.convert('RGB').save(buf, format='PNG', optimize=True)
+                encoded = base64.b64encode(buf.getvalue()).decode('utf-8')
+
+                results.append({
+                    'url': url,
+                    'base64': encoded,
+                    'width': w,
+                    'height': h,
+                    'mime_type': 'image/png',
+                })
+                logger.info(f"Downloaded image: {url} ({w}×{h})")
+
+            except Exception as e:
+                logger.warning(f"Failed to download image {url}: {e}")
+                continue
+
+        logger.info(f"Downloaded {len(results)} brand images")
+        return results
 
     def generate_brand_dna(self, brand) -> Dict:
         """

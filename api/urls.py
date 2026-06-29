@@ -539,6 +539,7 @@ urlpatterns = [
     # into a single rich prompt before image/video generation.
     path('visual-prompt/image/', visual_prompt_views.BuildImageVisualPromptView.as_view(), name='api-visual-prompt-image'),
     path('visual-prompt/video/', visual_prompt_views.BuildVideoVisualPromptView.as_view(), name='api-visual-prompt-video'),
+    path('visual-prompt/magic/', visual_prompt_views.BuildMagicPromptView.as_view(), name='api-visual-prompt-magic'),
 
     # Magic Mode History
     path('magic/history/', views.MagicHistoryView.as_view(), name='api-magic-history'),
@@ -553,6 +554,24 @@ urlpatterns = [
          views.MagicModeCachedPostsView.as_view(), name='api-magic-cached-posts-custom'),
     path('magic/posts/<str:industry>/<str:goal>/<str:tone>/<str:platforms>/<str:colors>/',
          views.MagicModeCachedPostsView.as_view(), name='api-magic-cached-posts'),
+
+    # Leads management (pages_read_engagement, leads_retrieval)
+    path('leads/forms/', views.LeadsFormsView.as_view(), name='leads-forms'),
+    path('leads/forms/<str:form_id>/submissions/', views.LeadsSubmissionsView.as_view(), name='leads-submissions'),
+    path('leads/sync/', views.LeadsSyncView.as_view(), name='leads-sync'),
+
+    # Instagram content management (instagram_manage_insights, instagram_content_publish)
+    path('instagram/content/', views.InstagramContentView.as_view(), name='instagram-content'),
+    path('instagram/content/<str:media_id>/archive/', views.InstagramContentArchiveView.as_view(), name='instagram-content-archive'),
+
+    # Facebook page metadata (pages_manage_metadata)
+    path('platforms/facebook/pages/metadata/', views.FacebookPagesMetadataView.as_view(), name='fb-pages-metadata'),
+    path('platforms/facebook/pages/<str:page_id>/metadata/', views.FacebookPageMetadataUpdateView.as_view(), name='fb-page-metadata-update'),
+
+    # Comment inbox (pages_read_user_content, instagram_manage_comments)
+    path('posts/<int:post_id>/comments/', views.PostCommentsView.as_view(), name='post-comments'),
+    path('comments/<int:comment_id>/reply/', views.CommentReplyView.as_view(), name='comment-reply'),
+    path('comments/<int:comment_id>/ai-reply/', views.CommentAIReplyView.as_view(), name='comment-ai-reply'),
 
     # Paid ads automation (Meta + Google Ads) — mounted under /api/v1/ads/
     path('ads/', include('ads.urls')),

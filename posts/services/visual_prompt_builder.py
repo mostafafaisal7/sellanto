@@ -71,6 +71,10 @@ IMAGE_SYSTEM_PROMPT = (
     "Hard rules:\n"
     "- Anchor every visual choice to the caption's subject. If the caption "
     "talks about Mondays, the image must read 'Monday'.\n"
+    "- If the brand DNA includes visual_style, color_palette_hex, visual_mood, "
+    "or photography_style fields, ALWAYS use them to set the aesthetic. These "
+    "come from real images of the brand — they are the ground truth for how "
+    "this brand looks.\n"
     "- Honour the brand voice and colour palette.\n"
     "- Reference trending themes only when they reinforce the post.\n"
     "- Lead with the dominant visual subject (a person, an object, a "
@@ -121,6 +125,19 @@ class ImageVisualPromptBuilder:
                 f"Treat your prompt as the BACKGROUND / setting — keep the centre "
                 f"empty for the product. Do NOT describe the product itself.\n"
             )
+        else:
+            # Fall back to products_services from brand DNA so images represent
+            # the actual business even when no product image was uploaded.
+            dna_products = _dna_field(dna, 'products_services')
+            if dna_products:
+                product_block = (
+                    f"\n<key_products>\n"
+                    f"{dna_products[:400]}\n"
+                    f"</key_products>\n\n"
+                    f"INSTRUCTION: The image MUST visually feature or represent the "
+                    f"product/service listed in <key_products>. Do not show generic "
+                    f"objects — show the specific offering relevant to the caption.\n"
+                )
 
         # Text-overlay block — explicit signal to the LLM about whether the
         # image must carry on-image text or stay purely visual.
@@ -146,6 +163,23 @@ class ImageVisualPromptBuilder:
                 "</text_overlay>\n"
             )
 
+        # Visual DNA fields (populated by deep crawl with image analysis)
+        _visual_style = _dna_field(dna, 'visual_style')
+        _color_palette_hex = _dna_field(dna, 'color_palette_hex')
+        _visual_mood = _dna_field(dna, 'visual_mood')
+        _photography_style = _dna_field(dna, 'photography_style')
+        _image_subjects = _dna_field(dna, 'image_subjects')
+
+        _visual_block = ''
+        if any([_visual_style, _color_palette_hex, _visual_mood, _photography_style]):
+            _visual_block = (
+                f"visual_style: {_visual_style or '—'}\n"
+                f"color_palette_hex: {_color_palette_hex or '—'}\n"
+                f"visual_mood: {_visual_mood or '—'}\n"
+                f"photography_style: {_photography_style or '—'}\n"
+                f"image_subjects: {_image_subjects or '—'}\n"
+            )
+
         return f"""<brand>
 name: {brand_name or '—'}
 industry: {industry or '—'}
@@ -155,7 +189,7 @@ target_audience: {_dna_field(dna, 'target_audience') or '—'}
 brand_values: {_dna_field(dna, 'brand_values') or '—'}
 brand_color_theme: {_dna_field(dna, 'color_theme') or '—'}
 keywords: {_dna_field(dna, 'keywords') or '—'}
-</brand>
+{_visual_block}</brand>
 
 <content_idea>
 title: {idea.get('title') or '—'}
@@ -312,6 +346,29 @@ class VideoVisualPromptBuilder:
                 "describe the product itself.\n"
             )
 
+        dna_products = _dna_field(dna, 'products_services')
+        products_section = ''
+        if not has_reference_image and dna_products:
+            products_section = (
+                f"\n<key_products>\n{dna_products[:400]}\n</key_products>\n"
+                f"INSTRUCTION: Feature or represent this product/service visually — "
+                f"not a generic scene.\n"
+            )
+
+        # Visual DNA fields for video
+        _v_visual_style = _dna_field(dna, 'visual_style')
+        _v_color_hex = _dna_field(dna, 'color_palette_hex')
+        _v_visual_mood = _dna_field(dna, 'visual_mood')
+        _v_photo_style = _dna_field(dna, 'photography_style')
+        _v_visual_block = ''
+        if any([_v_visual_style, _v_color_hex, _v_visual_mood, _v_photo_style]):
+            _v_visual_block = (
+                f"visual_style: {_v_visual_style or '—'}\n"
+                f"color_palette_hex: {_v_color_hex or '—'}\n"
+                f"visual_mood: {_v_visual_mood or '—'}\n"
+                f"photography_style: {_v_photo_style or '—'}\n"
+            )
+
         return f"""<user_seed_prompt>
 {(user_prompt or '—').strip()[:1000]}
 </user_seed_prompt>
@@ -323,7 +380,7 @@ voice: {_dna_field(dna, 'brand_voice') or '—'}
 target_audience: {_dna_field(dna, 'target_audience') or '—'}
 brand_values: {_dna_field(dna, 'brand_values') or '—'}
 brand_color_theme: {_dna_field(dna, 'color_theme') or '—'}
-</brand>
+{_v_visual_block}</brand>{products_section}
 
 <creative_idea>
 title: {idea.get('title') or '—'}

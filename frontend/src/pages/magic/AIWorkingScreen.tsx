@@ -3,12 +3,67 @@ import { useMagicModeStore, type MagicPost, type MagicCaptionData } from '../../
 import { useAuthStore } from '../../store';
 import api from '../../services/api';
 import strategyService from '../../services/strategyService';
-import captionService from '../../services/captionService';
 import imageService from '../../services/imageService';
 import hashtagService from '../../services/hashtagService';
 import visualPromptService from '../../services/visualPromptService';
 import type { ContentIdea, CaptionTone, CaptionPlatform } from '../../types';
 import { buildMagicCacheKey } from './cacheUtils';
+
+type ErrorInfo = {
+  icon: string;
+  title: string;
+  message: string;
+  actionUrl?: string;
+  actionLabel?: string;
+};
+
+function classifyError(raw: string): ErrorInfo {
+  const r = raw.toLowerCase();
+
+  if (r.includes('prepayment') || r.includes('credits') || r.includes('billing') || r.includes('resource_exhausted')) {
+    return {
+      icon: '💳',
+      title: 'AI Credits Depleted',
+      message:
+        'Your Google AI Studio prepayment credits have run out. Top up your balance to keep generating posts.',
+      actionUrl: 'https://aistudio.google.com/app/billing',
+      actionLabel: 'Manage Credits',
+    };
+  }
+  if (r.includes('quota') || r.includes('rate limit') || r.includes('too many requests')) {
+    return {
+      icon: '⏳',
+      title: 'Rate Limit Reached',
+      message: 'The AI service is handling too many requests right now. Wait a moment and try again.',
+    };
+  }
+  if (r.includes('api key') || r.includes('unauthenticated') || r.includes('invalid key') || r.includes('unauthorized')) {
+    return {
+      icon: '🔑',
+      title: 'Authentication Failed',
+      message: 'The AI service API key is invalid or missing. Please contact support to resolve this.',
+    };
+  }
+  if (r.includes('getaddrinfo') || r.includes('nameresolution') || r.includes('failed to resolve') || r.includes('connection refused')) {
+    return {
+      icon: '📡',
+      title: 'Connection Error',
+      message: 'Unable to reach the AI service. Please check your internet connection and try again.',
+    };
+  }
+  if (r.includes('timeout') || r.includes('timed out')) {
+    return {
+      icon: '⏱️',
+      title: 'Request Timed Out',
+      message: 'Image generation took too long. This is usually temporary — please try again.',
+    };
+  }
+  return {
+    icon: '⚠️',
+    title: 'Generation Failed',
+    message: 'Something went wrong while creating your posts. This is usually temporary — please try again.',
+  };
+}
 
 const STEPS = [
   { emoji: '🌐', label: 'Reading your website', desc: 'Understanding your brand identity...', estimatedMs: 3000 },
@@ -122,28 +177,59 @@ export function AIWorkingScreen({ onComplete, onStop }: AIWorkingScreenProps) {
           // Non-fatal — continue without logo
         }
       }
+      // Fallback: use an existing logo BrandAsset if none was uploaded this session
+      if (!brandLogoId) {
+        try {
+          const assetsRes = await api.get(`/brand-assets/?brand=${brandId}&asset_type=logo`);
+          const assets = Array.isArray(assetsRes.data)
+            ? assetsRes.data
+            : (assetsRes.data?.results || []);
+          if (assets.length > 0) {
+            brandLogoId = (assets[0].id as number) || null;
+          }
+        } catch {
+          // Non-fatal — continue without logo
+        }
+      }
       if (cancelledRef.current) return;
 
-      // Step 1: Generate DNA (if URL provided, not skipped, and brand has no existing DNA)
+      // Step 1: Generate DNA (if URL provided and brand lacks sufficient DNA)
       setStep(1);
-      if (store.websiteUrl && !store.skipDNAGeneration) {
-        try {
-          // Check if brand already has DNA before generating to avoid duplicate work
-          const brandDetail = await api.get(`/brands/${brandId}/`);
-          const existingDNA = brandDetail.data?.brand_dna;
-          const hasDNA = existingDNA && typeof existingDNA === 'object' && Object.keys(existingDNA).length > 0;
+      // Always fetch brand detail here so downstream steps can use brand DNA
+      // for product context, colour palette, etc.
+      let brandDNA: Record<string, unknown> = {};
+      try {
+        const brandDetail = await api.get(`/brands/${brandId}/`);
+        brandDNA = brandDetail.data?.brand_dna || {};
+      } catch {
+        // Non-fatal — proceed with empty DNA
+      }
 
-          if (hasDNA) {
-            console.log('[AIWorkingScreen] Brand already has DNA - skipping regeneration');
+      const REQUIRED_DNA_FIELDS = ['brand_voice', 'target_audience', 'products_services', 'brand_values'];
+      const hasSufficientDNA =
+        Object.keys(brandDNA).length > 0 &&
+        REQUIRED_DNA_FIELDS.some(
+          (f) => brandDNA[f] && String(brandDNA[f]).trim().length > 5
+        );
+
+      if (store.websiteUrl && (!store.skipDNAGeneration || !hasSufficientDNA)) {
+        try {
+          if (hasSufficientDNA) {
+            console.log('[AIWorkingScreen] Brand already has sufficient DNA - skipping regeneration');
           } else {
             console.log('[AIWorkingScreen] Generating DNA for brand:', brandId);
             await strategyService.generateDNA(brandId, store.websiteUrl);
+            // Re-fetch DNA after generation
+            try {
+              const refreshed = await api.get(`/brands/${brandId}/`);
+              brandDNA = refreshed.data?.brand_dna || {};
+            } catch { /* ignore */ }
           }
         } catch {
           // Non-fatal — continue without DNA
         }
-      } else if (store.skipDNAGeneration) {
-        console.log('[AIWorkingScreen] Skipping DNA generation - skipDNAGeneration flag set');
+      } else if (store.skipDNAGeneration && hasSufficientDNA) {
+        console.log('[AIWorkingScreen] Skipping DNA generation - brand has sufficient DNA');
       }
       if (cancelledRef.current) return;
 
@@ -181,7 +267,8 @@ export function AIWorkingScreen({ onComplete, onStop }: AIWorkingScreenProps) {
       );
       if (cancelledRef.current) return;
 
-      // Step 4: Generate captions for each idea
+      // Steps 4+5 (combined): MagicPromptBuilder generates caption + image/video
+      // prompt in one Claude Opus call using full context (brand DNA, Q&A, trending).
       setStep(4);
       const toneMap: Record<string, CaptionTone> = {
         'professional & authoritative': 'professional',
@@ -192,7 +279,6 @@ export function AIWorkingScreen({ onComplete, onStop }: AIWorkingScreenProps) {
       };
       const toneAnswer = store.answers.tone ? String(store.answers.tone).toLowerCase() : '';
       const captionTone: CaptionTone = toneMap[toneAnswer] || 'professional';
-      // Build user-selected platforms list — enforce these instead of backend's idea.platform
       const rawPlatforms = store.answers.platforms;
       const userPlatforms: CaptionPlatform[] = Array.isArray(rawPlatforms) && rawPlatforms.length > 0
         ? rawPlatforms.map((p: string) => p.replace(' / X', '').toLowerCase() as CaptionPlatform)
@@ -200,73 +286,69 @@ export function AIWorkingScreen({ onComplete, onStop }: AIWorkingScreenProps) {
 
       const posts: MagicPost[] = [];
       const captionsAccum: MagicCaptionData[] = [];
+      // Per-post enriched prompts from MagicPromptBuilder (used in image generation below).
+      const magicPrompts: (string | null)[] = [];
       const slicedIdeas = ideas.slice(0, count);
       for (let idx = 0; idx < slicedIdeas.length; idx++) {
         const idea = slicedIdeas[idx];
         if (cancelledRef.current) return;
 
-        // Use user's selected platform(s) via round-robin; fall back to idea.platform or 'linkedin'
         const captionPlatform: CaptionPlatform = userPlatforms.length > 0
           ? userPlatforms[idx % userPlatforms.length]
           : (idea.platform?.toLowerCase() as CaptionPlatform) || 'linkedin';
         const displayPlatform = captionPlatform.charAt(0).toUpperCase() + captionPlatform.slice(1);
 
-        try {
-          const caption = await captionService.generate({
-            topic: idea.title + (idea.hook ? ': ' + idea.hook : ''),
-            tone: captionTone,
-            length: 'medium',
-            platform: captionPlatform,
-            include_hashtags: true,
-            include_emojis: true,
-            include_cta: true,
-          });
+        // Build fallback strings in case the LLM call fails.
+        const fallbackCaption = idea.hook || 'Caption could not be generated. Click "Give feedback" to retry.';
+        const fallbackPrompt = `Create a professional social media image for: "${idea.title}". ${idea.hook || ''}`;
 
-          // 🆕 The caption API returns hashtags in a SEPARATE field
-          // (`generated_hashtags`) — merge them into the caption text now so
-          // the final post.caption already carries the hashtags. Mirrors the
-          // pattern in MagicHistoryPage.tsx:337-341 and VideoResultScreen.tsx:227.
-          const generatedBody = (caption.generated_caption || '').trim();
-          const generatedHashtags = (caption.generated_hashtags || '').trim();
-          const mergedCaption = generatedHashtags && !generatedBody.includes('#')
-            ? `${generatedBody}\n\n${generatedHashtags}`
-            : generatedBody;
+        const magicResult = await visualPromptService.buildMagicPrompt({
+          brand_id: brandId,
+          idea: { title: idea.title, hook: idea.hook || '', angle: idea.angle || '' },
+          platform: captionPlatform,
+          tone: captionTone,
+          questions_answers: {
+            industry: store.answers.industry ? String(store.answers.industry) : undefined,
+            goal: store.answers.goal ? String(store.answers.goal) : undefined,
+            tone: store.answers.tone ? String(store.answers.tone) : undefined,
+            platforms: Array.isArray(store.answers.platforms)
+              ? store.answers.platforms.map(String)
+              : store.answers.platforms ? [String(store.answers.platforms)] : [],
+            colors: Array.isArray(store.answers.colors)
+              ? store.answers.colors.map(String)
+              : store.answers.colors ? [String(store.answers.colors)] : [],
+          },
+          trending_topics: trendingTopics,
+          color_choices: [],  // resolved per-post below after colorChoices is built
+          fallback_caption: fallbackCaption,
+          fallback_prompt: fallbackPrompt,
+        });
 
-          posts.push({
-            id: idea.id,
-            title: idea.title,
-            platform: displayPlatform,
-            imageOverlay: idea.title,
-            imageStyle: idea.hook || idea.angle || '',
-            caption: mergedCaption,
-            status: 'ready' as const,
-            captionId: caption.id,
-            ideaId: idea.id,
-          });
-          captionsAccum.push({
-            captionId: caption.id,
-            ideaId: idea.id,
-            text: mergedCaption,
-            platform: captionPlatform,
-          });
-        } catch {
-          // Skip failed caption generation, still include the idea
-          posts.push({
-            id: idea.id,
-            title: idea.title,
-            platform: displayPlatform,
-            imageOverlay: idea.title,
-            imageStyle: idea.hook || idea.angle || '',
-            caption: idea.hook || 'Caption could not be generated. Click "Give feedback" to retry.',
-            status: 'ready' as const,
-            ideaId: idea.id,
-          });
-        }
+        const caption = magicResult?.caption || fallbackCaption;
+        const enrichedPrompt = magicResult?.prompt || null;
+        magicPrompts.push(enrichedPrompt);
+
+        posts.push({
+          id: idea.id,
+          title: idea.title,
+          platform: displayPlatform,
+          imageOverlay: idea.title,
+          imageStyle: idea.hook || idea.angle || '',
+          caption,
+          status: 'ready' as const,
+          ideaId: idea.id,
+        });
+        captionsAccum.push({
+          captionId: undefined,
+          ideaId: idea.id,
+          text: caption,
+          platform: captionPlatform,
+        });
       }
       store.setCaptionsData(captionsAccum);
       if (cancelledRef.current) return;
 
-      // Step 5: Generate images for each post
+      // Step 5: Generate images for each post (prompts already built in step 4 via MagicPromptBuilder)
       setStep(5);
 
       // Copy/text-overlay toggle (from the `include_copy` magic-mode question).
@@ -357,33 +439,15 @@ export function AIWorkingScreen({ onComplete, onStop }: AIWorkingScreenProps) {
 
             const fallbackProductPrompt = `Professional empty ${backgroundStyle} photography studio background for a social media post about "${post.title}". The background setting should complement a ${productType} with features: ${productFeatures}. The visual style is ${post.imageStyle}.${colorHint} IMPORTANT: The center of the image must be completely empty as a product will be placed there. Do NOT generate the product itself.`;
 
-            // 🆕 Ask the backend to synthesise brand DNA + idea + caption +
-            // trending into one focused prompt. Falls back to the template
-            // literal if the LLM call fails.
-            const richProductPrompt = await visualPromptService.buildImagePrompt({
-              brand_id: brandId,
-              idea: { title: post.title, hook: post.imageStyle, platform: post.platform.toLowerCase() },
-              caption: post.caption || captionsAccum[i]?.text || '',
-              platform: post.platform.toLowerCase(),
-              color_choices: colorChoices,
-              trending_topics: trendingTopics,
-              image_style_hint: post.imageStyle,
-              with_copy: wantsCopy,
-              copy_text: wantsCopy ? post.title : undefined,
-              product_context: {
-                product_type: productType,
-                features: productFeatures,
-                background_style: backgroundStyle,
-              },
-            });
-            const productPrompt = richProductPrompt || fallbackProductPrompt;
+            // Use the prompt already generated by MagicPromptBuilder (step 4).
+            const productPrompt = magicPrompts[i] || fallbackProductPrompt;
 
             const imgReq: Parameters<typeof imageService.generate>[0] = {
               prompt: productPrompt,
               title: post.title,
               provider: 'gemini',
               style: 'modern',
-              enhance_prompt: true,
+              enhance_prompt: false,
               product_image: productImage,
               product_type: productType,
               background_style: backgroundStyle,
@@ -420,26 +484,13 @@ export function AIWorkingScreen({ onComplete, onStop }: AIWorkingScreenProps) {
             const post = posts[i];
             const fallbackAiPrompt = `Create a professional social media image for: "${post.title}". ${post.imageStyle}${colorHint}`;
 
-            // 🆕 Synthesise brand DNA + idea + caption + trending into a
-            // focused prompt. Falls back to the template literal if the
-            // LLM call fails.
-            const richAiPrompt = await visualPromptService.buildImagePrompt({
-              brand_id: brandId,
-              idea: { title: post.title, hook: post.imageStyle, platform: post.platform.toLowerCase() },
-              caption: post.caption || captionsAccum[i]?.text || '',
-              platform: post.platform.toLowerCase(),
-              color_choices: colorChoices,
-              trending_topics: trendingTopics,
-              image_style_hint: post.imageStyle,
-              with_copy: wantsCopy,
-              copy_text: wantsCopy ? post.title : undefined,
-            });
+            // Use the prompt already generated by MagicPromptBuilder (step 4).
             const imgReq: Parameters<typeof imageService.generate>[0] = {
-              prompt: richAiPrompt || fallbackAiPrompt,
+              prompt: magicPrompts[i] || fallbackAiPrompt,
               title: post.title,
               provider: 'gemini',
               style: 'modern',
-              enhance_prompt: true,
+              enhance_prompt: false,
               with_copy: wantsCopy,
             };
             if (wantsCopy) imgReq.copy_text = post.title;
@@ -490,6 +541,18 @@ export function AIWorkingScreen({ onComplete, onStop }: AIWorkingScreenProps) {
         }
       }
 
+      // Pre-populate localStorage so ResultsScreen's auto-save guard finds these
+      // posts and skips re-creation (prevents duplicate posts 403/404).
+      if (savedPostIds.length > 0) {
+        const draftMap: Record<string, { draftId: number; imageUrl: string | null }> = {};
+        posts.forEach((p) => {
+          if (p.id && savedPostIds.includes(p.id as number)) {
+            draftMap[String(p.id)] = { draftId: p.id as number, imageUrl: p.imageUrl || null };
+          }
+        });
+        localStorage.setItem('magic_draft_post_ids', JSON.stringify(draftMap));
+      }
+
       // 🗃️ Save cache mapping to enable "Previous Posts" button reuse
       // CRITICAL FIX: Use unified cache key + include userId + set flag ONLY on success
       if (savedPostIds.length > 0) {
@@ -502,9 +565,20 @@ export function AIWorkingScreen({ onComplete, onStop }: AIWorkingScreenProps) {
           // ✅ Use unified cache key generation (matches MagicModePage lookup)
           const { cacheKey } = buildMagicCacheKey(store.answers, store.customAnswers, userId);
 
+          // Build caption_ids mapping so feedback works after page reload
+          // (captionId lives in Zustand in-memory; persisting it to Post lets
+          //  the backend find the correct CaptionGeneration record later).
+          const captionIdsMap: Record<string, number> = {};
+          posts.forEach((p) => {
+            if (p.id && p.captionId) {
+              captionIdsMap[String(p.id)] = p.captionId;
+            }
+          });
+
           // ✅ Include userId in URL for backend validation
           await api.post(`/magic/posts/${userId}/${cacheKey}/`, {
             post_ids: savedPostIds,
+            caption_ids: captionIdsMap,
           });
 
           console.log(`[AIWorkingScreen] ✅ Cache saved: ${cacheKey} → ${savedPostIds.length} posts`);
@@ -652,25 +726,70 @@ export function AIWorkingScreen({ onComplete, onStop }: AIWorkingScreenProps) {
       <div className="relative z-10 flex flex-col items-center max-w-[520px] w-full">
         {/* Error state */}
         {error ? (
-          <>
-            <div className="text-[64px] mb-4">❌</div>
-            <h2 className="text-[24px] font-extrabold text-text-primary text-center mb-2">
-              Something went wrong
-            </h2>
-            <p className="text-[14px] text-text-secondary text-center mb-6 max-w-[400px]">
-              {error}
-            </p>
-            <button
-              onClick={handleRetry}
-              className="px-6 py-3 rounded-[14px] text-[15px] font-bold text-white"
-              style={{
-                background: 'linear-gradient(135deg, rgb(var(--c-coral)), rgb(var(--c-coral-hover)))',
-                boxShadow: 'var(--shadow-glow-coral)',
-              }}
-            >
-              Try Again
-            </button>
-          </>
+          <div className="flex flex-col items-center w-full">
+            {(() => {
+              const info = classifyError(error);
+              return (
+                <>
+                  {/* Icon */}
+                  <div
+                    className="w-[80px] h-[80px] rounded-[28px] flex items-center justify-center text-[38px] mb-5"
+                    style={{
+                      background: 'rgba(255,255,255,0.05)',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.07)',
+                    }}
+                  >
+                    {info.icon}
+                  </div>
+
+                  <h2 className="text-[22px] font-extrabold text-text-primary text-center mb-2">
+                    {info.title}
+                  </h2>
+
+                  <p className="text-[13px] text-text-secondary text-center mb-7 max-w-[340px] leading-relaxed">
+                    {info.message}
+                  </p>
+
+                  <div className="flex flex-col gap-3 w-full max-w-[260px]">
+                    {info.actionUrl && (
+                      <a
+                        href={info.actionUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-6 py-3 rounded-[14px] text-[14px] font-bold text-white text-center transition-opacity hover:opacity-90"
+                        style={{
+                          background: 'linear-gradient(135deg, rgb(var(--c-coral)), rgb(var(--c-coral-hover)))',
+                          boxShadow: 'var(--shadow-glow-coral)',
+                        }}
+                      >
+                        {info.actionLabel} →
+                      </a>
+                    )}
+                    <button
+                      onClick={handleRetry}
+                      className="px-6 py-3 rounded-[14px] text-[14px] font-bold transition-opacity hover:opacity-90"
+                      style={
+                        info.actionUrl
+                          ? {
+                              background: 'rgba(255,255,255,0.06)',
+                              color: 'rgba(255,255,255,0.55)',
+                              border: '1px solid rgba(255,255,255,0.1)',
+                            }
+                          : {
+                              background: 'linear-gradient(135deg, rgb(var(--c-coral)), rgb(var(--c-coral-hover)))',
+                              boxShadow: 'var(--shadow-glow-coral)',
+                              color: 'white',
+                            }
+                      }
+                    >
+                      Try Again
+                    </button>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
         ) : (
           <>
             {/* Thinking dots */}
