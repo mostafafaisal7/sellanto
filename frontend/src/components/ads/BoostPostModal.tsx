@@ -58,6 +58,7 @@ export function BoostPostModal({ isOpen, onClose, onSuccess, preselectedPost }: 
   const [country, setCountry] = useState<string>('BD');
   const [ageMin, setAgeMin] = useState<string>('18');
   const [ageMax, setAgeMax] = useState<string>('65');
+  const [gender, setGender] = useState<'all' | 'male' | 'female'>('all');
 
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<{ type: 'success' | 'error'; message: string; campaign?: AdCampaign } | null>(null);
@@ -136,6 +137,8 @@ export function BoostPostModal({ isOpen, onClose, onSuccess, preselectedPost }: 
           geo_locations: { countries: [country] },
           age_min: parseInt(ageMin, 10),
           age_max: parseInt(ageMax, 10),
+          // Meta genders: 1 = male, 2 = female; omit for all.
+          ...(gender === 'male' ? { genders: [1] } : gender === 'female' ? { genders: [2] } : {}),
         },
         confirm_live: confirmLive,
       });
@@ -380,6 +383,22 @@ export function BoostPostModal({ isOpen, onClose, onSuccess, preselectedPost }: 
                   <label className="block text-[11px] font-bold text-text-muted uppercase tracking-widest mb-2">Age Max</label>
                   <input required type="number" min="13" max="65" value={ageMax} onChange={(e) => setAgeMax(e.target.value)}
                     className="w-full bg-dark-900/60 border border-white/10 rounded-xl px-4 py-3 text-text-primary text-sm focus:border-primary/50 outline-none" />
+                </div>
+              </div>
+
+              {/* Gender */}
+              <div>
+                <label className="block text-[11px] font-bold text-text-muted uppercase tracking-widest mb-2">Gender</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(['all', 'male', 'female'] as const).map((g) => (
+                    <button key={g} type="button" onClick={() => setGender(g)}
+                      className={`py-2 rounded-lg text-xs font-semibold capitalize transition-colors ${
+                        gender === g ? 'bg-purple-500/20 text-purple-200 border border-purple-500/40'
+                          : 'bg-dark-900/60 text-text-muted border border-white/10 hover:border-white/20'
+                      }`}>
+                      {g}
+                    </button>
+                  ))}
                 </div>
               </div>
 

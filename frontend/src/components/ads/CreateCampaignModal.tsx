@@ -47,6 +47,7 @@ export function CreateCampaignModal({ isOpen, onClose, onSuccess }: Props) {
   const [country, setCountry] = useState('US');
   const [ageMin, setAgeMin] = useState('18');
   const [ageMax, setAgeMax] = useState('65');
+  const [gender, setGender] = useState<'all' | 'male' | 'female'>('all');
   const [activate, setActivate] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
@@ -86,6 +87,8 @@ export function CreateCampaignModal({ isOpen, onClose, onSuccess }: Props) {
           geo_locations: { countries: [country] },
           age_min: parseInt(ageMin, 10),
           age_max: parseInt(ageMax, 10),
+          // Meta genders: 1 = male, 2 = female; omit for all.
+          ...(gender === 'male' ? { genders: [1] } : gender === 'female' ? { genders: [2] } : {}),
         },
         activate,
         confirm_live: confirmLive,
@@ -225,6 +228,20 @@ export function CreateCampaignModal({ isOpen, onClose, onSuccess }: Props) {
               <label className="block text-xs font-semibold text-text-secondary mb-1.5">Age max</label>
               <input type="number" min="13" max="65" value={ageMax} onChange={(e) => setAgeMax(e.target.value)}
                 className="w-full bg-dark-900/60 border border-white/10 rounded-xl px-3 py-2.5 text-text-primary text-sm outline-none" />
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-text-secondary mb-1.5">Gender</label>
+            <div className="grid grid-cols-3 gap-2">
+              {(['all', 'male', 'female'] as const).map((g) => (
+                <button key={g} type="button" onClick={() => setGender(g)}
+                  className={`py-2 rounded-lg text-xs font-semibold capitalize transition-colors ${
+                    gender === g ? 'bg-purple-500/20 text-purple-200 border border-purple-500/40'
+                      : 'bg-dark-900/60 text-text-muted border border-white/10 hover:border-white/20'
+                  }`}>
+                  {g}
+                </button>
+              ))}
             </div>
           </div>
 
