@@ -987,6 +987,8 @@ def _auto_discover_ad_accounts(user, long_lived_token):
                     'name':           a.get('name', ''),
                     'currency_code':  a.get('currency', ''),
                     'timezone_name':  a.get('timezone_name', ''),
+                    'account_status': a.get('account_status'),
+                    'is_sandbox':     a.get('is_sandbox', False),
                     'business_id':    a.get('business_id', ''),
                     'encrypted_token': encrypted,
                     'is_active':      True,

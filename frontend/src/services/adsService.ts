@@ -13,6 +13,10 @@ export interface AdAccount {
   name: string;
   currency_code: string;
   timezone_name: string;
+  /** Meta account_status: 1 = live, 101 = sandbox/test, 2 = disabled, ... */
+  account_status?: number | null;
+  /** True for Meta sandbox (test) ad accounts — no real spend/delivery. */
+  is_sandbox?: boolean;
   is_active: boolean;
   last_synced_at: string | null;
   created_at: string;

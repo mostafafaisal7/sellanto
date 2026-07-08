@@ -72,16 +72,20 @@ def list_user_ad_accounts(user_access_token):
     Returns list of dicts: {id, account_id, name, currency, timezone_name, business_id}
     `id` is the full 'act_<digits>' form; `account_id` is bare digits.
     """
-    fields = 'id,account_id,name,currency,timezone_name,business'
+    fields = 'id,account_id,name,currency,timezone_name,account_status,business'
     body = _get('me/adaccounts', user_access_token, fields=fields, limit=100)
     out = []
     for a in body.get('data', []):
+        status = a.get('account_status')
         out.append({
             'id': a.get('id'),
             'account_id': a.get('account_id'),
             'name': a.get('name', ''),
             'currency': a.get('currency', ''),
             'timezone_name': a.get('timezone_name', ''),
+            'account_status': status,
+            # Meta marks sandbox/test accounts with account_status == 101.
+            'is_sandbox': status == 101,
             'business_id': (a.get('business') or {}).get('id', ''),
         })
     return out

@@ -57,6 +57,13 @@ class AdAccount(models.Model):
     # Meta-specific: business_id under which this ad account sits.
     business_id = models.CharField(max_length=64, blank=True)
 
+    # Meta account_status from the Graph API (1 = active/live, 101 = sandbox/test,
+    # 2 = disabled, ...). Stored so the UI can label test vs real accounts.
+    account_status = models.IntegerField(null=True, blank=True)
+    # True when this is a Meta sandbox (test) ad account — no real spend/delivery.
+    # Derived from account_status == 101 at discovery time.
+    is_sandbox = models.BooleanField(default=False)
+
     is_active = models.BooleanField(default=True)
     last_synced_at = models.DateTimeField(null=True, blank=True)
     sync_error = models.TextField(blank=True)

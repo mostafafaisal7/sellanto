@@ -98,9 +98,9 @@ export function AdAccountsStatus({ refreshKey = 0 }: Props) {
       <div className="flex items-start gap-3 bg-purple-500/10 border border-purple-500/20 rounded-xl p-3 mb-4">
         <CheckCircleIcon className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
         <div>
-          <p className="text-xs font-medium text-purple-300">business_management active</p>
+          <p className="text-xs font-medium text-purple-300">ads_management &amp; ads_read active</p>
           <p className="text-[10px] text-purple-400/80 mt-0.5">
-            SellAnto reads your Meta Business Manager account to associate ad accounts and pages with the correct business entity.
+            SellAnto reads your ad performance and manages campaigns on your connected Meta ad accounts. Sandbox (test) accounts are labelled below.
           </p>
         </div>
       </div>
@@ -143,8 +143,23 @@ export function AdAccountsStatus({ refreshKey = 0 }: Props) {
                     <CheckCircleIcon className="w-4 h-4 text-purple-300" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-sm font-semibold text-text-primary truncate">
-                      {acc.name || `Ad Account ${acc.external_id}`}
+                    <p className="text-sm font-semibold text-text-primary truncate flex items-center gap-2">
+                      <span className="truncate">{acc.name || `Ad Account ${acc.external_id}`}</span>
+                      {acc.is_sandbox ? (
+                        <span
+                          className="shrink-0 text-[9px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 font-bold uppercase tracking-wide"
+                          title="Meta sandbox ad account — test only, no real spend or delivery"
+                        >
+                          Sandbox
+                        </span>
+                      ) : acc.account_status != null ? (
+                        <span
+                          className="shrink-0 text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 font-bold uppercase tracking-wide"
+                          title="Live ad account — real campaigns spend real money"
+                        >
+                          Live
+                        </span>
+                      ) : null}
                     </p>
                     <p className="text-[10px] text-text-muted font-mono truncate">
                       act_{acc.external_id}
