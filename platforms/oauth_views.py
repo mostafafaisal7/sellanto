@@ -59,10 +59,13 @@ FB_SCOPES = ','.join([
     'pages_read_engagement',
     'instagram_basic',
     'instagram_content_publish',
-    'instagram_business_content_publish',
     'instagram_manage_comments',
     'instagram_manage_contents',
-    'instagram_manage_insights',
+    # Removed as invalid scopes (Meta rejects them on the consent screen):
+    #   - instagram_business_content_publish → not a real permission; use
+    #     instagram_content_publish (already above).
+    #   - instagram_manage_insights → not valid for this app and unused by
+    #     any code (IG insights are not exercised).
     # Lead Ads
     'leads_retrieval',
     # Ads
