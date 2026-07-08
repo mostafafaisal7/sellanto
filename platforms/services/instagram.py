@@ -194,10 +194,10 @@ class InstagramService:
             
             # Step 1: Upload to Facebook Page (unpublished)
             if is_video:
-                upload_url = f"https://graph.facebook.com/v18.0/{page_id}/videos"
+                upload_url = f"https://graph.facebook.com/v21.0/{page_id}/videos"
                 print(f"         Uploading VIDEO to Facebook...")
             else:
-                upload_url = f"https://graph.facebook.com/v18.0/{page_id}/photos"
+                upload_url = f"https://graph.facebook.com/v21.0/{page_id}/photos"
                 print(f"         Uploading IMAGE to Facebook...")
             
             with open(media_path, 'rb') as media_file:
@@ -236,7 +236,7 @@ class InstagramService:
                     time.sleep(10)  # Wait 10 seconds between checks
                     attempt += 1
                     
-                    video_info_url = f"https://graph.facebook.com/v18.0/{fb_media_id}?fields=source,permalink_url,status&access_token={page_access_token}"
+                    video_info_url = f"https://graph.facebook.com/v21.0/{fb_media_id}?fields=source,permalink_url,status&access_token={page_access_token}"
                     video_info_response = requests.get(video_info_url, timeout=30)
                     video_info = video_info_response.json()
                     
@@ -264,7 +264,7 @@ class InstagramService:
                 
                 # NOW get the video URL
                 print(f"         Getting video URL...")
-                video_info_url = f"https://graph.facebook.com/v18.0/{fb_media_id}?fields=source&access_token={page_access_token}"
+                video_info_url = f"https://graph.facebook.com/v21.0/{fb_media_id}?fields=source&access_token={page_access_token}"
                 video_info_response = requests.get(video_info_url, timeout=30)
                 video_info = video_info_response.json()
                 
@@ -280,7 +280,7 @@ class InstagramService:
                 
             else:
                 # For images
-                image_info_url = f"https://graph.facebook.com/v18.0/{fb_media_id}?fields=images&access_token={page_access_token}"
+                image_info_url = f"https://graph.facebook.com/v21.0/{fb_media_id}?fields=images&access_token={page_access_token}"
                 image_info_response = requests.get(image_info_url, timeout=30)
                 image_info = image_info_response.json()
                 
@@ -296,7 +296,7 @@ class InstagramService:
                 print(f"         [OK] Image URL: {media_url[:100]}...")
             
             # Step 3: Create Instagram container
-            container_url = f"https://graph.facebook.com/v18.0/{business_account_id}/media"
+            container_url = f"https://graph.facebook.com/v21.0/{business_account_id}/media"
             
             container_payload = {
                 'caption': caption,
@@ -332,7 +332,7 @@ class InstagramService:
             time.sleep(wait_time)
             
             # Check status WITH full error details
-            status_url = f"https://graph.facebook.com/v18.0/{container_id}?fields=status_code,status,error_message&access_token={access_token}"
+            status_url = f"https://graph.facebook.com/v21.0/{container_id}?fields=status_code,status,error_message&access_token={access_token}"
             status_response = requests.get(status_url, timeout=30)
             status_data = status_response.json()
             
@@ -379,7 +379,7 @@ class InstagramService:
                     return False, f'Instagram processing incomplete: {status_code}'
             
             # Step 5: Publish
-            publish_url = f"https://graph.facebook.com/v18.0/{business_account_id}/media_publish"
+            publish_url = f"https://graph.facebook.com/v21.0/{business_account_id}/media_publish"
             
             publish_payload = {
                 'creation_id': container_id,
@@ -418,7 +418,7 @@ class InstagramService:
             tuple: (success: bool, comment_id_or_error: str)
         """
         try:
-            url = f"https://graph.facebook.com/v18.0/{media_id}/comments"
+            url = f"https://graph.facebook.com/v21.0/{media_id}/comments"
             payload = {
                 'message': text,
                 'access_token': access_token,
@@ -446,7 +446,7 @@ class InstagramService:
             tuple: (success: bool, message: str)
         """
         try:
-            url = f"https://graph.facebook.com/v18.0/{media_id}"
+            url = f"https://graph.facebook.com/v21.0/{media_id}"
             params = {'access_token': access_token}
             response = requests.delete(url, params=params, timeout=30)
             data = response.json()
@@ -461,7 +461,7 @@ class InstagramService:
     def validate_credentials(access_token, business_account_id):
         """Validate Instagram credentials"""
         try:
-            url = f"https://graph.facebook.com/v18.0/{business_account_id}"
+            url = f"https://graph.facebook.com/v21.0/{business_account_id}"
             params = {
                 'fields': 'username,profile_picture_url',
                 'access_token': access_token

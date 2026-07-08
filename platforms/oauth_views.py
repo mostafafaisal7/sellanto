@@ -44,10 +44,14 @@ FB_AUTH_URL  = 'https://www.facebook.com/v21.0/dialog/oauth'
 FB_TOKEN_URL = f'{FB_GRAPH}/oauth/access_token'
 
 # Permissions for posting + Messenger + Instagram + Ads
-# Ads scopes (ads_management, ads_read, business_management, pages_manage_ads)
-# work in dev tier immediately for the app admin. For non-admin users they
-# require App Review approval (Advanced Access for ads_management) before
-# Meta will surface them on the consent screen for other accounts.
+# Ads scopes (ads_management, ads_read, pages_manage_ads) work in dev tier
+# immediately for the app admin. For non-admin users they require App Review
+# approval (Advanced Access for ads_management) before Meta will surface them
+# on the consent screen for other accounts.
+# NOTE: business_management is intentionally NOT requested — ad-account
+# discovery uses GET /me/adaccounts (authorized by ads_read/ads_management),
+# and the app has no Business Manager API calls. Re-add only if agency /
+# multi-client Business Manager features are built.
 FB_SCOPES = ','.join([
     'pages_show_list',
     'pages_manage_metadata',
@@ -64,7 +68,6 @@ FB_SCOPES = ','.join([
     # Ads
     'ads_management',
     'ads_read',
-    'business_management',
     'pages_manage_ads',
 ])
 

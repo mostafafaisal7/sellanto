@@ -152,7 +152,7 @@ class FacebookService:
         exchange it for the Page token automatically.
         """
         try:
-            url = f"https://graph.facebook.com/v18.0/debug_token"
+            url = f"https://graph.facebook.com/v21.0/debug_token"
             params = {'input_token': access_token, 'access_token': access_token}
             r = requests.get(url, params=params, timeout=10)
             data = r.json().get('data', {})
@@ -161,7 +161,7 @@ class FacebookService:
                 return access_token
 
             # It's a User token - exchange for Page token
-            page_url = f"https://graph.facebook.com/v18.0/{page_id}"
+            page_url = f"https://graph.facebook.com/v21.0/{page_id}"
             page_params = {'fields': 'access_token', 'access_token': access_token}
             r2 = requests.get(page_url, params=page_params, timeout=10)
             page_data = r2.json()
@@ -209,7 +209,7 @@ class FacebookService:
     @staticmethod
     def _post_text(page_id, access_token, message):
         """Post text only"""
-        url = f"https://graph.facebook.com/v18.0/{page_id}/feed"
+        url = f"https://graph.facebook.com/v21.0/{page_id}/feed"
         
         payload = {
             'message': message,
@@ -233,7 +233,7 @@ class FacebookService:
         provides it, so the result can be used for downstream features like
         Boost Ads. Falls back to the photo media `id` when `post_id` is absent.
         """
-        url = f"https://graph.facebook.com/v18.0/{page_id}/photos"
+        url = f"https://graph.facebook.com/v21.0/{page_id}/photos"
 
         try:
             with open(photo_path, 'rb') as photo:
@@ -264,7 +264,7 @@ class FacebookService:
         Same approach as _post_photo — prefer the feed post_id over the raw
         video media id, so boost-ads can target the published post.
         """
-        url = f"https://graph.facebook.com/v18.0/{page_id}/videos"
+        url = f"https://graph.facebook.com/v21.0/{page_id}/videos"
 
         try:
             with open(video_path, 'rb') as video:
@@ -288,9 +288,42 @@ class FacebookService:
             return False, str(e)
     
     @staticmethod
+    def delete_post(page_id, access_token, post_id):
+        """Delete a published Facebook Page post.
+
+        Exercises the `pages_manage_posts` delete capability via
+        `DELETE /{post-id}`. `post_id` is whatever the publish call returned
+        (a `<page_id>_<post_id>` feed id or a bare media id — both are
+        deletable with the Page token).
+
+        Returns:
+            (success: bool, message: str)
+        """
+        # Ensure we operate with a Page Access Token (delete requires it).
+        access_token = FacebookService._get_page_token(page_id, access_token)
+
+        url = f"https://graph.facebook.com/v21.0/{post_id}"
+        try:
+            response = requests.delete(
+                url, params={'access_token': access_token}, timeout=15
+            )
+            result = response.json()
+        except Exception as e:
+            return False, str(e)
+
+        if 'error' in result:
+            return False, result['error'].get('message', 'Unknown error')
+
+        # Graph returns {"success": true} on a successful delete. Some objects
+        # return the deleted id instead; treat a 2xx with no error as success.
+        if result.get('success') is False:
+            return False, 'Facebook reported the delete did not succeed.'
+        return True, 'Deleted'
+
+    @staticmethod
     def validate_credentials(page_id, access_token):
         """Validate credentials"""
-        url = f"https://graph.facebook.com/v18.0/{page_id}"
+        url = f"https://graph.facebook.com/v21.0/{page_id}"
         params = {
             'fields': 'id,name',
             'access_token': access_token

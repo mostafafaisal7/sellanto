@@ -1101,8 +1101,14 @@ class PostViewSet(viewsets.ModelViewSet):
         return Response(PostSerializer(post, context={'request': request}).data)
 
     def destroy(self, request, *args, **kwargs):
-        """Delete a post from Instagram (if published) and then from the local DB."""
+        """Delete a post from Instagram + Facebook (if published) and then from the local DB."""
         post = self.get_object()
+
+        # Phrases that mean the remote post is already gone — safe to proceed
+        # with the local delete instead of blocking on the API error.
+        _already_gone = ('does not exist', 'cannot be loaded',
+                         'unsupported get request', 'unsupported delete request',
+                         'not found', 'no longer available')
 
         if post.instagram_post_id:
             ig = SocialAccount.objects.filter(
@@ -1114,14 +1120,27 @@ class PostViewSet(viewsets.ModelViewSet):
                     ig.instagram_access_token, post.instagram_post_id
                 )
                 if not success:
-                    # If the media is already gone on Instagram, proceed with local delete.
-                    already_gone = any(
-                        phrase in (message or '').lower()
-                        for phrase in ('does not exist', 'cannot be loaded', 'unsupported get request', 'not found')
-                    )
+                    already_gone = any(p in (message or '').lower() for p in _already_gone)
                     if not already_gone:
                         return Response(
                             {'error': f'Could not delete from Instagram: {message}'},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+
+        if post.facebook_post_id:
+            fb = SocialAccount.objects.filter(
+                user=request.user, platform='facebook', is_active=True
+            ).first()
+            if fb and fb.facebook_access_token and fb.facebook_page_id:
+                from platforms.services.facebook import FacebookService
+                success, message = FacebookService.delete_post(
+                    fb.facebook_page_id, fb.facebook_access_token, post.facebook_post_id
+                )
+                if not success:
+                    already_gone = any(p in (message or '').lower() for p in _already_gone)
+                    if not already_gone:
+                        return Response(
+                            {'error': f'Could not delete from Facebook: {message}'},
                             status=status.HTTP_400_BAD_REQUEST,
                         )
 
