@@ -85,13 +85,16 @@ class Command(BaseCommand):
             )
 
         # ── instagram_basic ──────────────────────────────────────
+        # NOTE: the stored IG token is the linked Page token, so /me resolves
+        # to the Facebook Page (no media_count field). Query the IG business
+        # account id directly — that's the Instagram user node.
         if ig and ig.instagram_business_account_id:
             self._call(
-                label='instagram_basic → GET /me?fields=id,name,username,followers_count,media_count,account_type',
+                label='instagram_basic → GET /{ig-user-id}?fields=id,username,followers_count,media_count,profile_picture_url',
                 method='GET',
-                url=f"{GRAPH}/me",
+                url=f"{GRAPH}/{ig.instagram_business_account_id}",
                 params={
-                    'fields': 'id,name,username,followers_count,media_count,account_type',
+                    'fields': 'id,username,followers_count,media_count,profile_picture_url',
                     'access_token': ig.instagram_access_token,
                 },
             )
@@ -109,11 +112,15 @@ class Command(BaseCommand):
             )
 
         # ── pages_manage_posts ───────────────────────────────────
+        # Use /published_posts (the page's OWN posts, readable with the Page
+        # token) rather than /feed, which additionally triggers Meta's
+        # "Page Public Content Access" gate and would fail unrelated to this
+        # permission.
         if fb and fb.facebook_page_id:
             self._call(
-                label='pages_manage_posts → GET /{page-id}/feed',
+                label='pages_manage_posts → GET /{page-id}/published_posts',
                 method='GET',
-                url=f"{GRAPH}/{fb.facebook_page_id}/feed",
+                url=f"{GRAPH}/{fb.facebook_page_id}/published_posts",
                 params={
                     'fields': 'id,message,created_time',
                     'limit': 5,
