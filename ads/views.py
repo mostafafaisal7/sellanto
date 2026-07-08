@@ -32,6 +32,48 @@ from posts.models import Post
 logger = logging.getLogger(__name__)
 
 
+def _parse_bool(value, default=False):
+    """Parse a bool from JSON/form data ('true'/'false'/1/0)."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in ('true', '1', 'yes', 'on')
+    return default
+
+
+def _live_spend_guard(ad_account: 'AdAccount', request):
+    """Block accidental real-money spend on LIVE (non-sandbox) ad accounts.
+
+    Sandbox accounts (Meta account_status == 101) run freely — no confirmation.
+    For any non-sandbox account, the caller must pass confirm_live=true, so the
+    UI can surface a "this spends real money" warning first.
+
+    Returns None when the action may proceed, or a DRF Response (HTTP 409) that
+    the caller should return immediately when confirmation is required.
+    """
+    if getattr(ad_account, 'is_sandbox', False):
+        return None  # test account — safe, no confirmation needed
+
+    if _parse_bool(request.data.get('confirm_live')):
+        return None  # user explicitly confirmed real spend
+
+    return Response(
+        {
+            'error': 'live_ad_account_confirmation_required',
+            'detail': (
+                f'"{ad_account.name or ad_account.external_id}" is a LIVE ad '
+                f'account — this action can spend real money. Re-submit with '
+                f'confirm_live=true to proceed, or pick a Sandbox (test) account.'
+            ),
+            'requires_confirmation': True,
+            'is_sandbox': False,
+            'account_name': ad_account.name,
+            'external_id': ad_account.external_id,
+        },
+        status=status.HTTP_409_CONFLICT,
+    )
+
+
 def _serialize_account(a: AdAccount) -> dict:
     return {
         'id': a.id,
@@ -1585,6 +1627,11 @@ class BoostPostView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+        # Guard: LIVE accounts require explicit confirmation (real spend).
+        guard = _live_spend_guard(ad_account, request)
+        if guard is not None:
+            return guard
+
         # Resolve Page ID from the post's brand → SocialAccount
         from platforms.models import SocialAccount
         sa = SocialAccount.objects.filter(
@@ -1789,6 +1836,11 @@ class MetaCreateCampaignView(APIView):
             return Response({'error': 'Meta ad account not found or not connected.'},
                             status=status.HTTP_404_NOT_FOUND)
 
+        # Guard: LIVE accounts require explicit confirmation (real spend).
+        guard = _live_spend_guard(ad_account, request)
+        if guard is not None:
+            return guard
+
         from platforms.models import SocialAccount
         sa = SocialAccount.objects.filter(
             user=request.user, platform='facebook', is_active=True).first()
@@ -1920,6 +1972,11 @@ class RunVideoAdView(APIView):
                 {'error': 'Ad account not found or not connected.'},
                 status=status.HTTP_404_NOT_FOUND,
             )
+
+        # Guard: LIVE accounts require explicit confirmation (real spend).
+        guard = _live_spend_guard(ad_account, request)
+        if guard is not None:
+            return guard
 
         from platforms.models import SocialAccount
         sa = SocialAccount.objects.filter(

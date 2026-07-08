@@ -73,6 +73,8 @@ export function RunVideoAdModal({ isOpen, onClose, onSuccess }: Props) {
   // Wallet reservation state
   const [shortfall, setShortfall] = useState<number | null>(null);
   const [reservationId, setReservationId] = useState<string | null>(null);
+  // Set when the backend blocks a LIVE (real-money) ad account pending confirmation.
+  const [liveConfirm, setLiveConfirm] = useState<{ resId: string; detail: string } | null>(null);
   const [topupOpen, setTopupOpen] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -93,6 +95,7 @@ export function RunVideoAdModal({ isOpen, onClose, onSuccess }: Props) {
     setPhase('idle');
     setShortfall(null);
     setReservationId(null);
+    setLiveConfirm(null);
     adsService
       .listAdAccounts()
       .then((data) => {
@@ -155,9 +158,10 @@ export function RunVideoAdModal({ isOpen, onClose, onSuccess }: Props) {
   const isDone: boolean = phase === 'done';
   const showPhaseProgress: boolean = isReserving || isUploading || isProcessing || isCreating;
 
-  const launchVideoAd = async (resId: string) => {
+  const launchVideoAd = async (resId: string, confirmLive = false) => {
     if (!videoFile || !adAccountId) return;
     setResult(null);
+    setLiveConfirm(null);
     setPhase('uploading');
     setUploadPercent(0);
 
@@ -173,6 +177,7 @@ export function RunVideoAdModal({ isOpen, onClose, onSuccess }: Props) {
           age_min: parseInt(ageMin, 10),
           age_max: parseInt(ageMax, 10),
         },
+        confirm_live: confirmLive,
         onUploadProgress: (pct) => {
           setUploadPercent(pct);
           if (pct >= 100) setPhase('processing');
@@ -187,13 +192,19 @@ export function RunVideoAdModal({ isOpen, onClose, onSuccess }: Props) {
       });
       onSuccess?.();
     } catch (err: unknown) {
-      // Release reserved diamonds since the ad failed
-      try { await stripeService.releaseBoostReservation(resId, 'video_ad_failed'); } catch { /* non-fatal */ }
       const errObj = err as {
-        response?: { data?: { error?: string; error_user_title?: string; error_user_msg?: string; step?: string; code?: number; subcode?: number } };
+        response?: { status?: number; data?: { error?: string; detail?: string; requires_confirmation?: boolean; error_user_title?: string; error_user_msg?: string; step?: string; code?: number; subcode?: number } };
         message?: string;
       };
       const d = errObj?.response?.data || {};
+      // LIVE ad-account guard (HTTP 409): keep the reservation, prompt to confirm.
+      if (errObj?.response?.status === 409 && d.requires_confirmation) {
+        setLiveConfirm({ resId, detail: d.detail || 'This is a LIVE ad account — it will spend real money.' });
+        setPhase('idle');
+        return;
+      }
+      // Release reserved diamonds since the ad failed
+      try { await stripeService.releaseBoostReservation(resId, 'video_ad_failed'); } catch { /* non-fatal */ }
       setPhase('error');
       setResult({
         type: 'error',
@@ -358,11 +369,25 @@ export function RunVideoAdModal({ isOpen, onClose, onSuccess }: Props) {
                 <option value="">— Select an ad account —</option>
                 {adAccounts.map((a) => (
                   <option key={a.id} value={a.id}>
+                    {a.is_sandbox ? '🧪 SANDBOX — ' : '🔴 LIVE — '}
                     {a.name || `act_${a.external_id}`} ({a.currency_code})
                   </option>
                 ))}
               </select>
             )}
+            {adAccountId != null && (() => {
+              const sel = adAccounts.find((a) => a.id === adAccountId);
+              if (!sel) return null;
+              return sel.is_sandbox ? (
+                <p className="mt-1.5 text-[11px] text-amber-400">
+                  🧪 Sandbox (test) account — no real money is spent.
+                </p>
+              ) : (
+                <p className="mt-1.5 text-[11px] text-red-400">
+                  🔴 Live account — launching will spend real money.
+                </p>
+              );
+            })()}
           </div>
 
           {/* Budget + Duration */}
@@ -473,6 +498,24 @@ export function RunVideoAdModal({ isOpen, onClose, onSuccess }: Props) {
                 </p>
               </div>
             </motion.div>
+          )}
+
+          {/* LIVE ad-account confirmation (real spend) */}
+          {liveConfirm && (
+            <div className="mt-2 p-4 rounded-xl bg-red-500/10 border border-red-500/30">
+              <p className="text-sm font-bold text-red-300">⚠️ Real money warning</p>
+              <p className="text-xs text-red-200/90 mt-1">{liveConfirm.detail}</p>
+              <div className="flex items-center gap-2 mt-3">
+                <button type="button" onClick={() => setLiveConfirm(null)} disabled={isBusy}
+                  className="flex-1 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-text-secondary text-xs font-semibold transition-colors disabled:opacity-50">
+                  Cancel
+                </button>
+                <button type="button" onClick={() => launchVideoAd(liveConfirm.resId, true)} disabled={isBusy}
+                  className="flex-1 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition-colors disabled:opacity-50">
+                  {isBusy ? 'Launching…' : 'Yes, spend real money'}
+                </button>
+              </div>
+            </div>
           )}
 
           {/* Footer */}

@@ -66,6 +66,8 @@ export function BoostPostModal({ isOpen, onClose, onSuccess, preselectedPost }: 
   const [shortfall, setShortfall] = useState<number | null>(null);
   const [reservationId, setReservationId] = useState<string | null>(null);
   const [topupOpen, setTopupOpen] = useState(false);
+  // Set when the backend blocks a LIVE (real-money) ad account pending confirmation.
+  const [liveConfirm, setLiveConfirm] = useState<{ resId: string; detail: string } | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -74,6 +76,7 @@ export function BoostPostModal({ isOpen, onClose, onSuccess, preselectedPost }: 
     setResult(null);
     setShortfall(null);
     setReservationId(null);
+    setLiveConfirm(null);
     if (preselectedPost?.id) setSelectedPostId(preselectedPost.id);
 
     Promise.all([
@@ -120,7 +123,7 @@ export function BoostPostModal({ isOpen, onClose, onSuccess, preselectedPost }: 
     parseInt(ageMax, 10) <= 65 &&
     parseInt(ageMin, 10) <= parseInt(ageMax, 10);
 
-  const launchBoost = async (resId: string) => {
+  const launchBoost = async (resId: string, confirmLive = false) => {
     if (!selectedPostId || !selectedAdAccountId) return;
     setSubmitting(true);
     try {
@@ -134,7 +137,9 @@ export function BoostPostModal({ isOpen, onClose, onSuccess, preselectedPost }: 
           age_min: parseInt(ageMin, 10),
           age_max: parseInt(ageMax, 10),
         },
+        confirm_live: confirmLive,
       });
+      setLiveConfirm(null);
       setReservationId(null);
       setResult({
         type: 'success',
@@ -143,10 +148,17 @@ export function BoostPostModal({ isOpen, onClose, onSuccess, preselectedPost }: 
       });
       onSuccess?.(campaign);
     } catch (err: unknown) {
+      const errObj = err as { response?: { status?: number; data?: { error?: string; detail?: string; requires_confirmation?: boolean; account_name?: string; code?: number; subcode?: number; error_user_title?: string; error_user_msg?: string; step?: string } } };
+      const data = errObj?.response?.data || {};
+      // LIVE ad-account guard (HTTP 409): don't burn the reservation — prompt
+      // the user to confirm real spend, then re-run with confirm_live=true.
+      if (errObj?.response?.status === 409 && data.requires_confirmation) {
+        setLiveConfirm({ resId, detail: data.detail || 'This is a LIVE ad account — it will spend real money.' });
+        setSubmitting(false);
+        return;
+      }
       // Release the reserved diamonds since the ad failed
       try { await stripeService.releaseBoostReservation(resId, 'boost_launch_failed'); } catch { /* non-fatal */ }
-      const errObj = err as { response?: { data?: { error?: string; code?: number; subcode?: number; error_user_title?: string; error_user_msg?: string; step?: string } } };
-      const data = errObj?.response?.data || {};
       const title = data.error_user_title;
       const userMsg = data.error_user_msg;
       const headline = title || data.error || 'Failed to create campaign.';
@@ -294,11 +306,25 @@ export function BoostPostModal({ isOpen, onClose, onSuccess, preselectedPost }: 
                     <option value="">— Select an ad account —</option>
                     {adAccounts.map((a) => (
                       <option key={a.id} value={a.id}>
+                        {a.is_sandbox ? '🧪 SANDBOX — ' : '🔴 LIVE — '}
                         {a.name || `act_${a.external_id}`} ({a.currency_code})
                       </option>
                     ))}
                   </select>
                 )}
+                {selectedAdAccountId != null && (() => {
+                  const sel = adAccounts.find((a) => a.id === selectedAdAccountId);
+                  if (!sel) return null;
+                  return sel.is_sandbox ? (
+                    <p className="mt-1.5 text-[11px] text-amber-400">
+                      🧪 Sandbox (test) account — no real money is spent.
+                    </p>
+                  ) : (
+                    <p className="mt-1.5 text-[11px] text-red-400">
+                      🔴 Live account — launching will spend real money.
+                    </p>
+                  );
+                })()}
               </div>
 
               {/* Budget + Duration */}
@@ -406,6 +432,32 @@ export function BoostPostModal({ isOpen, onClose, onSuccess, preselectedPost }: 
                 </motion.div>
               )}
             </>
+          )}
+
+          {/* LIVE ad-account confirmation (real spend) */}
+          {liveConfirm && (
+            <div className="mt-2 p-4 rounded-xl bg-red-500/10 border border-red-500/30">
+              <p className="text-sm font-bold text-red-300">⚠️ Real money warning</p>
+              <p className="text-xs text-red-200/90 mt-1">{liveConfirm.detail}</p>
+              <div className="flex items-center gap-2 mt-3">
+                <button
+                  type="button"
+                  onClick={() => setLiveConfirm(null)}
+                  disabled={submitting}
+                  className="flex-1 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-text-secondary text-xs font-semibold transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => launchBoost(liveConfirm.resId, true)}
+                  disabled={submitting}
+                  className="flex-1 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-bold transition-colors disabled:opacity-50"
+                >
+                  {submitting ? 'Launching…' : 'Yes, spend real money'}
+                </button>
+              </div>
+            </div>
           )}
 
           {/* Footer */}

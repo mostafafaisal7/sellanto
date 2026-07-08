@@ -113,6 +113,8 @@ export const adsService = {
     daily_budget_usd: number;
     duration_days: number;
     targeting: Record<string, unknown>;
+    /** Required (true) to proceed on a LIVE (non-sandbox) ad account — real spend. */
+    confirm_live?: boolean;
   }): Promise<AdCampaign> {
     const res = await api.post('/ads/boost-post/', params);
     return res.data;
@@ -132,6 +134,8 @@ export const adsService = {
     image_url?: string;
     targeting?: Record<string, unknown>;
     activate?: boolean;
+    /** Required (true) to proceed on a LIVE (non-sandbox) ad account — real spend. */
+    confirm_live?: boolean;
   }): Promise<AdCampaign> {
     const res = await api.post('/ads/meta/campaigns/create/', params);
     return res.data;
@@ -161,6 +165,8 @@ export const adsService = {
     daily_budget_usd: number;
     duration_days: number;
     targeting: Record<string, unknown>;
+    /** Required (true) to proceed on a LIVE (non-sandbox) ad account — real spend. */
+    confirm_live?: boolean;
     onUploadProgress?: (percent: number) => void;
   }): Promise<{
     post: { id: number; facebook_post_id: string; video_id: string };
@@ -178,6 +184,7 @@ export const adsService = {
     fd.append('daily_budget_usd', String(params.daily_budget_usd));
     fd.append('duration_days', String(params.duration_days));
     fd.append('targeting', JSON.stringify(params.targeting));
+    if (params.confirm_live) fd.append('confirm_live', 'true');
 
     const res = await api.post('/ads/run-video-ad/', fd, {
       headers: { 'Content-Type': 'multipart/form-data' },
