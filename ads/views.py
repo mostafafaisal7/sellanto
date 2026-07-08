@@ -14,6 +14,7 @@ Endpoints (mounted under /api/v1/ads/ in api/urls.py):
     POST   /ads/boost-post/              — MVP killer feature: boost an organic post
 """
 import logging
+import math
 from datetime import datetime, timedelta
 
 from django.utils import timezone
@@ -205,6 +206,11 @@ class CampaignListCreateView(APIView):
 
     def get(self, request):
         campaigns = AdCampaign.objects.filter(user=request.user).select_related('ad_account', 'brand')
+        # Optional provider filter so the Meta page shows only Meta campaigns
+        # and the Google page only Google — otherwise all providers mix.
+        provider = (request.GET.get('provider') or '').strip().lower()
+        if provider in ('meta', 'google'):
+            campaigns = campaigns.filter(ad_account__provider=provider)
         return Response({
             'campaigns': [_serialize_campaign(c) for c in campaigns],
         })
@@ -547,10 +553,45 @@ class AdRuleDetailView(APIView):
         rule = self._get(request, pk)
         if not rule:
             return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
-        for f in ('name', 'metric', 'operator', 'threshold', 'lookback_days',
-                  'action', 'action_value', 'is_active'):
-            if f in request.data:
-                setattr(rule, f, request.data[f])
+
+        valid_metrics = {'spend', 'cpc', 'ctr', 'conversions', 'cpa'}
+        valid_ops = {'gt', 'lt', 'gte', 'lte'}
+        valid_actions = {'pause', 'notify', 'increase_budget', 'decrease_budget'}
+        data = request.data
+
+        # Validate/coerce each provided field before assigning — mirrors the
+        # same checks as create() so PATCH can't store garbage that would later
+        # crash the rule evaluator.
+        try:
+            if 'name' in data:
+                rule.name = str(data['name'])[:200]
+            if 'metric' in data:
+                v = str(data['metric']).strip().lower()
+                if v not in valid_metrics:
+                    return Response({'error': 'Invalid metric.'}, status=status.HTTP_400_BAD_REQUEST)
+                rule.metric = v
+            if 'operator' in data:
+                v = str(data['operator']).strip().lower()
+                if v not in valid_ops:
+                    return Response({'error': 'Invalid operator.'}, status=status.HTTP_400_BAD_REQUEST)
+                rule.operator = v
+            if 'action' in data:
+                v = str(data['action']).strip().lower()
+                if v not in valid_actions:
+                    return Response({'error': 'Invalid action.'}, status=status.HTTP_400_BAD_REQUEST)
+                rule.action = v
+            if 'threshold' in data:
+                rule.threshold = float(data['threshold'])
+            if 'action_value' in data:
+                rule.action_value = float(data['action_value'])
+            if 'lookback_days' in data:
+                rule.lookback_days = max(1, int(data['lookback_days']))
+            if 'is_active' in data:
+                rule.is_active = _parse_bool(data['is_active'], default=rule.is_active)
+        except (TypeError, ValueError):
+            return Response({'error': 'threshold, action_value and lookback_days must be numbers.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
         rule.save()
         return Response(_serialize_rule(rule))
 
@@ -613,11 +654,19 @@ class AdAudienceListCreateView(APIView):
         except AdAccount.DoesNotExist:
             return Response({'error': 'Ad account not found.'}, status=status.HTTP_404_NOT_FOUND)
 
+        # Brand is optional (account-scoped audiences); fall back to the
+        # account's brand, else the user's first brand, else None. AdAudience
+        # is now brand-nullable, so None is safe.
+        brand = ad_account.brand
+        if brand is None:
+            from brands.models import Brand
+            brand = Brand.objects.filter(user=request.user).first()
+
         # Saved (rule-based) presets are immediately usable; custom/lookalike
         # would need a Meta build step before they are ready.
         audience = AdAudience.objects.create(
             user=request.user,
-            brand=ad_account.brand,
+            brand=brand,
             ad_account=ad_account,
             name=name[:200],
             audience_type=audience_type,
@@ -1747,6 +1796,9 @@ class BoostPostView(APIView):
         except (TypeError, ValueError):
             return Response({'error': 'Invalid daily_budget_usd'},
                             status=status.HTTP_400_BAD_REQUEST)
+        if not math.isfinite(usd):
+            return Response({'error': 'daily_budget_usd must be a finite number.'},
+                            status=status.HTTP_400_BAD_REQUEST)
 
         # $1.00 works for USD accounts but BDT/PKR/IDR have higher absolute
         # minimums (e.g. Meta requires BDT ~124/day). Requiring $1.50 USD
@@ -1903,6 +1955,9 @@ class MetaCreateCampaignView(APIView):
             usd = float(daily_budget_usd)
         except (TypeError, ValueError):
             return Response({'error': 'Invalid daily_budget_usd.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not math.isfinite(usd):
+            return Response({'error': 'daily_budget_usd must be a finite number.'},
+                            status=status.HTTP_400_BAD_REQUEST)
         if usd < 1.5:
             return Response({'error': 'Minimum daily budget is $1.50.'},
                             status=status.HTTP_400_BAD_REQUEST)
@@ -2077,6 +2132,9 @@ class RunVideoAdView(APIView):
             usd = float(daily_budget_usd)
         except (TypeError, ValueError):
             return Response({'error': 'Invalid daily_budget_usd'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if not math.isfinite(usd):
+            return Response({'error': 'daily_budget_usd must be a finite number.'},
                             status=status.HTTP_400_BAD_REQUEST)
         if usd < 1.5:
             return Response(

@@ -23,11 +23,16 @@ export function AudiencesPanel({ adAccountId }: { adAccountId: number }) {
   const [ageMax, setAgeMax] = useState('65');
   const [saving, setSaving] = useState(false);
 
+  const [error, setError] = useState<string | null>(null);
+
   const load = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const r = await adsService.listAudiences(adAccountId);
       setAudiences(r.audiences || []);
+    } catch {
+      setError('Could not load audiences.');
     } finally {
       setLoading(false);
     }
@@ -38,6 +43,7 @@ export function AudiencesPanel({ adAccountId }: { adAccountId: number }) {
   const create = async () => {
     if (!name.trim()) return;
     setSaving(true);
+    setError(null);
     try {
       await adsService.createAudience({
         name: name.trim(),
@@ -52,6 +58,8 @@ export function AudiencesPanel({ adAccountId }: { adAccountId: number }) {
       setName('');
       setShowForm(false);
       await load();
+    } catch {
+      setError('Could not save the audience.');
     } finally {
       setSaving(false);
     }
@@ -59,8 +67,13 @@ export function AudiencesPanel({ adAccountId }: { adAccountId: number }) {
 
   const remove = async (a: AdAudience) => {
     if (!window.confirm(`Delete audience "${a.name}"?`)) return;
-    await adsService.deleteAudience(a.id);
-    setAudiences((prev) => prev.filter((x) => x.id !== a.id));
+    setError(null);
+    try {
+      await adsService.deleteAudience(a.id);
+      setAudiences((prev) => prev.filter((x) => x.id !== a.id));
+    } catch {
+      setError('Could not delete the audience. It may already be gone — refresh.');
+    }
   };
 
   return (
@@ -75,6 +88,10 @@ export function AudiencesPanel({ adAccountId }: { adAccountId: number }) {
           <PlusIcon className="w-3.5 h-3.5" /> New
         </button>
       </div>
+
+      {error && (
+        <div className="mb-3 p-2 rounded-lg bg-red-500/10 text-red-300 text-xs">{error}</div>
+      )}
 
       {showForm && (
         <div className="mb-3 p-3 rounded-lg bg-dark-900/60 border border-white/10 space-y-2">

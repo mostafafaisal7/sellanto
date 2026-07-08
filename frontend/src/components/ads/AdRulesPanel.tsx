@@ -31,11 +31,16 @@ export function AdRulesPanel({ campaignId }: { campaignId: number }) {
   const [action, setAction] = useState<AdRule['action']>('pause');
   const [saving, setSaving] = useState(false);
 
+  const [error, setError] = useState<string | null>(null);
+
   const load = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const r = await adsService.listRules(campaignId);
       setRules(r.rules || []);
+    } catch {
+      setError('Could not load rules.');
     } finally {
       setLoading(false);
     }
@@ -45,27 +50,40 @@ export function AdRulesPanel({ campaignId }: { campaignId: number }) {
 
   const create = async () => {
     const t = parseFloat(threshold);
-    if (Number.isNaN(t)) return;
+    if (Number.isNaN(t) || !Number.isFinite(t)) return;
     setSaving(true);
+    setError(null);
     try {
       await adsService.createRule({ campaign_id: campaignId, metric, operator, threshold: t, action });
       setThreshold('');
       setShowForm(false);
       await load();
+    } catch {
+      setError('Could not create the rule.');
     } finally {
       setSaving(false);
     }
   };
 
   const toggle = async (r: AdRule) => {
-    const updated = await adsService.updateRule(r.id, { is_active: !r.is_active });
-    setRules((prev) => prev.map((x) => (x.id === r.id ? updated : x)));
+    setError(null);
+    try {
+      const updated = await adsService.updateRule(r.id, { is_active: !r.is_active });
+      setRules((prev) => prev.map((x) => (x.id === r.id ? updated : x)));
+    } catch {
+      setError('Could not update the rule.');
+    }
   };
 
   const remove = async (r: AdRule) => {
     if (!window.confirm('Delete this rule?')) return;
-    await adsService.deleteRule(r.id);
-    setRules((prev) => prev.filter((x) => x.id !== r.id));
+    setError(null);
+    try {
+      await adsService.deleteRule(r.id);
+      setRules((prev) => prev.filter((x) => x.id !== r.id));
+    } catch {
+      setError('Could not delete the rule. It may already be gone — refresh.');
+    }
   };
 
   return (
@@ -80,6 +98,10 @@ export function AdRulesPanel({ campaignId }: { campaignId: number }) {
           <PlusIcon className="w-3.5 h-3.5" /> Add rule
         </button>
       </div>
+
+      {error && (
+        <div className="mb-3 p-2 rounded-lg bg-red-500/10 text-red-300 text-xs">{error}</div>
+      )}
 
       {showForm && (
         <div className="mb-3 p-3 rounded-lg bg-dark-900/60 border border-white/10 space-y-2">

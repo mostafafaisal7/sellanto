@@ -232,6 +232,8 @@ class AdAudience(models.Model):
     )
     brand = models.ForeignKey(
         Brand, on_delete=models.CASCADE, related_name='ad_audiences',
+        null=True, blank=True,
+        help_text='Optional — audiences are account-scoped; brand is a hint.',
     )
     ad_account = models.ForeignKey(
         AdAccount, on_delete=models.CASCADE, related_name='audiences',

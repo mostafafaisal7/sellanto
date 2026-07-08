@@ -48,6 +48,19 @@ import { ConnectMetaTokenModal } from '../components/ads/ConnectMetaTokenModal';
 import { AdRulesPanel } from '../components/ads/AdRulesPanel';
 import { AudiencesPanel } from '../components/ads/AudiencesPanel';
 
+// Safely extract a human-readable message from an axios error, coercing
+// object/DRF-dict error bodies to a string so the UI never shows [object Object].
+function errMsg(err: unknown, fallback: string): string {
+  const data = (err as { response?: { data?: unknown } })?.response?.data;
+  if (typeof data === 'string' && data.trim()) return data;
+  if (data && typeof data === 'object') {
+    const e = (data as { error?: unknown; detail?: unknown }).error
+      ?? (data as { detail?: unknown }).detail;
+    if (typeof e === 'string' && e.trim()) return e;
+  }
+  return fallback;
+}
+
 // ── Status config ─────────────────────────────────────────────────────────────
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; icon: React.ElementType }> = {
@@ -306,9 +319,11 @@ export function AdsPage() {
     try {
       const [accData, campData] = await Promise.all([
         adsService.listAdAccounts(),
-        adsService.listCampaigns(),
+        adsService.listCampaigns('meta'),
       ]);
-      setAccounts(accData.accounts || []);
+      // This is the Meta Ads page — only show Meta accounts/campaigns.
+      // (Google Ads has its own page at /google-ads.)
+      setAccounts((accData.accounts || []).filter((a) => a.provider === 'meta'));
       setCampaigns(campData.campaigns || []);
     } catch {
       setError('Could not load ads data. Make sure your Meta Ad Account is connected.');
@@ -344,13 +359,24 @@ export function AdsPage() {
   const handleEdit = async (c: AdCampaign) => {
     const newName = window.prompt('Campaign name:', c.name);
     if (newName === null) return;  // cancelled
-    const curBudget = (c.daily_budget_minor / 100).toFixed(2);
-    const budgetStr = window.prompt('Daily budget (USD):', curBudget);
-    if (budgetStr === null) return;
+    // Budget is entered in USD and converted server-side to the account's
+    // currency. We deliberately do NOT prefill it: daily_budget_minor is in
+    // the ad account's currency, so showing it as a USD default would mislead
+    // non-USD accounts into over/under-spending. Blank = keep current budget.
+    const budgetStr = window.prompt(
+      'New daily budget in USD (min $1.50). Leave blank to keep the current budget:',
+      '',
+    );
+    if (budgetStr === null) return;  // cancelled
     const changes: { name?: string; daily_budget_usd?: number } = {};
     if (newName.trim() && newName.trim() !== c.name) changes.name = newName.trim();
-    const budgetNum = parseFloat(budgetStr);
-    if (!Number.isNaN(budgetNum) && budgetNum >= 1.5 && budgetNum.toFixed(2) !== curBudget) {
+    const trimmed = budgetStr.trim();
+    if (trimmed !== '') {
+      const budgetNum = parseFloat(trimmed);
+      if (Number.isNaN(budgetNum) || !Number.isFinite(budgetNum) || budgetNum < 1.5) {
+        window.alert('Budget must be a number of at least $1.50.');
+        return;
+      }
       changes.daily_budget_usd = budgetNum;
     }
     if (!changes.name && changes.daily_budget_usd === undefined) return;  // nothing changed
@@ -360,8 +386,7 @@ export function AdsPage() {
       setCampaigns((prev) => prev.map((x) => (x.id === c.id ? updated : x)));
       if (selectedCampaign?.id === c.id) setSelectedCampaign(updated);
     } catch (err: unknown) {
-      const e = err as { response?: { data?: { error?: string } } };
-      window.alert(e?.response?.data?.error || 'Failed to update campaign.');
+      window.alert(errMsg(err, 'Failed to update campaign.'));
     } finally {
       setActionLoading(null);
     }
@@ -375,8 +400,7 @@ export function AdsPage() {
       setCampaigns((prev) => prev.filter((x) => x.id !== c.id));
       if (selectedCampaign?.id === c.id) setSelectedCampaign(null);
     } catch (err: unknown) {
-      const e = err as { response?: { data?: { error?: string } } };
-      window.alert(e?.response?.data?.error || 'Failed to delete campaign.');
+      window.alert(errMsg(err, 'Failed to delete campaign.'));
     } finally {
       setActionLoading(null);
     }

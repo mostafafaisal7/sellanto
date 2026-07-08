@@ -100,8 +100,10 @@ export const adsService = {
     return res.data;
   },
 
-  async listCampaigns(): Promise<{ campaigns: AdCampaign[] }> {
-    const res = await api.get('/ads/campaigns/');
+  async listCampaigns(provider?: 'meta' | 'google'): Promise<{ campaigns: AdCampaign[] }> {
+    const res = await api.get('/ads/campaigns/', {
+      params: provider ? { provider } : undefined,
+    });
     return res.data;
   },
 
