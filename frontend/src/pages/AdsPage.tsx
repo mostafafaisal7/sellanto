@@ -44,6 +44,9 @@ import { adsService, type AdCampaign, type AdAccount } from '../services/adsServ
 import { BoostPostModal } from '../components/ads/BoostPostModal';
 import { RunVideoAdModal } from '../components/ads/RunVideoAdModal';
 import { CreateCampaignModal } from '../components/ads/CreateCampaignModal';
+import { ConnectMetaTokenModal } from '../components/ads/ConnectMetaTokenModal';
+import { AdRulesPanel } from '../components/ads/AdRulesPanel';
+import { AudiencesPanel } from '../components/ads/AudiencesPanel';
 
 // ── Status config ─────────────────────────────────────────────────────────────
 
@@ -294,6 +297,7 @@ export function AdsPage() {
   const [boostOpen, setBoostOpen] = useState(false);
   const [videoAdOpen, setVideoAdOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [connectOpen, setConnectOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
   const fetchData = useCallback(async () => {
@@ -414,6 +418,10 @@ export function AdsPage() {
           <Button variant="secondary" size="sm" onClick={() => setCreateOpen(true)} className="flex items-center gap-2">
             <MegaphoneIcon className="w-4 h-4" />
             Create Campaign
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setConnectOpen(true)} className="flex items-center gap-2">
+            <PlusIcon className="w-4 h-4" />
+            Connect by token
           </Button>
         </div>
       </div>
@@ -539,6 +547,9 @@ export function AdsPage() {
                     </div>
                     <CampaignInsightsPanel campaignId={selectedCampaign.id} />
                   </Card>
+                  <div className="mt-4">
+                    <AdRulesPanel campaignId={selectedCampaign.id} />
+                  </div>
                 </motion.div>
               ) : (
                 <motion.div
@@ -597,12 +608,22 @@ export function AdsPage() {
         </Card>
       </div>
 
+      {/* Saved audiences (scoped to the first connected ad account) */}
+      {accounts.length > 0 && (
+        <AudiencesPanel adAccountId={accounts[0].id} />
+      )}
+
       <BoostPostModal isOpen={boostOpen} onClose={() => setBoostOpen(false)} />
       <RunVideoAdModal isOpen={videoAdOpen} onClose={() => setVideoAdOpen(false)} />
       <CreateCampaignModal
         isOpen={createOpen}
         onClose={() => setCreateOpen(false)}
         onSuccess={() => { setCreateOpen(false); fetchData(); }}
+      />
+      <ConnectMetaTokenModal
+        isOpen={connectOpen}
+        onClose={() => setConnectOpen(false)}
+        onSuccess={() => { setConnectOpen(false); fetchData(); }}
       />
     </div>
   );
