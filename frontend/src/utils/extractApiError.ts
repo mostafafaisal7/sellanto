@@ -54,6 +54,20 @@ export function extractApiError(error: unknown): ExtractedError {
       isServerError: (status ?? 0) >= 500,
     };
 
+    // When DEBUG is off (or a proxy/500 error), the body can be a raw HTML
+    // string, not JSON. Object.entries() on a string yields {0:'<',1:'!',...}
+    // which previously rendered as a giant character-by-character toast.
+    // Treat any non-object (or array) body as "no structured data" and fall
+    // through to the friendly status-code message below.
+    if (typeof data === 'string' || Array.isArray(data)) {
+      if (status && STATUS_MESSAGES[status]) {
+        result.message = STATUS_MESSAGES[status];
+      } else {
+        result.message = 'An unexpected error occurred. Please try again.';
+      }
+      return result;
+    }
+
     if (data) {
       // 1) Direct 'error' string → {'error': 'message'}
       if (typeof data.error === 'string') {

@@ -41,10 +41,18 @@ export const useToastStore = create<ToastState>()((set, get) => ({
 
   addToast: (toast) => {
     const id = `toast-${++toastCounter}-${Date.now()}`;
+    // Defense-in-depth: a non-string message (e.g. an accidentally-passed
+    // object or HTML body) must never reach the renderer, or React shows it
+    // as character-indexed garbage. Coerce anything non-string to a safe text.
+    const safeMessage =
+      typeof toast.message === 'string'
+        ? toast.message
+        : 'An unexpected error occurred. Please try again.';
     const newToast: Toast = {
       id,
       dismissible: true,
       ...toast,
+      message: safeMessage,
     };
 
     set((state) => {
