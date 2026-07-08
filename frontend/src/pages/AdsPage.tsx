@@ -27,6 +27,8 @@ import {
   CursorArrowRaysIcon,
   EyeIcon,
   PlusIcon,
+  PencilIcon,
+  TrashIcon,
 } from '@heroicons/react/24/outline';
 import {
   AreaChart,
@@ -41,6 +43,7 @@ import { Button, Card, Spinner } from '../components/ui';
 import { adsService, type AdCampaign, type AdAccount } from '../services/adsService';
 import { BoostPostModal } from '../components/ads/BoostPostModal';
 import { RunVideoAdModal } from '../components/ads/RunVideoAdModal';
+import { CreateCampaignModal } from '../components/ads/CreateCampaignModal';
 
 // ── Status config ─────────────────────────────────────────────────────────────
 
@@ -182,6 +185,8 @@ function CampaignRow({
   onSelect,
   onPause,
   onResume,
+  onEdit,
+  onDelete,
   actionLoading,
 }: {
   campaign: AdCampaign;
@@ -189,6 +194,8 @@ function CampaignRow({
   onSelect: () => void;
   onPause: () => void;
   onResume: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
   actionLoading: boolean;
 }) {
   const spendUsd = (campaign.spend_to_date_minor / 100).toFixed(2);
@@ -251,6 +258,24 @@ function CampaignRow({
               Resume
             </button>
           )}
+          <button
+            disabled={actionLoading}
+            onClick={onEdit}
+            title="Edit name / budget"
+            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/5 text-text-secondary hover:bg-white/10 text-xs transition-colors disabled:opacity-50"
+          >
+            <PencilIcon className="w-3.5 h-3.5" />
+            Edit
+          </button>
+          <button
+            disabled={actionLoading}
+            onClick={onDelete}
+            title="Delete / archive campaign"
+            className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 text-xs transition-colors disabled:opacity-50"
+          >
+            <TrashIcon className="w-3.5 h-3.5" />
+            Delete
+          </button>
         </div>
       </div>
     </motion.div>
@@ -268,6 +293,7 @@ export function AdsPage() {
   const [actionLoading, setActionLoading] = useState<number | null>(null);
   const [boostOpen, setBoostOpen] = useState(false);
   const [videoAdOpen, setVideoAdOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
   const fetchData = useCallback(async () => {
@@ -311,6 +337,47 @@ export function AdsPage() {
     }
   };
 
+  const handleEdit = async (c: AdCampaign) => {
+    const newName = window.prompt('Campaign name:', c.name);
+    if (newName === null) return;  // cancelled
+    const curBudget = (c.daily_budget_minor / 100).toFixed(2);
+    const budgetStr = window.prompt('Daily budget (USD):', curBudget);
+    if (budgetStr === null) return;
+    const changes: { name?: string; daily_budget_usd?: number } = {};
+    if (newName.trim() && newName.trim() !== c.name) changes.name = newName.trim();
+    const budgetNum = parseFloat(budgetStr);
+    if (!Number.isNaN(budgetNum) && budgetNum >= 1.5 && budgetNum.toFixed(2) !== curBudget) {
+      changes.daily_budget_usd = budgetNum;
+    }
+    if (!changes.name && changes.daily_budget_usd === undefined) return;  // nothing changed
+    setActionLoading(c.id);
+    try {
+      const updated = await adsService.updateCampaign(c.id, changes);
+      setCampaigns((prev) => prev.map((x) => (x.id === c.id ? updated : x)));
+      if (selectedCampaign?.id === c.id) setSelectedCampaign(updated);
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { error?: string } } };
+      window.alert(e?.response?.data?.error || 'Failed to update campaign.');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleDelete = async (c: AdCampaign) => {
+    if (!window.confirm(`Delete/archive "${c.name}"? This removes it on the ad platform.`)) return;
+    setActionLoading(c.id);
+    try {
+      await adsService.deleteCampaign(c.id);
+      setCampaigns((prev) => prev.filter((x) => x.id !== c.id));
+      if (selectedCampaign?.id === c.id) setSelectedCampaign(null);
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { error?: string } } };
+      window.alert(e?.response?.data?.error || 'Failed to delete campaign.');
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const filtered = statusFilter === 'all'
     ? campaigns
     : campaigns.filter((c) => c.status === statusFilter);
@@ -343,6 +410,10 @@ export function AdsPage() {
           <Button variant="secondary" size="sm" onClick={() => setVideoAdOpen(true)} className="flex items-center gap-2">
             <FilmIcon className="w-4 h-4" />
             Video Ad
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => setCreateOpen(true)} className="flex items-center gap-2">
+            <MegaphoneIcon className="w-4 h-4" />
+            Create Campaign
           </Button>
         </div>
       </div>
@@ -433,6 +504,8 @@ export function AdsPage() {
                     onSelect={() => setSelectedCampaign(selectedCampaign?.id === campaign.id ? null : campaign)}
                     onPause={() => handlePause(campaign.id)}
                     onResume={() => handleResume(campaign.id)}
+                    onEdit={() => handleEdit(campaign)}
+                    onDelete={() => handleDelete(campaign)}
                     actionLoading={actionLoading === campaign.id}
                   />
                 ))}
@@ -526,6 +599,11 @@ export function AdsPage() {
 
       <BoostPostModal isOpen={boostOpen} onClose={() => setBoostOpen(false)} />
       <RunVideoAdModal isOpen={videoAdOpen} onClose={() => setVideoAdOpen(false)} />
+      <CreateCampaignModal
+        isOpen={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onSuccess={() => { setCreateOpen(false); fetchData(); }}
+      />
     </div>
   );
 }
