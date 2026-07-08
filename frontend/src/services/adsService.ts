@@ -51,6 +51,35 @@ export interface AdCampaign {
   created_at: string;
 }
 
+export interface AdAudience {
+  id: number;
+  name: string;
+  audience_type: 'custom' | 'lookalike' | 'saved';
+  ad_account_id: number;
+  brand_id: number | null;
+  external_id: string;
+  size_estimate: number;
+  config: Record<string, unknown>;
+  is_ready: boolean;
+  created_at: string;
+}
+
+export interface AdRule {
+  id: number;
+  campaign_id: number;
+  name: string;
+  metric: 'spend' | 'cpc' | 'ctr' | 'conversions' | 'cpa';
+  operator: 'gt' | 'lt' | 'gte' | 'lte';
+  threshold: number;
+  lookback_days: number;
+  action: 'pause' | 'notify' | 'increase_budget' | 'decrease_budget';
+  action_value: number;
+  is_active: boolean;
+  last_evaluated_at: string | null;
+  last_triggered_at: string | null;
+  trigger_count: number;
+}
+
 // ── Service ───────────────────────────────────────────────────────────────────
 
 export const adsService = {
@@ -196,6 +225,62 @@ export const adsService = {
         }
       },
     });
+    return res.data;
+  },
+
+  // ── Saved audiences (reusable targeting presets) ──────────────────────────
+  async listAudiences(adAccountId?: number): Promise<{ audiences: AdAudience[] }> {
+    const res = await api.get('/ads/audiences/', {
+      params: adAccountId ? { ad_account_id: adAccountId } : undefined,
+    });
+    return res.data;
+  },
+
+  async createAudience(params: {
+    name: string;
+    ad_account_id: number;
+    audience_type?: 'custom' | 'lookalike' | 'saved';
+    config?: Record<string, unknown>;
+  }): Promise<AdAudience> {
+    const res = await api.post('/ads/audiences/', params);
+    return res.data;
+  },
+
+  async deleteAudience(id: number): Promise<{ deleted: boolean }> {
+    const res = await api.delete(`/ads/audiences/${id}/`);
+    return res.data;
+  },
+
+  // ── Automation rules (auto-pause / budget pacing) ─────────────────────────
+  async listRules(campaignId?: number): Promise<{ rules: AdRule[] }> {
+    const res = await api.get('/ads/rules/', {
+      params: campaignId ? { campaign_id: campaignId } : undefined,
+    });
+    return res.data;
+  },
+
+  async createRule(params: {
+    campaign_id: number;
+    metric: AdRule['metric'];
+    operator: AdRule['operator'];
+    threshold: number;
+    action: AdRule['action'];
+    name?: string;
+    lookback_days?: number;
+    action_value?: number;
+    is_active?: boolean;
+  }): Promise<AdRule> {
+    const res = await api.post('/ads/rules/', params);
+    return res.data;
+  },
+
+  async updateRule(id: number, changes: Partial<AdRule>): Promise<AdRule> {
+    const res = await api.patch(`/ads/rules/${id}/`, changes);
+    return res.data;
+  },
+
+  async deleteRule(id: number): Promise<{ deleted: boolean }> {
+    const res = await api.delete(`/ads/rules/${id}/`);
     return res.data;
   },
 };

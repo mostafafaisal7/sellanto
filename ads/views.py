@@ -562,6 +562,84 @@ class AdRuleDetailView(APIView):
         return Response({'deleted': True})
 
 
+# ─────────────────────────────── Audiences ──────────────────────────────────
+# Saved, reusable targeting presets (AdAudience). This is a preset store the
+# boost/campaign forms can reuse — it does NOT yet sync live Custom/Lookalike
+# audiences to Meta (that requires the Meta Custom Audience API + user-data
+# hashing, a follow-up). audience_type='saved' presets are fully functional now.
+
+def _serialize_audience(a):
+    return {
+        'id': a.id,
+        'name': a.name,
+        'audience_type': a.audience_type,
+        'ad_account_id': a.ad_account_id,
+        'brand_id': a.brand_id,
+        'external_id': a.external_id,
+        'size_estimate': a.size_estimate,
+        'config': a.config_json or {},
+        'is_ready': a.is_ready,
+        'created_at': a.created_at.isoformat(),
+    }
+
+
+class AdAudienceListCreateView(APIView):
+    """GET → list the user's saved audiences. POST → create a saved preset."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from ads.models import AdAudience
+        qs = AdAudience.objects.filter(user=request.user).select_related('ad_account')
+        ad_account_id = request.GET.get('ad_account_id')
+        if ad_account_id:
+            qs = qs.filter(ad_account_id=ad_account_id)
+        return Response({'audiences': [_serialize_audience(a) for a in qs]})
+
+    def post(self, request):
+        from ads.models import AdAudience
+        name = (request.data.get('name') or '').strip()
+        audience_type = (request.data.get('audience_type') or 'saved').strip().lower()
+        ad_account_id = request.data.get('ad_account_id')
+        config = request.data.get('config') or {}
+
+        if not name:
+            return Response({'error': 'name is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        if audience_type not in ('custom', 'lookalike', 'saved'):
+            return Response({'error': 'Invalid audience_type.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            ad_account = AdAccount.objects.get(
+                id=ad_account_id, user=request.user, is_active=True)
+        except AdAccount.DoesNotExist:
+            return Response({'error': 'Ad account not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Saved (rule-based) presets are immediately usable; custom/lookalike
+        # would need a Meta build step before they are ready.
+        audience = AdAudience.objects.create(
+            user=request.user,
+            brand=ad_account.brand,
+            ad_account=ad_account,
+            name=name[:200],
+            audience_type=audience_type,
+            config_json=config if isinstance(config, dict) else {},
+            is_ready=(audience_type == 'saved'),
+        )
+        return Response(_serialize_audience(audience), status=status.HTTP_201_CREATED)
+
+
+class AdAudienceDetailView(APIView):
+    """DELETE → remove a saved audience."""
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, pk):
+        from ads.models import AdAudience
+        audience = AdAudience.objects.filter(id=pk, user=request.user).first()
+        if not audience:
+            return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+        audience.delete()
+        return Response({'deleted': True})
+
+
 class CampaignKeywordInsightsView(APIView):
     """GET /ads/campaigns/<id>/keywords/ → per-keyword performance (Google only)."""
     permission_classes = [IsAuthenticated]

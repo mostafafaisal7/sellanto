@@ -121,6 +121,14 @@ urlpatterns = [
          views.AdRuleDetailView.as_view(),
          name='ads-rule-detail'),
 
+    # Saved audiences (reusable targeting presets)
+    path('audiences/',
+         views.AdAudienceListCreateView.as_view(),
+         name='ads-audiences-list'),
+    path('audiences/<int:pk>/',
+         views.AdAudienceDetailView.as_view(),
+         name='ads-audience-detail'),
+
     # MVP — Boost Post
     path('boost-post/',
          views.BoostPostView.as_view(),
