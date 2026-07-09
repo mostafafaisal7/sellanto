@@ -50,6 +50,8 @@ import { AudiencesPanel } from '../components/ads/AudiencesPanel';
 import { InsightBreakdownPanel } from '../components/ads/InsightBreakdownPanel';
 import { AccountInsightsPanel } from '../components/ads/AccountInsightsPanel';
 import { BoostFromContentModal } from '../components/ads/BoostFromContentModal';
+import { CarouselModal } from '../components/ads/CarouselModal';
+import { LeadFormModal } from '../components/ads/LeadFormModal';
 
 // Safely extract a human-readable message from an axios error, coercing
 // object/DRF-dict error bodies to a string so the UI never shows [object Object].
@@ -92,8 +94,14 @@ function StatusBadge({ status }: { status: string }) {
 interface InsightPoint {
   date: string;
   impressions: number;
+  reach?: number;
   clicks: number;
+  link_clicks?: number;
   spend_minor: number;
+  frequency?: number;
+  conversions?: number;
+  roas?: number;
+  cpa?: number;
 }
 
 function CampaignInsightsPanel({ campaignId }: { campaignId: number }) {
@@ -127,8 +135,20 @@ function CampaignInsightsPanel({ campaignId }: { campaignId: number }) {
   }
 
   const totalImpressions = data.reduce((s, d) => s + d.impressions, 0);
+  const totalReach = data.reduce((s, d) => s + (d.reach || 0), 0);
   const totalClicks = data.reduce((s, d) => s + d.clicks, 0);
+  const totalLinkClicks = data.reduce((s, d) => s + (d.link_clicks || 0), 0);
   const totalSpend = data.reduce((s, d) => s + d.spend_minor, 0) / 100;
+  const totalConversions = data.reduce((s, d) => s + (d.conversions || 0), 0);
+  // Weighted ROAS across the period: total revenue (roas × spend per day) / total spend.
+  const totalRevenue = data.reduce((s, d) => s + (d.roas || 0) * (d.spend_minor / 100), 0);
+  const roas = totalSpend > 0 ? totalRevenue / totalSpend : 0;
+  const cpa = totalConversions > 0 ? totalSpend / totalConversions : 0;
+  // Average daily frequency (mean of per-day values that reported one).
+  const freqDays = data.filter((d) => (d.frequency || 0) > 0);
+  const avgFrequency = freqDays.length
+    ? freqDays.reduce((s, d) => s + (d.frequency || 0), 0) / freqDays.length
+    : 0;
 
   return (
     <div className="space-y-4">
@@ -160,6 +180,23 @@ function CampaignInsightsPanel({ campaignId }: { campaignId: number }) {
           <div key={kpi.label} className="bg-[#1A1A2E] rounded-xl p-3 text-center">
             <kpi.icon className={`w-4 h-4 ${kpi.color} mx-auto mb-1`} />
             <p className="text-lg font-bold text-text-primary">{kpi.value}</p>
+            <p className="text-[10px] text-text-muted">{kpi.label}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Secondary KPIs — surfaced from the deep insight rows (0 when Meta reports none) */}
+      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2.5">
+        {[
+          { label: 'Reach', value: totalReach.toLocaleString() },
+          { label: 'Link clicks', value: totalLinkClicks.toLocaleString() },
+          { label: 'Conversions', value: totalConversions.toLocaleString() },
+          { label: 'ROAS', value: `${roas.toFixed(2)}×` },
+          { label: 'CPA', value: `$${cpa.toFixed(2)}` },
+          { label: 'Frequency', value: avgFrequency.toFixed(2) },
+        ].map((kpi) => (
+          <div key={kpi.label} className="bg-[#1A1A2E] rounded-xl p-2.5 text-center">
+            <p className="text-sm font-bold text-text-primary">{kpi.value}</p>
             <p className="text-[10px] text-text-muted">{kpi.label}</p>
           </div>
         ))}
@@ -315,6 +352,8 @@ export function AdsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [connectOpen, setConnectOpen] = useState(false);
   const [boostContentOpen, setBoostContentOpen] = useState(false);
+  const [carouselOpen, setCarouselOpen] = useState(false);
+  const [leadFormOpen, setLeadFormOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
   const fetchData = useCallback(async () => {
@@ -450,6 +489,14 @@ export function AdsPage() {
           <Button variant="secondary" size="sm" onClick={() => setCreateOpen(true)} className="flex items-center gap-2">
             <MegaphoneIcon className="w-4 h-4" />
             Create Campaign
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => setCarouselOpen(true)} className="flex items-center gap-2">
+            <ChartBarIcon className="w-4 h-4" />
+            Carousel
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => setLeadFormOpen(true)} className="flex items-center gap-2">
+            <CursorArrowRaysIcon className="w-4 h-4" />
+            Lead Forms
           </Button>
           <Button variant="ghost" size="sm" onClick={() => setConnectOpen(true)} className="flex items-center gap-2">
             <PlusIcon className="w-4 h-4" />
@@ -669,6 +716,16 @@ export function AdsPage() {
         isOpen={boostContentOpen}
         onClose={() => setBoostContentOpen(false)}
         onSuccess={() => { setBoostContentOpen(false); fetchData(); }}
+      />
+      <CarouselModal
+        isOpen={carouselOpen}
+        onClose={() => setCarouselOpen(false)}
+        onSuccess={() => { setCarouselOpen(false); fetchData(); }}
+      />
+      <LeadFormModal
+        isOpen={leadFormOpen}
+        onClose={() => setLeadFormOpen(false)}
+        onSuccess={() => setLeadFormOpen(false)}
       />
     </div>
   );

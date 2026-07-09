@@ -10,10 +10,11 @@
  */
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { XMarkIcon, MegaphoneIcon, SparklesIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, MegaphoneIcon, SparklesIcon, PlusIcon, EyeIcon } from '@heroicons/react/24/outline';
 import { adsService, type AdAccount, type AdCampaign } from '../../services/adsService';
 import { extractApiError } from '../../utils/extractApiError';
 import { TargetingBuilder, emptyTargeting, type TargetingValue } from './TargetingBuilder';
+import { MediaPicker, type MediaSelection } from './MediaPicker';
 
 interface Props {
   isOpen: boolean;
@@ -48,8 +49,95 @@ const CTA_OPTIONS: { value: string; label: string }[] = [
   { value: 'NO_BUTTON', label: 'No Button' },
 ];
 
+// Special ad categories — regulated verticals Meta requires you to declare.
+const SPECIAL_AD_CATEGORIES: { value: string; label: string }[] = [
+  { value: '', label: 'None (standard campaign)' },
+  { value: 'HOUSING', label: 'Housing' },
+  { value: 'CREDIT', label: 'Credit' },
+  { value: 'EMPLOYMENT', label: 'Employment' },
+  { value: 'ISSUES_ELECTIONS_POLITICS', label: 'Politics / Social issues' },
+  { value: 'FINANCIAL_PRODUCTS_SERVICES', label: 'Financial products & services' },
+  { value: 'ONLINE_GAMBLING_AND_GAMING', label: 'Gambling & gaming' },
+];
+
+const BID_STRATEGIES: { value: string; label: string; needsBid: boolean }[] = [
+  { value: 'LOWEST_COST_WITHOUT_CAP', label: 'Lowest cost (automatic)', needsBid: false },
+  { value: 'LOWEST_COST_WITH_BID_CAP', label: 'Bid cap', needsBid: true },
+  { value: 'COST_CAP', label: 'Cost cap', needsBid: true },
+  { value: 'LOWEST_COST_WITH_MIN_ROAS', label: 'Minimum ROAS', needsBid: true },
+];
+
+const CONVERSION_EVENTS: { value: string; label: string }[] = [
+  { value: 'PURCHASE', label: 'Purchase' },
+  { value: 'LEAD', label: 'Lead' },
+  { value: 'ADD_TO_CART', label: 'Add to cart' },
+  { value: 'COMPLETE_REGISTRATION', label: 'Complete registration' },
+];
+
+const AD_FORMATS: { value: string; label: string }[] = [
+  { value: 'MOBILE_FEED_STANDARD', label: 'Mobile Feed' },
+  { value: 'DESKTOP_FEED_STANDARD', label: 'Desktop Feed' },
+  { value: 'INSTAGRAM_STANDARD', label: 'Instagram' },
+  { value: 'INSTAGRAM_STORY', label: 'IG Story' },
+  { value: 'FACEBOOK_STORY_MOBILE', label: 'FB Story' },
+  { value: 'INSTAGRAM_REELS', label: 'IG Reels' },
+];
+
+const MAX_COPY_LINES = 5;
+
 const OBJECTIVE_VALUES = ['awareness', 'traffic', 'engagement', 'leads', 'sales'] as const;
 type ObjectiveValue = typeof OBJECTIVE_VALUES[number];
+
+/** A small "add up to N lines" list editor for multi-version copy. */
+function CopyLines({
+  label, lines, onChange, placeholder, max = MAX_COPY_LINES,
+}: {
+  label: string;
+  lines: string[];
+  onChange: (next: string[]) => void;
+  placeholder: string;
+  max?: number;
+}) {
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1.5">
+        <label className="text-xs font-semibold text-text-secondary">{label}</label>
+        <button
+          type="button"
+          onClick={() => onChange([...lines, ''])}
+          disabled={lines.length >= max}
+          className="flex items-center gap-1 text-[11px] font-semibold text-purple-300 hover:text-purple-200 disabled:opacity-40"
+        >
+          <PlusIcon className="w-3.5 h-3.5" /> Add variation
+        </button>
+      </div>
+      <div className="space-y-1.5">
+        {lines.map((line, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <input
+              value={line}
+              onChange={(e) => onChange(lines.map((l, j) => (j === i ? e.target.value : l)))}
+              placeholder={`${placeholder} #${i + 2}`}
+              className="flex-1 bg-dark-900/60 border border-white/10 rounded-xl px-3 py-2 text-text-primary text-sm outline-none"
+            />
+            <button
+              type="button"
+              onClick={() => onChange(lines.filter((_, j) => j !== i))}
+              className="shrink-0 p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-text-muted"
+            >
+              <XMarkIcon className="w-4 h-4" />
+            </button>
+          </div>
+        ))}
+        {lines.length === 0 && (
+          <p className="text-[10px] text-text-muted">
+            Optional extra variations — Meta will optimize across them (the primary field above is version #1).
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
 
 // Map an AI-suggested objective (which may be a Meta ODAX constant or free text)
 // onto our five supported objective values.
@@ -89,6 +177,33 @@ export function CreateCampaignModal({ isOpen, onClose, onSuccess }: Props) {
   const [advancedTargeting, setAdvancedTargeting] = useState(false);
   const [targeting, setTargeting] = useState<TargetingValue>(emptyTargeting('US'));
 
+  // Creative media (image only for the single-image link ad)
+  const [media, setMedia] = useState<MediaSelection | null>(null);
+
+  // ── Advanced options (collapsed by default) ──────────────────────────────
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [specialCategory, setSpecialCategory] = useState('');
+  const [urlTags, setUrlTags] = useState('');
+  const [budgetType, setBudgetType] = useState<'daily' | 'lifetime'>('daily');
+  const [lifetimeBudgetUsd, setLifetimeBudgetUsd] = useState('50.00');
+  const [startTime, setStartTime] = useState('');
+  const [endTime, setEndTime] = useState('');
+  const [bidStrategy, setBidStrategy] = useState('LOWEST_COST_WITHOUT_CAP');
+  const [bidAmountUsd, setBidAmountUsd] = useState('');
+  const [spendCapUsd, setSpendCapUsd] = useState('');
+  const [pixels, setPixels] = useState<{ id: string; name: string }[]>([]);
+  const [pixelId, setPixelId] = useState('');
+  const [customEventType, setCustomEventType] = useState('PURCHASE');
+  const [extraHeadlines, setExtraHeadlines] = useState<string[]>([]);
+  const [extraMessages, setExtraMessages] = useState<string[]>([]);
+  const [extraDescriptions, setExtraDescriptions] = useState<string[]>([]);
+
+  // ── Ad preview ───────────────────────────────────────────────────────────
+  const [adFormat, setAdFormat] = useState('MOBILE_FEED_STANDARD');
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+  const [previewing, setPreviewing] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+
   // AI suggest
   const [suggestTopic, setSuggestTopic] = useState('');
   const [suggesting, setSuggesting] = useState(false);
@@ -96,6 +211,19 @@ export function CreateCampaignModal({ isOpen, onClose, onSuccess }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [liveConfirm, setLiveConfirm] = useState<{ detail: string } | null>(null);
+
+  const needsPixel = objective === 'sales' || objective === 'leads';
+  const selectedBid = BID_STRATEGIES.find((b) => b.value === bidStrategy);
+
+  // Load Meta pixels when the account changes and this objective can use them.
+  useEffect(() => {
+    if (!adAccountId || !needsPixel) { setPixels([]); return; }
+    let cancelled = false;
+    adsService.listMetaPixels(adAccountId)
+      .then((r) => { if (!cancelled) setPixels(r.pixels || []); })
+      .catch(() => { if (!cancelled) setPixels([]); });
+    return () => { cancelled = true; };
+  }, [adAccountId, needsPixel]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -148,11 +276,47 @@ export function CreateCampaignModal({ isOpen, onClose, onSuccess }: Props) {
     !!adAccountId && !!linkUrl.trim() && parseFloat(dailyBudgetUsd) >= 1.5 &&
     parseInt(durationDays, 10) >= 1;
 
+  // Build the targeting object once (shared by submit + preview isn't targeted).
+  const buildTargeting = (): Record<string, unknown> =>
+    advancedTargeting
+      ? {
+          geo_locations: {
+            ...targeting.geo_locations,
+            ...(targeting.regions && targeting.regions.length
+              ? { regions: targeting.regions.map((key) => ({ key })) }
+              : {}),
+            ...(targeting.cities && targeting.cities.length
+              ? { cities: targeting.cities.map((key) => ({ key })) }
+              : {}),
+          },
+          age_min: targeting.age_min,
+          age_max: targeting.age_max,
+          ...(targeting.genders && targeting.genders.length ? { genders: targeting.genders } : {}),
+          ...(targeting.interests.length ? { interests: targeting.interests } : {}),
+          ...(targeting.placements.length ? { placements: targeting.placements } : {}),
+          ...(targeting.custom_audiences && targeting.custom_audiences.length
+            ? { custom_audiences: targeting.custom_audiences }
+            : {}),
+        }
+      : {
+          geo_locations: { countries: [country] },
+          age_min: parseInt(ageMin, 10),
+          age_max: parseInt(ageMax, 10),
+          // Meta genders: 1 = male, 2 = female; omit for all.
+          ...(gender === 'male' ? { genders: [1] } : gender === 'female' ? { genders: [2] } : {}),
+        };
+
   const submit = async (confirmLive = false) => {
     if (!adAccountId || !canSubmit) return;
     setSubmitting(true);
     setResult(null);
     try {
+      // Multi-version copy: only send the arrays when the user added variations.
+      // The array's first entry is the primary field (headline/message/description).
+      const headlines = extraHeadlines.map((s) => s.trim()).filter(Boolean);
+      const messages = extraMessages.map((s) => s.trim()).filter(Boolean);
+      const descriptions = extraDescriptions.map((s) => s.trim()).filter(Boolean);
+
       const campaign = await adsService.createMetaCampaign({
         ad_account_id: adAccountId,
         objective,
@@ -165,25 +329,33 @@ export function CreateCampaignModal({ isOpen, onClose, onSuccess }: Props) {
         description: description.trim() || undefined,
         cta: cta || undefined,
         display_link: displayLink.trim() || undefined,
+        // Creative image (from MediaPicker) — omit when none picked.
+        ...(media?.url ? { image_url: media.url } : {}),
         // Advanced targeting (interests/placements/geo) supersedes the basic
         // inputs when the user has opened that section; otherwise use the simple
         // country/age/gender fields.
-        targeting: advancedTargeting
+        targeting: buildTargeting(),
+        // ── Advanced options ──
+        ...(specialCategory ? { special_ad_categories: [specialCategory] } : {}),
+        ...(urlTags.trim() ? { url_tags: urlTags.trim() } : {}),
+        ...(budgetType === 'lifetime'
+          ? { budget_type: 'lifetime', lifetime_budget_usd: parseFloat(lifetimeBudgetUsd) || undefined }
+          : {}),
+        ...(startTime ? { start_time: new Date(startTime).toISOString() } : {}),
+        ...(endTime ? { end_time: new Date(endTime).toISOString() } : {}),
+        ...(bidStrategy !== 'LOWEST_COST_WITHOUT_CAP'
           ? {
-              geo_locations: targeting.geo_locations,
-              age_min: targeting.age_min,
-              age_max: targeting.age_max,
-              ...(targeting.genders && targeting.genders.length ? { genders: targeting.genders } : {}),
-              ...(targeting.interests.length ? { interests: targeting.interests } : {}),
-              ...(targeting.placements.length ? { placements: targeting.placements } : {}),
+              bid_strategy: bidStrategy as
+                | 'LOWEST_COST_WITH_BID_CAP' | 'COST_CAP' | 'LOWEST_COST_WITH_MIN_ROAS',
+              ...(bidAmountUsd ? { bid_amount_usd: parseFloat(bidAmountUsd) } : {}),
             }
-          : {
-              geo_locations: { countries: [country] },
-              age_min: parseInt(ageMin, 10),
-              age_max: parseInt(ageMax, 10),
-              // Meta genders: 1 = male, 2 = female; omit for all.
-              ...(gender === 'male' ? { genders: [1] } : gender === 'female' ? { genders: [2] } : {}),
-            },
+          : {}),
+        ...(spendCapUsd ? { spend_cap_usd: parseFloat(spendCapUsd) } : {}),
+        ...(needsPixel && pixelId ? { pixel_id: pixelId, custom_event_type: customEventType } : {}),
+        // Send multi-version lists only when there's more than the single primary.
+        ...(headlines.length ? { headlines: [headline.trim(), ...headlines].filter(Boolean).slice(0, MAX_COPY_LINES) } : {}),
+        ...(messages.length ? { messages: [message.trim(), ...messages].filter(Boolean).slice(0, MAX_COPY_LINES) } : {}),
+        ...(descriptions.length ? { descriptions: [description.trim(), ...descriptions].filter(Boolean).slice(0, MAX_COPY_LINES) } : {}),
         activate,
         confirm_live: confirmLive,
       });
@@ -200,6 +372,31 @@ export function CreateCampaignModal({ isOpen, onClose, onSuccess }: Props) {
       setResult({ type: 'error', message: data.error || 'Failed to create campaign.' });
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const runPreview = async () => {
+    if (!adAccountId) return;
+    setPreviewing(true);
+    setPreviewError(null);
+    setPreviewHtml(null);
+    try {
+      const r = await adsService.getMetaAdPreview({
+        ad_account_id: adAccountId,
+        ad_format: adFormat,
+        link_url: linkUrl.trim(),
+        message: message.trim() || undefined,
+        headline: headline.trim() || undefined,
+        description: description.trim() || undefined,
+        image_url: media?.url || undefined,
+        cta: cta || undefined,
+        display_link: displayLink.trim() || undefined,
+      });
+      setPreviewHtml(r.preview_html);
+    } catch (err: unknown) {
+      setPreviewError(extractApiError(err).message);
+    } finally {
+      setPreviewing(false);
     }
   };
 
@@ -338,6 +535,47 @@ export function CreateCampaignModal({ isOpen, onClose, onSuccess }: Props) {
             </div>
           </div>
 
+          {/* Creative image */}
+          <div>
+            <label className="block text-xs font-semibold text-text-secondary mb-1.5">Ad image (optional)</label>
+            <MediaPicker value={media} onChange={setMedia} kind="image" adAccountId={adAccountId ?? undefined} />
+          </div>
+
+          {/* Ad preview */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-semibold text-text-secondary">Ad preview</label>
+              <div className="flex items-center gap-2">
+                <select value={adFormat} onChange={(e) => setAdFormat(e.target.value)}
+                  className="bg-dark-900/60 border border-white/10 rounded-lg px-2 py-1 text-text-primary text-[11px] outline-none">
+                  {AD_FORMATS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+                </select>
+                <button type="button" onClick={runPreview} disabled={previewing || !adAccountId || !linkUrl.trim()}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-text-secondary text-[11px] font-semibold disabled:opacity-40">
+                  <EyeIcon className="w-3.5 h-3.5" />
+                  {previewing ? 'Rendering…' : 'Preview ad'}
+                </button>
+              </div>
+            </div>
+            {previewError && (
+              <div className="p-2 rounded-lg bg-red-500/10 text-red-300 text-xs mb-2">{previewError}</div>
+            )}
+            {previewHtml && (
+              <div className="rounded-xl border border-white/10 bg-white overflow-hidden">
+                <iframe
+                  title="Ad preview"
+                  srcDoc={previewHtml}
+                  sandbox="allow-scripts allow-same-origin"
+                  className="w-full"
+                  style={{ height: 520, border: 'none' }}
+                />
+              </div>
+            )}
+            {!previewHtml && !previewError && (
+              <p className="text-[10px] text-text-muted">Renders a live Meta preview — nothing is created or spent.</p>
+            )}
+          </div>
+
           {/* Budget + targeting */}
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -402,6 +640,138 @@ export function CreateCampaignModal({ isOpen, onClose, onSuccess }: Props) {
               </div>
             </>
           )}
+
+          {/* Advanced options — collapsed by default */}
+          <div className="rounded-xl border border-white/10 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowAdvanced((v) => !v)}
+              className="w-full flex items-center justify-between px-4 py-3 bg-dark-900/60 hover:bg-dark-900/80 text-text-secondary text-xs font-semibold"
+            >
+              <span>Advanced options</span>
+              <span className="text-text-muted">{showAdvanced ? '▲' : '▼'}</span>
+            </button>
+            {showAdvanced && (
+              <div className="p-4 space-y-4 bg-dark-900/30">
+                {/* Special ad category */}
+                <div>
+                  <label className="block text-xs font-semibold text-text-secondary mb-1.5">Special ad category</label>
+                  <select value={specialCategory} onChange={(e) => setSpecialCategory(e.target.value)}
+                    className="w-full bg-dark-900/60 border border-white/10 rounded-xl px-3 py-2.5 text-text-primary text-sm outline-none">
+                    {SPECIAL_AD_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                  </select>
+                  {specialCategory && (
+                    <p className="text-[10px] text-amber-400 mt-1">
+                      Regulated category — Meta restricts targeting (age/gender/geo) for these ads.
+                    </p>
+                  )}
+                </div>
+
+                {/* URL tags */}
+                <div>
+                  <label className="block text-xs font-semibold text-text-secondary mb-1.5">URL parameters (UTM)</label>
+                  <input value={urlTags} onChange={(e) => setUrlTags(e.target.value)}
+                    placeholder="utm_source=facebook&utm_medium=cpc"
+                    className="w-full bg-dark-900/60 border border-white/10 rounded-xl px-3 py-2.5 text-text-primary text-sm outline-none" />
+                </div>
+
+                {/* Budget type */}
+                <div>
+                  <label className="block text-xs font-semibold text-text-secondary mb-1.5">Budget type</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {(['daily', 'lifetime'] as const).map((bt) => (
+                      <button key={bt} type="button" onClick={() => setBudgetType(bt)}
+                        className={`py-2 rounded-lg text-xs font-semibold capitalize transition-colors ${
+                          budgetType === bt
+                            ? 'bg-purple-500/20 text-purple-200 border border-purple-500/40'
+                            : 'bg-dark-900/60 text-text-muted border border-white/10 hover:border-white/20'
+                        }`}>
+                        {bt}
+                      </button>
+                    ))}
+                  </div>
+                  {budgetType === 'lifetime' && (
+                    <div className="mt-2">
+                      <label className="block text-xs font-semibold text-text-secondary mb-1.5">Lifetime budget (USD)</label>
+                      <input type="number" min="1.5" step="0.5" value={lifetimeBudgetUsd} onChange={(e) => setLifetimeBudgetUsd(e.target.value)}
+                        className="w-full bg-dark-900/60 border border-white/10 rounded-xl px-3 py-2.5 text-text-primary text-sm outline-none" />
+                      <p className="text-[10px] text-text-muted mt-1">Total spent over the whole run (min $1.50).</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Schedule */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-text-secondary mb-1.5">Start (optional)</label>
+                    <input type="datetime-local" value={startTime} onChange={(e) => setStartTime(e.target.value)}
+                      className="w-full bg-dark-900/60 border border-white/10 rounded-xl px-3 py-2.5 text-text-primary text-sm outline-none" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-text-secondary mb-1.5">End (optional)</label>
+                    <input type="datetime-local" value={endTime} onChange={(e) => setEndTime(e.target.value)}
+                      className="w-full bg-dark-900/60 border border-white/10 rounded-xl px-3 py-2.5 text-text-primary text-sm outline-none" />
+                  </div>
+                </div>
+
+                {/* Bid strategy */}
+                <div>
+                  <label className="block text-xs font-semibold text-text-secondary mb-1.5">Bid strategy</label>
+                  <select value={bidStrategy} onChange={(e) => setBidStrategy(e.target.value)}
+                    className="w-full bg-dark-900/60 border border-white/10 rounded-xl px-3 py-2.5 text-text-primary text-sm outline-none">
+                    {BID_STRATEGIES.map((b) => <option key={b.value} value={b.value}>{b.label}</option>)}
+                  </select>
+                  {selectedBid?.needsBid && (
+                    <div className="mt-2">
+                      <label className="block text-xs font-semibold text-text-secondary mb-1.5">Bid / target amount (USD)</label>
+                      <input type="number" min="0.01" step="0.01" value={bidAmountUsd} onChange={(e) => setBidAmountUsd(e.target.value)}
+                        placeholder={bidStrategy === 'LOWEST_COST_WITH_MIN_ROAS' ? 'e.g. 2.0 (min ROAS)' : 'e.g. 1.50'}
+                        className="w-full bg-dark-900/60 border border-white/10 rounded-xl px-3 py-2.5 text-text-primary text-sm outline-none" />
+                    </div>
+                  )}
+                </div>
+
+                {/* Spend cap */}
+                <div>
+                  <label className="block text-xs font-semibold text-text-secondary mb-1.5">Campaign spend cap (USD, optional)</label>
+                  <input type="number" min="1" step="1" value={spendCapUsd} onChange={(e) => setSpendCapUsd(e.target.value)}
+                    placeholder="Lifetime ceiling across the campaign"
+                    className="w-full bg-dark-900/60 border border-white/10 rounded-xl px-3 py-2.5 text-text-primary text-sm outline-none" />
+                </div>
+
+                {/* Pixel + conversion event (sales/leads only) */}
+                {needsPixel && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-text-secondary mb-1.5">Meta Pixel</label>
+                      <select value={pixelId} onChange={(e) => setPixelId(e.target.value)}
+                        className="w-full bg-dark-900/60 border border-white/10 rounded-xl px-3 py-2.5 text-text-primary text-sm outline-none">
+                        <option value="">— None (optimize for Page) —</option>
+                        {pixels.map((p) => <option key={p.id} value={p.id}>{p.name || p.id}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-text-secondary mb-1.5">Conversion event</label>
+                      <select value={customEventType} onChange={(e) => setCustomEventType(e.target.value)} disabled={!pixelId}
+                        className="w-full bg-dark-900/60 border border-white/10 rounded-xl px-3 py-2.5 text-text-primary text-sm outline-none disabled:opacity-50">
+                        {CONVERSION_EVENTS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                )}
+
+                {/* Multi-version copy */}
+                <div className="space-y-3 pt-1 border-t border-white/10">
+                  <p className="text-[11px] text-text-muted pt-2">
+                    Add up to {MAX_COPY_LINES} variations each and Meta will optimize the best-performing combination.
+                  </p>
+                  <CopyLines label="Extra headlines" lines={extraHeadlines} onChange={setExtraHeadlines} placeholder="Headline" />
+                  <CopyLines label="Extra primary texts" lines={extraMessages} onChange={setExtraMessages} placeholder="Primary text" />
+                  <CopyLines label="Extra descriptions" lines={extraDescriptions} onChange={setExtraDescriptions} placeholder="Description" />
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* Launch mode — explicit, defaults to PAUSED so nothing spends by accident */}
           <div>

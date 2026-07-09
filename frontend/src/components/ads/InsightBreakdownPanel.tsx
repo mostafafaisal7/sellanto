@@ -9,13 +9,23 @@ import { useState, useEffect, useCallback } from 'react';
 import { ChartPieIcon } from '@heroicons/react/24/outline';
 import { adsService, type BreakdownDimension, type BreakdownRow } from '../../services/adsService';
 
-const DIMENSIONS: { value: BreakdownDimension; label: string; field: keyof BreakdownRow }[] = [
+const DIMENSIONS: { value: BreakdownDimension; label: string; field: keyof BreakdownRow | (keyof BreakdownRow)[] }[] = [
   { value: 'age', label: 'Age', field: 'age' },
   { value: 'gender', label: 'Gender', field: 'gender' },
+  { value: 'age,gender', label: 'Age + Gender', field: ['age', 'gender'] },
   { value: 'publisher_platform', label: 'Placement', field: 'publisher_platform' },
   { value: 'region', label: 'Region', field: 'region' },
+  { value: 'country', label: 'Country', field: 'country' },
   { value: 'impression_device', label: 'Device', field: 'impression_device' },
+  { value: 'device_platform', label: 'Device platform', field: 'device_platform' },
 ];
+
+// Compose a row's dimension label from one or more breakdown fields.
+function rowLabel(r: BreakdownRow, field: keyof BreakdownRow | (keyof BreakdownRow)[]): string {
+  const fields = Array.isArray(field) ? field : [field];
+  const parts = fields.map((f) => String(r[f] ?? '')).filter(Boolean);
+  return parts.length ? parts.join(' · ') : '—';
+}
 
 function num(v: unknown): number {
   const n = typeof v === 'number' ? v : parseFloat(String(v ?? ''));
@@ -88,21 +98,29 @@ export function InsightBreakdownPanel({ campaignId }: { campaignId: number }) {
               <tr className="text-text-muted border-b border-white/10">
                 <th className="text-left font-semibold py-1.5 pr-2 capitalize">{active.label}</th>
                 <th className="text-right font-semibold py-1.5 px-2">Impressions</th>
+                <th className="text-right font-semibold py-1.5 px-2">Reach</th>
                 <th className="text-right font-semibold py-1.5 px-2">Clicks</th>
                 <th className="text-right font-semibold py-1.5 px-2">Spend</th>
-                <th className="text-right font-semibold py-1.5 pl-2">CTR</th>
+                <th className="text-right font-semibold py-1.5 px-2">CTR</th>
+                <th className="text-right font-semibold py-1.5 px-2">CPC</th>
+                <th className="text-right font-semibold py-1.5 px-2">CPM</th>
+                <th className="text-right font-semibold py-1.5 pl-2">Freq.</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r, i) => {
-                const label = String(r[active.field] ?? '—');
+                const label = rowLabel(r, active.field);
                 return (
                   <tr key={`${label}-${i}`} className="border-b border-white/5 last:border-0">
-                    <td className="text-text-primary py-1.5 pr-2 capitalize">{label}</td>
+                    <td className="text-text-primary py-1.5 pr-2 capitalize whitespace-nowrap">{label}</td>
                     <td className="text-right text-text-secondary py-1.5 px-2">{num(r.impressions).toLocaleString()}</td>
+                    <td className="text-right text-text-secondary py-1.5 px-2">{num(r.reach).toLocaleString()}</td>
                     <td className="text-right text-text-secondary py-1.5 px-2">{num(r.clicks).toLocaleString()}</td>
                     <td className="text-right text-text-secondary py-1.5 px-2">${num(r.spend).toFixed(2)}</td>
-                    <td className="text-right text-text-secondary py-1.5 pl-2">{num(r.ctr).toFixed(2)}%</td>
+                    <td className="text-right text-text-secondary py-1.5 px-2">{num(r.ctr).toFixed(2)}%</td>
+                    <td className="text-right text-text-secondary py-1.5 px-2">${num(r.cpc).toFixed(2)}</td>
+                    <td className="text-right text-text-secondary py-1.5 px-2">${num(r.cpm).toFixed(2)}</td>
+                    <td className="text-right text-text-secondary py-1.5 pl-2">{num(r.frequency).toFixed(2)}</td>
                   </tr>
                 );
               })}
