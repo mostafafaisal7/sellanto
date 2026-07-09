@@ -19,6 +19,7 @@ import {
   RocketLaunchIcon,
 } from '@heroicons/react/24/outline';
 import { BoostPostModal } from '../components/ads/BoostPostModal';
+import { BoostFromContentModal } from '../components/ads/BoostFromContentModal';
 import { format, formatDistanceToNow } from 'date-fns';
 import { Button, Card, StatusBadge, PlatformBadge, Modal, ConfirmModal, LoadingPlaceholder } from '../components/ui';
 import { usePostStore } from '../store';
@@ -36,6 +37,7 @@ export function MyPostsPage() {
   const [searchParams] = useSearchParams();
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [boostingPost, setBoostingPost] = useState<Post | null>(null);
+  const [boostContentOpen, setBoostContentOpen] = useState(false);
   const [deleteModalPost, setDeleteModalPost] = useState<Post | null>(null);
   const [cancelModalPost, setCancelModalPost] = useState<Post | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -443,6 +445,17 @@ export function MyPostsPage() {
                   Boost Post
                 </button>
               )}
+              {(selectedPost.status === 'scheduled' || selectedPost.status === 'draft') && (
+                <button
+                  type="button"
+                  onClick={() => { setBoostContentOpen(true); setSelectedPost(null); }}
+                  className="flex-1 py-2.5 rounded-xl border border-purple-500/40 bg-purple-500/10 hover:bg-purple-500/20 text-purple-200 text-sm font-bold transition-all flex items-center justify-center gap-2"
+                  title="Queue a paid boost that launches automatically once this post publishes"
+                >
+                  <RocketLaunchIcon className="w-5 h-5" />
+                  Boost when published
+                </button>
+              )}
               <Button variant="secondary" onClick={() => setSelectedPost(null)}>
                 Close
               </Button>
@@ -456,6 +469,13 @@ export function MyPostsPage() {
         isOpen={!!boostingPost}
         onClose={() => setBoostingPost(null)}
         preselectedPost={boostingPost}
+      />
+
+      {/* Boost from Content — pick a post (incl. scheduled) & queue/launch a boost */}
+      <BoostFromContentModal
+        isOpen={boostContentOpen}
+        onClose={() => setBoostContentOpen(false)}
+        onSuccess={() => { setBoostContentOpen(false); fetchPosts(); }}
       />
 
       {/* Delete Confirmation */}

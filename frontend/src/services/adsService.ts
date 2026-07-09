@@ -80,6 +80,124 @@ export interface AdRule {
   trigger_count: number;
 }
 
+/** Breakdown dimensions supported by /ads/campaigns/{id}/breakdown/. */
+export type BreakdownDimension =
+  | 'age'
+  | 'gender'
+  | 'age,gender'
+  | 'publisher_platform'
+  | 'region'
+  | 'country'
+  | 'impression_device'
+  | 'device_platform';
+
+/**
+ * One row of a breakdown report. Metrics are always present; the dimension
+ * fields (age/gender/publisher_platform/…) vary by the requested breakdown, so
+ * they're indexed loosely as optional strings.
+ */
+export interface BreakdownRow {
+  impressions: number;
+  reach: number;
+  clicks: number;
+  spend: number;
+  cpc: number;
+  cpm: number;
+  ctr: number;
+  frequency: number;
+  actions?: Array<{ action_type: string; value: number }>;
+  age?: string;
+  gender?: string;
+  publisher_platform?: string;
+  region?: string;
+  country?: string;
+  impression_device?: string;
+  device_platform?: string;
+  [key: string]: unknown;
+}
+
+export interface BreakdownResponse {
+  breakdown: string;
+  rows: BreakdownRow[];
+}
+
+/** A targeting spec result (interest / behavior / demographic). */
+export interface TargetingSearchResult {
+  id: string;
+  name: string;
+  audience_size: number;
+  path?: string[];
+  type: string;
+}
+
+/** A geo (city / region / country) targeting result. */
+export interface GeoSearchResult {
+  key: string;
+  name: string;
+  type: string;
+  country_code: string;
+}
+
+/** A live Meta custom/lookalike/saved audience. */
+export interface LiveAudience {
+  id: string;
+  name: string;
+  subtype: string;
+  approximate_count?: number | null;
+  delivery_status?: string | null;
+  operation_status?: string | null;
+}
+
+/** AI-generated campaign suggestion. */
+export interface CampaignSuggestion {
+  name: string;
+  objective: string;
+  daily_budget_usd: number;
+  primary_text: string;
+  headline: string;
+  description: string;
+  link_description?: string;
+  call_to_action: string;
+  targeting: {
+    countries: string[];
+    age_min: number;
+    age_max: number;
+    genders: number[];
+    interests: Array<{ id: string; name: string }> | string[];
+  };
+}
+
+export interface AccountSummary {
+  spend: number;
+  impressions: number;
+  clicks: number;
+  ctr: number;
+  cpc: number;
+  reach: number;
+  conversions: number;
+  active_campaigns: number;
+  paused_campaigns: number;
+  total_campaigns: number;
+}
+
+export interface AccountRecommendation {
+  title: string;
+  message: string;
+  severity: string;
+}
+
+/** A published/scheduled post eligible for boosting. */
+export interface BoostablePost {
+  id: number;
+  caption: string;
+  status: string;
+  facebook_post_id?: string | null;
+  instagram_post_id?: string | null;
+  scheduled_time?: string | null;
+  ai_generated: boolean;
+  thumbnail?: string | null;
+}
+
 // ── Service ───────────────────────────────────────────────────────────────────
 
 export const adsService = {
@@ -165,6 +283,10 @@ export const adsService = {
     image_url?: string;
     targeting?: Record<string, unknown>;
     activate?: boolean;
+    /** Meta call-to-action button, e.g. LEARN_MORE / SHOP_NOW / SIGN_UP. */
+    cta?: string;
+    /** Short display link shown under the headline (e.g. yoursite.com). */
+    display_link?: string;
     /** Required (true) to proceed on a LIVE (non-sandbox) ad account — real spend. */
     confirm_live?: boolean;
   }): Promise<AdCampaign> {
@@ -283,6 +405,124 @@ export const adsService = {
 
   async deleteRule(id: number): Promise<{ deleted: boolean }> {
     const res = await api.delete(`/ads/rules/${id}/`);
+    return res.data;
+  },
+
+  // ── Insights breakdown (age / gender / placement / region / device) ───────
+  /** 1) GET /ads/campaigns/{id}/breakdown/ — segmented performance rows. */
+  async getBreakdown(
+    campaignId: number,
+    breakdown: BreakdownDimension,
+    datePreset = 'last_7d',
+  ): Promise<BreakdownResponse> {
+    const res = await api.get(`/ads/campaigns/${campaignId}/breakdown/`, {
+      params: { date_preset: datePreset, breakdown },
+    });
+    return res.data;
+  },
+
+  // ── Live Meta targeting search (interests / behaviors / demographics) ─────
+  /** 2) GET /ads/meta/targeting/search/ — search the Meta targeting catalog. */
+  async searchTargeting(params: {
+    q: string;
+    type: 'interest' | 'behavior' | 'demographic';
+    ad_account_id?: number;
+  }): Promise<{ success: boolean; type: string; results: TargetingSearchResult[] }> {
+    const res = await api.get('/ads/meta/targeting/search/', {
+      params: { q: params.q, type: params.type, ad_account_id: params.ad_account_id },
+    });
+    return res.data;
+  },
+
+  /** 3) GET /ads/meta/targeting/geo/ — search countries / regions / cities. */
+  async searchGeo(params: {
+    q: string;
+    ad_account_id?: number;
+  }): Promise<{ success: boolean; results: GeoSearchResult[] }> {
+    const res = await api.get('/ads/meta/targeting/geo/', {
+      params: { q: params.q, ad_account_id: params.ad_account_id },
+    });
+    return res.data;
+  },
+
+  // ── Live Meta audiences (read-through from the ad account) ────────────────
+  /** 4) GET /ads/meta/audiences/live/ — custom/lookalike audiences on Meta. */
+  async listLiveAudiences(
+    adAccountId?: number,
+  ): Promise<{ audiences: LiveAudience[]; count: number }> {
+    const res = await api.get('/ads/meta/audiences/live/', {
+      params: adAccountId ? { ad_account_id: adAccountId } : undefined,
+    });
+    return res.data;
+  },
+
+  // ── AI campaign suggestion ────────────────────────────────────────────────
+  /** 5) POST /ads/meta/suggest/ — AI-drafted campaign name/copy/targeting. */
+  async suggestMetaCampaign(params: {
+    topic?: string;
+    objective?: string;
+    brand_id?: number;
+  }): Promise<{ success: boolean; suggestion: CampaignSuggestion }> {
+    const res = await api.post('/ads/meta/suggest/', params);
+    return res.data;
+  },
+
+  // ── Account-level insights & recommendations ──────────────────────────────
+  /** 6) GET /ads/meta/account-summary/ — rolled-up KPIs for an ad account. */
+  async getAccountSummary(params: {
+    ad_account_id?: number;
+    date_preset?: string;
+  }): Promise<AccountSummary> {
+    const res = await api.get('/ads/meta/account-summary/', {
+      params: { ad_account_id: params.ad_account_id, date_preset: params.date_preset },
+    });
+    return res.data;
+  },
+
+  /** 7) GET /ads/meta/recommendations/ — actionable optimization tips. */
+  async getRecommendations(
+    adAccountId?: number,
+  ): Promise<{ recommendations: AccountRecommendation[] }> {
+    const res = await api.get('/ads/meta/recommendations/', {
+      params: adAccountId ? { ad_account_id: adAccountId } : undefined,
+    });
+    return res.data;
+  },
+
+  // ── Boost from content (published or scheduled posts) ─────────────────────
+  /** 8) GET /ads/boostable-posts/ — posts eligible to boost. */
+  async getBoostablePosts(): Promise<{ posts: BoostablePost[] }> {
+    const res = await api.get('/ads/boostable-posts/');
+    return res.data;
+  },
+
+  /**
+   * 9) POST /ads/boost-from-post/ — boost a specific content post.
+   * May 409 with { requires_confirmation, detail } on LIVE accounts — resubmit
+   * with confirm_live=true (same pattern as boostPost).
+   */
+  async boostFromPost(params: {
+    post_id: number;
+    ad_account_id: number;
+    daily_budget_usd: number;
+    duration_days: number;
+    targeting: Record<string, unknown>;
+    /** Required (true) to proceed on a LIVE (non-sandbox) ad account — real spend. */
+    confirm_live?: boolean;
+    /** For a scheduled post: boost automatically once it publishes. */
+    schedule_after_publish?: boolean;
+  }): Promise<AdCampaign & { boost_on_publish?: boolean; detail?: string }> {
+    const res = await api.post('/ads/boost-from-post/', params);
+    return res.data;
+  },
+
+  /** 10) GET /ads/prefill-from-post/ — creative prefill from a post. */
+  async prefillFromPost(
+    postId: number,
+  ): Promise<{ message: string; headline: string; image_url: string }> {
+    const res = await api.get('/ads/prefill-from-post/', {
+      params: { post_id: postId },
+    });
     return res.data;
   },
 };

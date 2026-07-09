@@ -47,6 +47,9 @@ import { CreateCampaignModal } from '../components/ads/CreateCampaignModal';
 import { ConnectMetaTokenModal } from '../components/ads/ConnectMetaTokenModal';
 import { AdRulesPanel } from '../components/ads/AdRulesPanel';
 import { AudiencesPanel } from '../components/ads/AudiencesPanel';
+import { InsightBreakdownPanel } from '../components/ads/InsightBreakdownPanel';
+import { AccountInsightsPanel } from '../components/ads/AccountInsightsPanel';
+import { BoostFromContentModal } from '../components/ads/BoostFromContentModal';
 
 // Safely extract a human-readable message from an axios error, coercing
 // object/DRF-dict error bodies to a string so the UI never shows [object Object].
@@ -311,6 +314,7 @@ export function AdsPage() {
   const [videoAdOpen, setVideoAdOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [connectOpen, setConnectOpen] = useState(false);
+  const [boostContentOpen, setBoostContentOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
   const fetchData = useCallback(async () => {
@@ -435,6 +439,10 @@ export function AdsPage() {
             <PlusIcon className="w-4 h-4" />
             Boost Post
           </Button>
+          <Button variant="secondary" size="sm" onClick={() => setBoostContentOpen(true)} className="flex items-center gap-2">
+            <RocketLaunchIcon className="w-4 h-4" />
+            Boost from Content
+          </Button>
           <Button variant="secondary" size="sm" onClick={() => setVideoAdOpen(true)} className="flex items-center gap-2">
             <FilmIcon className="w-4 h-4" />
             Video Ad
@@ -484,6 +492,11 @@ export function AdsPage() {
             </Card>
           ))}
         </div>
+      )}
+
+      {/* Account-level performance summary + recommendations */}
+      {!loading && accounts.length > 0 && (
+        <AccountInsightsPanel adAccountId={accounts[0].id} />
       )}
 
       {/* Main content */}
@@ -572,6 +585,9 @@ export function AdsPage() {
                     <CampaignInsightsPanel campaignId={selectedCampaign.id} />
                   </Card>
                   <div className="mt-4">
+                    <InsightBreakdownPanel campaignId={selectedCampaign.id} />
+                  </div>
+                  <div className="mt-4">
                     <AdRulesPanel campaignId={selectedCampaign.id} />
                   </div>
                 </motion.div>
@@ -648,6 +664,11 @@ export function AdsPage() {
         isOpen={connectOpen}
         onClose={() => setConnectOpen(false)}
         onSuccess={() => { setConnectOpen(false); fetchData(); }}
+      />
+      <BoostFromContentModal
+        isOpen={boostContentOpen}
+        onClose={() => setBoostContentOpen(false)}
+        onSuccess={() => { setBoostContentOpen(false); fetchData(); }}
       />
     </div>
   );

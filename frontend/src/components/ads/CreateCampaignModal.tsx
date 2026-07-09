@@ -10,8 +10,10 @@
  */
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { XMarkIcon, MegaphoneIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, MegaphoneIcon, SparklesIcon } from '@heroicons/react/24/outline';
 import { adsService, type AdAccount, type AdCampaign } from '../../services/adsService';
+import { extractApiError } from '../../utils/extractApiError';
+import { TargetingBuilder, emptyTargeting, type TargetingValue } from './TargetingBuilder';
 
 interface Props {
   isOpen: boolean;
@@ -34,6 +36,35 @@ const COUNTRIES = [
   { code: 'DE', name: 'Germany' }, { code: 'FR', name: 'France' },
 ];
 
+const CTA_OPTIONS: { value: string; label: string }[] = [
+  { value: 'LEARN_MORE', label: 'Learn More' },
+  { value: 'SHOP_NOW', label: 'Shop Now' },
+  { value: 'SIGN_UP', label: 'Sign Up' },
+  { value: 'BOOK_TRAVEL', label: 'Book Now' },
+  { value: 'CONTACT_US', label: 'Contact Us' },
+  { value: 'DOWNLOAD', label: 'Download' },
+  { value: 'GET_OFFER', label: 'Get Offer' },
+  { value: 'SUBSCRIBE', label: 'Subscribe' },
+  { value: 'NO_BUTTON', label: 'No Button' },
+];
+
+const OBJECTIVE_VALUES = ['awareness', 'traffic', 'engagement', 'leads', 'sales'] as const;
+type ObjectiveValue = typeof OBJECTIVE_VALUES[number];
+
+// Map an AI-suggested objective (which may be a Meta ODAX constant or free text)
+// onto our five supported objective values.
+function normalizeObjective(raw: string | undefined): ObjectiveValue | null {
+  if (!raw) return null;
+  const v = raw.toLowerCase();
+  if (OBJECTIVE_VALUES.includes(v as ObjectiveValue)) return v as ObjectiveValue;
+  if (v.includes('aware') || v.includes('reach')) return 'awareness';
+  if (v.includes('traffic') || v.includes('link_click')) return 'traffic';
+  if (v.includes('engage')) return 'engagement';
+  if (v.includes('lead')) return 'leads';
+  if (v.includes('sale') || v.includes('conversion') || v.includes('purchase')) return 'sales';
+  return null;
+}
+
 export function CreateCampaignModal({ isOpen, onClose, onSuccess }: Props) {
   const [adAccounts, setAdAccounts] = useState<AdAccount[]>([]);
   const [adAccountId, setAdAccountId] = useState<number | null>(null);
@@ -42,6 +73,9 @@ export function CreateCampaignModal({ isOpen, onClose, onSuccess }: Props) {
   const [linkUrl, setLinkUrl] = useState('');
   const [message, setMessage] = useState('');
   const [headline, setHeadline] = useState('');
+  const [description, setDescription] = useState('');
+  const [cta, setCta] = useState('LEARN_MORE');
+  const [displayLink, setDisplayLink] = useState('');
   const [dailyBudgetUsd, setDailyBudgetUsd] = useState('2.00');
   const [durationDays, setDurationDays] = useState('7');
   const [country, setCountry] = useState('US');
@@ -49,6 +83,15 @@ export function CreateCampaignModal({ isOpen, onClose, onSuccess }: Props) {
   const [ageMax, setAgeMax] = useState('65');
   const [gender, setGender] = useState<'all' | 'male' | 'female'>('all');
   const [activate, setActivate] = useState(false);
+
+  // Advanced targeting (interests + placements + geo search) — optional, off by
+  // default. When opened, it supersedes the basic country/age/gender inputs.
+  const [advancedTargeting, setAdvancedTargeting] = useState(false);
+  const [targeting, setTargeting] = useState<TargetingValue>(emptyTargeting('US'));
+
+  // AI suggest
+  const [suggestTopic, setSuggestTopic] = useState('');
+  const [suggesting, setSuggesting] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -64,6 +107,42 @@ export function CreateCampaignModal({ isOpen, onClose, onSuccess }: Props) {
   }, [isOpen]);
 
   const selected = adAccounts.find((a) => a.id === adAccountId);
+
+  const runSuggest = async () => {
+    setSuggesting(true);
+    setResult(null);
+    try {
+      const { suggestion } = await adsService.suggestMetaCampaign({
+        topic: suggestTopic.trim() || undefined,
+        objective,
+      });
+      if (suggestion.name) setName(suggestion.name);
+      const obj = normalizeObjective(suggestion.objective);
+      if (obj) setObjective(obj);
+      if (suggestion.daily_budget_usd) setDailyBudgetUsd(String(suggestion.daily_budget_usd));
+      if (suggestion.primary_text) setMessage(suggestion.primary_text);
+      if (suggestion.headline) setHeadline(suggestion.headline);
+      if (suggestion.description) setDescription(suggestion.description);
+      if (suggestion.link_description) setDisplayLink(suggestion.link_description);
+      if (suggestion.call_to_action) setCta(suggestion.call_to_action);
+      const t = suggestion.targeting;
+      if (t) {
+        if (t.countries && t.countries.length > 0) setCountry(t.countries[0]);
+        if (typeof t.age_min === 'number') setAgeMin(String(t.age_min));
+        if (typeof t.age_max === 'number') setAgeMax(String(t.age_max));
+        if (Array.isArray(t.genders) && t.genders.length === 1) {
+          setGender(t.genders[0] === 1 ? 'male' : t.genders[0] === 2 ? 'female' : 'all');
+        } else {
+          setGender('all');
+        }
+      }
+      setResult({ type: 'success', message: '✨ Prefilled from AI suggestion — review before launching.' });
+    } catch (err: unknown) {
+      setResult({ type: 'error', message: extractApiError(err).message });
+    } finally {
+      setSuggesting(false);
+    }
+  };
 
   const canSubmit =
     !!adAccountId && !!linkUrl.trim() && parseFloat(dailyBudgetUsd) >= 1.5 &&
@@ -83,13 +162,28 @@ export function CreateCampaignModal({ isOpen, onClose, onSuccess }: Props) {
         link_url: linkUrl.trim(),
         message: message.trim() || undefined,
         headline: headline.trim() || undefined,
-        targeting: {
-          geo_locations: { countries: [country] },
-          age_min: parseInt(ageMin, 10),
-          age_max: parseInt(ageMax, 10),
-          // Meta genders: 1 = male, 2 = female; omit for all.
-          ...(gender === 'male' ? { genders: [1] } : gender === 'female' ? { genders: [2] } : {}),
-        },
+        description: description.trim() || undefined,
+        cta: cta || undefined,
+        display_link: displayLink.trim() || undefined,
+        // Advanced targeting (interests/placements/geo) supersedes the basic
+        // inputs when the user has opened that section; otherwise use the simple
+        // country/age/gender fields.
+        targeting: advancedTargeting
+          ? {
+              geo_locations: targeting.geo_locations,
+              age_min: targeting.age_min,
+              age_max: targeting.age_max,
+              ...(targeting.genders && targeting.genders.length ? { genders: targeting.genders } : {}),
+              ...(targeting.interests.length ? { interests: targeting.interests } : {}),
+              ...(targeting.placements.length ? { placements: targeting.placements } : {}),
+            }
+          : {
+              geo_locations: { countries: [country] },
+              age_min: parseInt(ageMin, 10),
+              age_max: parseInt(ageMax, 10),
+              // Meta genders: 1 = male, 2 = female; omit for all.
+              ...(gender === 'male' ? { genders: [1] } : gender === 'female' ? { genders: [2] } : {}),
+            },
         activate,
         confirm_live: confirmLive,
       });
@@ -129,6 +223,31 @@ export function CreateCampaignModal({ isOpen, onClose, onSuccess }: Props) {
         </div>
 
         <div className="p-5 space-y-4">
+          {/* AI suggest */}
+          <div className="p-3 rounded-xl bg-purple-500/10 border border-purple-500/20">
+            <label className="text-xs font-semibold text-purple-200 mb-1.5 flex items-center gap-1">
+              <SparklesIcon className="w-3.5 h-3.5" /> AI suggest
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                value={suggestTopic}
+                onChange={(e) => setSuggestTopic(e.target.value)}
+                placeholder="What are you advertising? (e.g. handmade candles)"
+                className="flex-1 bg-dark-900/60 border border-white/10 rounded-xl px-3 py-2.5 text-text-primary text-sm outline-none"
+              />
+              <button
+                type="button"
+                onClick={runSuggest}
+                disabled={suggesting}
+                className="shrink-0 flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 text-purple-200 text-xs font-semibold disabled:opacity-50"
+              >
+                <SparklesIcon className="w-4 h-4" />
+                {suggesting ? 'Thinking…' : 'Suggest'}
+              </button>
+            </div>
+            <p className="text-[10px] text-text-muted mt-1">Prefills name, copy, budget & targeting. You can edit everything after.</p>
+          </div>
+
           {/* Objective */}
           <div>
             <label className="block text-xs font-semibold text-text-secondary mb-1.5">Objective</label>
@@ -198,6 +317,27 @@ export function CreateCampaignModal({ isOpen, onClose, onSuccess }: Props) {
               className="w-full bg-dark-900/60 border border-white/10 rounded-xl px-4 py-2.5 text-text-primary text-sm outline-none resize-none" />
           </div>
 
+          {/* Creative — description, CTA button, display link */}
+          <div>
+            <label className="block text-xs font-semibold text-text-secondary mb-1.5">Description (optional)</label>
+            <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Extra line shown under the headline"
+              className="w-full bg-dark-900/60 border border-white/10 rounded-xl px-4 py-2.5 text-text-primary text-sm outline-none" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-text-secondary mb-1.5">Call to action</label>
+              <select value={cta} onChange={(e) => setCta(e.target.value)}
+                className="w-full bg-dark-900/60 border border-white/10 rounded-xl px-3 py-2.5 text-text-primary text-sm outline-none">
+                {CTA_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-text-secondary mb-1.5">Display link (optional)</label>
+              <input value={displayLink} onChange={(e) => setDisplayLink(e.target.value)} placeholder="yoursite.com"
+                className="w-full bg-dark-900/60 border border-white/10 rounded-xl px-4 py-2.5 text-text-primary text-sm outline-none" />
+            </div>
+          </div>
+
           {/* Budget + targeting */}
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -211,39 +351,57 @@ export function CreateCampaignModal({ isOpen, onClose, onSuccess }: Props) {
                 className="w-full bg-dark-900/60 border border-white/10 rounded-xl px-4 py-2.5 text-text-primary text-sm outline-none" />
             </div>
           </div>
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-text-secondary mb-1.5">Country</label>
-              <select value={country} onChange={(e) => setCountry(e.target.value)}
-                className="w-full bg-dark-900/60 border border-white/10 rounded-xl px-3 py-2.5 text-text-primary text-sm outline-none">
-                {COUNTRIES.map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-text-secondary mb-1.5">Age min</label>
-              <input type="number" min="13" max="65" value={ageMin} onChange={(e) => setAgeMin(e.target.value)}
-                className="w-full bg-dark-900/60 border border-white/10 rounded-xl px-3 py-2.5 text-text-primary text-sm outline-none" />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-text-secondary mb-1.5">Age max</label>
-              <input type="number" min="13" max="65" value={ageMax} onChange={(e) => setAgeMax(e.target.value)}
-                className="w-full bg-dark-900/60 border border-white/10 rounded-xl px-3 py-2.5 text-text-primary text-sm outline-none" />
-            </div>
+          {/* Targeting header + advanced toggle */}
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-semibold text-text-secondary">Targeting</label>
+            <button
+              type="button"
+              onClick={() => setAdvancedTargeting((v) => !v)}
+              className="text-[11px] font-semibold text-purple-300 hover:text-purple-200"
+            >
+              {advancedTargeting ? '← Basic targeting' : 'Advanced targeting (interests, placements) →'}
+            </button>
           </div>
-          <div>
-            <label className="block text-xs font-semibold text-text-secondary mb-1.5">Gender</label>
-            <div className="grid grid-cols-3 gap-2">
-              {(['all', 'male', 'female'] as const).map((g) => (
-                <button key={g} type="button" onClick={() => setGender(g)}
-                  className={`py-2 rounded-lg text-xs font-semibold capitalize transition-colors ${
-                    gender === g ? 'bg-purple-500/20 text-purple-200 border border-purple-500/40'
-                      : 'bg-dark-900/60 text-text-muted border border-white/10 hover:border-white/20'
-                  }`}>
-                  {g}
-                </button>
-              ))}
-            </div>
-          </div>
+
+          {advancedTargeting ? (
+            <TargetingBuilder value={targeting} onChange={setTargeting} adAccountId={adAccountId ?? undefined} />
+          ) : (
+            <>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-text-secondary mb-1.5">Country</label>
+                  <select value={country} onChange={(e) => setCountry(e.target.value)}
+                    className="w-full bg-dark-900/60 border border-white/10 rounded-xl px-3 py-2.5 text-text-primary text-sm outline-none">
+                    {COUNTRIES.map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-text-secondary mb-1.5">Age min</label>
+                  <input type="number" min="13" max="65" value={ageMin} onChange={(e) => setAgeMin(e.target.value)}
+                    className="w-full bg-dark-900/60 border border-white/10 rounded-xl px-3 py-2.5 text-text-primary text-sm outline-none" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-text-secondary mb-1.5">Age max</label>
+                  <input type="number" min="13" max="65" value={ageMax} onChange={(e) => setAgeMax(e.target.value)}
+                    className="w-full bg-dark-900/60 border border-white/10 rounded-xl px-3 py-2.5 text-text-primary text-sm outline-none" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-text-secondary mb-1.5">Gender</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(['all', 'male', 'female'] as const).map((g) => (
+                    <button key={g} type="button" onClick={() => setGender(g)}
+                      className={`py-2 rounded-lg text-xs font-semibold capitalize transition-colors ${
+                        gender === g ? 'bg-purple-500/20 text-purple-200 border border-purple-500/40'
+                          : 'bg-dark-900/60 text-text-muted border border-white/10 hover:border-white/20'
+                      }`}>
+                      {g}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
 
           {/* Launch mode — explicit, defaults to PAUSED so nothing spends by accident */}
           <div>
