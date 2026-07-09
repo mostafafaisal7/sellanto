@@ -78,6 +78,31 @@ def _delete_quietly(node_id, token):
         logger.warning(f'[rollback] could not delete {node_id}: {e}')
 
 
+def _normalize_display_link(value: str) -> str:
+    """Coerce a display-link value into a valid URL for link_data['caption'].
+
+    Meta requires the caption to be a URL. Users often type a bare domain
+    ("example.com") or free text ("Shop now"); the former we fix by adding a
+    scheme, the latter we drop (returning '') so the whole creative isn't
+    rejected with "Link data caption is not a URL".
+    """
+    if not value:
+        return ''
+    v = value.strip()
+    if not v:
+        return ''
+    if v.startswith(('http://', 'https://')):
+        candidate = v
+    else:
+        candidate = 'https://' + v
+    # Must look like scheme://host.tld — a host with a dot and no spaces.
+    import re
+    host = candidate.split('://', 1)[1].split('/', 1)[0]
+    if ' ' in host or '.' not in host or not re.match(r'^[A-Za-z0-9.\-]+$', host):
+        return ''
+    return candidate
+
+
 # ───────────────────────────── Ad account discovery ─────────────────────────
 
 
@@ -520,9 +545,13 @@ def create_link_campaign(
     elif image_url:
         link_data['picture'] = image_url
 
-    # Shown/display domain (e.g. "example.com") under the headline.
-    if display_link:
-        link_data['caption'] = display_link[:255]
+    # Display link under the headline. Meta requires link_data['caption'] to be
+    # a valid URL (not a bare domain or free text), else it rejects the whole
+    # creative with "Link data caption is not a URL". Normalize: add https:// to
+    # a bare domain; if it still isn't URL-shaped, drop it rather than fail.
+    caption_url = _normalize_display_link(display_link)
+    if caption_url:
+        link_data['caption'] = caption_url[:255]
 
     # Call-to-action button. Omit entirely for NO_BUTTON.
     cta_type = (cta or 'LEARN_MORE').strip().upper()
