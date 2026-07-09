@@ -42,6 +42,116 @@ def _parse_bool(value, default=False):
     return default
 
 
+def _num(v, default=0.0):
+    """Coerce a Meta insight scalar (often a string) to float."""
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return default
+
+
+def _meta_first_roas(row):
+    """Return purchase_roas[0].value as a float (0.0 when absent).
+
+    Meta returns `purchase_roas` as a list of {action_type, value}; the first
+    entry is the omni/purchase ROAS. Falls back to website_purchase_roas.
+    """
+    for key in ('purchase_roas', 'website_purchase_roas'):
+        arr = row.get(key)
+        if isinstance(arr, list) and arr:
+            return _num(arr[0].get('value'))
+    return 0.0
+
+
+# Conversion action types we treat as "the" CPA/conversion for a row, in
+# priority order — first one present in cost_per_action_type / actions wins.
+_META_CONVERSION_ACTIONS = (
+    'purchase', 'omni_purchase',
+    'offsite_conversion.fb_pixel_purchase',
+    'lead', 'onsite_conversion.lead_grouped',
+    'offsite_conversion.fb_pixel_lead',
+    'complete_registration',
+    'offsite_conversion.fb_pixel_complete_registration',
+)
+
+
+def _meta_action_amount(arr):
+    """Pick the highest-priority conversion action value from a Meta
+    action-style list [{action_type, value}, ...]. Returns float (0.0 if none).
+    """
+    if not isinstance(arr, list):
+        return 0.0
+    by_type = {a.get('action_type'): _num(a.get('value')) for a in arr
+               if isinstance(a, dict)}
+    for t in _META_CONVERSION_ACTIONS:
+        if t in by_type:
+            return by_type[t]
+    return 0.0
+
+
+def _meta_cpa(row):
+    """Cost per (priority) conversion action from cost_per_action_type.
+
+    Returns float in account currency units (0.0 when absent).
+    """
+    return _meta_action_amount(row.get('cost_per_action_type'))
+
+
+def _meta_conversions(row):
+    """Count of the priority conversion action from the row's `actions`."""
+    return _meta_action_amount(row.get('actions'))
+
+
+def _meta_link_clicks(row):
+    """inline_link_clicks as int (0 when absent)."""
+    return int(_num(row.get('inline_link_clicks')))
+
+
+# Friendly targeting keys that, if present, mean the incoming dict is the
+# frontend's "friendly" shape and must be run through build_targeting_spec.
+_FRIENDLY_TARGETING_KEYS = (
+    'geo', 'placements', 'interests', 'behaviors', 'custom_audiences',
+)
+
+
+def _normalize_targeting(targeting):
+    """Convert an incoming friendly targeting dict to a Meta targeting spec.
+
+    The frontend sends a friendly dict that may contain a pre-shaped
+    `geo_locations` plus flat `interests`/`behaviors` ids, `placements`
+    tokens and `custom_audiences` ids. Meta expects `flexible_spec`,
+    `publisher_platforms`/`*_positions`, and `custom_audiences: [{id}]`
+    instead — build_targeting_spec produces exactly that.
+
+    Backward-compat: if the dict already looks like a valid Meta spec
+    (no friendly-only keys such as placements/interests/behaviors/
+    custom_audiences/geo, i.e. just geo_locations + age/genders), it is
+    returned unchanged so existing callers keep working identically.
+    """
+    if not isinstance(targeting, dict) or not targeting:
+        return targeting
+
+    has_friendly = any(k in targeting for k in _FRIENDLY_TARGETING_KEYS)
+    if not has_friendly:
+        # Already a Meta-ready spec (or trivial age/gender-only) — pass as-is.
+        return targeting
+
+    # Build the friendly dict build_targeting_spec expects. Prefer an explicit
+    # `geo` key; otherwise reshape a pre-shaped `geo_locations` under `geo`
+    # (build_targeting_spec passes a non-country-keyed dict straight through).
+    friendly = {
+        'age_min': targeting.get('age_min'),
+        'age_max': targeting.get('age_max'),
+        'genders': targeting.get('genders'),
+        'interests': targeting.get('interests'),
+        'behaviors': targeting.get('behaviors'),
+        'placements': targeting.get('placements'),
+        'custom_audiences': targeting.get('custom_audiences'),
+        'geo': targeting.get('geo') or targeting.get('geo_locations'),
+    }
+    return meta_ads.build_targeting_spec(friendly)
+
+
 def _live_spend_guard(ad_account: 'AdAccount', request):
     """Block accidental real-money spend on LIVE (non-sandbox) ad accounts.
 
@@ -456,9 +566,17 @@ class CampaignInsightsView(APIView):
             saved.append({
                 'date': str(obj.date),
                 'impressions': obj.impressions,
+                'reach': obj.reach,
                 'clicks': obj.clicks,
+                'link_clicks': _meta_link_clicks(r),
                 'spend_minor': obj.spend_minor,
                 'ctr': obj.ctr,
+                'cpc': _num(r.get('cpc')),
+                'cpm': _num(r.get('cpm')),
+                'frequency': obj.frequency,
+                'conversions': _meta_conversions(r),
+                'roas': _meta_first_roas(r),
+                'cpa': _meta_cpa(r),
             })
 
         return Response({'insights': saved, 'count': len(saved)})
@@ -2198,6 +2316,12 @@ class BoostPostView(APIView):
             # Feature not yet wired in DIAMOND_COSTS — skip gracefully during MVP
             pass
 
+        # Convert the frontend's friendly targeting dict (flat interests/
+        # behaviors ids, placement tokens, custom_audiences, geo) into the
+        # Meta targeting spec the API expects. Already-shaped specs pass
+        # through unchanged (backward-compatible).
+        targeting_spec = _normalize_targeting(targeting)
+
         # Create the campaign on Meta
         try:
             result = meta_ads.boost_post(
@@ -2206,7 +2330,7 @@ class BoostPostView(APIView):
                 fb_post_id=post.facebook_post_id,
                 daily_budget_cents=daily_budget_cents,
                 duration_days=duration_days,
-                targeting=targeting,
+                targeting=targeting_spec,
                 campaign_name=f'Boost: {post.caption[:40] if post.caption else post.id}',
                 page_access_token=sa.facebook_access_token or '',
             )
@@ -2379,6 +2503,114 @@ class PrefillFromContentView(APIView):
         })
 
 
+class AdMediaLibraryView(APIView):
+    """GET /ads/media-library/?kind=image|video|all — list the user's reusable
+    media for ad creatives: AI-generated images (ai_image.ImageGeneration),
+    AI-generated videos (video_studio.VideoClip / MergedVideo), and media
+    already attached to their posts. Read-only, no billing.
+
+    Returns { items: [{ id, kind, url, thumbnail, source, label, created_at }] }
+    where source ∈ {generated_image, generated_video, post}. Each url is an
+    absolute URL Meta/the frontend can fetch.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        kind = (request.GET.get('kind') or 'all').strip().lower()
+        want_img = kind in ('image', 'all')
+        want_vid = kind in ('video', 'all')
+        items = []
+
+        def absurl(u):
+            if not u:
+                return ''
+            if str(u).startswith(('http://', 'https://')):
+                return u
+            try:
+                return request.build_absolute_uri(u)
+            except Exception:
+                return u
+
+        # 1) AI-generated images
+        if want_img:
+            try:
+                from ai_image.models import ImageGeneration
+                qs = (ImageGeneration.objects
+                      .filter(user=request.user, status='completed')
+                      .order_by('-created_at')[:60])
+                for g in qs:
+                    field = (g.copy_overlay_image or g.generated_image_with_logo
+                             or g.generated_image or g.composited_image)
+                    if not field:
+                        continue
+                    items.append({
+                        'id': f'img-{g.id}', 'kind': 'image',
+                        'url': absurl(field.url),
+                        'thumbnail': absurl(field.url),
+                        'source': 'generated_image',
+                        'label': (getattr(g, 'prompt', '') or 'Generated image')[:60],
+                        'created_at': g.created_at.isoformat() if g.created_at else None,
+                    })
+            except Exception as e:  # app optional / schema drift — never 500 the picker
+                logger.warning('[media-library] image list failed: %s', e)
+
+        # 2) AI-generated videos (merged first, then standalone clips)
+        if want_vid:
+            try:
+                from video_studio.models import MergedVideo, VideoClip
+                for m in (MergedVideo.objects
+                          .filter(project__user=request.user, status='completed')
+                          .order_by('-created_at')[:40]):
+                    if not m.merged_video:
+                        continue
+                    items.append({
+                        'id': f'mvid-{m.id}', 'kind': 'video',
+                        'url': absurl(m.merged_video.url),
+                        'thumbnail': absurl(m.thumbnail.url) if m.thumbnail else '',
+                        'source': 'generated_video',
+                        'label': (getattr(m, 'title', '') or 'Merged video')[:60],
+                        'created_at': m.created_at.isoformat() if getattr(m, 'created_at', None) else None,
+                    })
+                for cl in (VideoClip.objects
+                           .filter(project__user=request.user, status='completed')
+                           .order_by('-id')[:40]):
+                    vu = cl.get_video_url()
+                    if not vu:
+                        continue
+                    items.append({
+                        'id': f'clip-{cl.id}', 'kind': 'video',
+                        'url': absurl(vu),
+                        'thumbnail': absurl(cl.get_thumbnail_url() or ''),
+                        'source': 'generated_video',
+                        'label': (getattr(cl, 'prompt', '') or 'Video clip')[:60],
+                        'created_at': None,
+                    })
+            except Exception as e:
+                logger.warning('[media-library] video list failed: %s', e)
+
+        # 3) Media already on the user's posts
+        try:
+            posts = (Post.objects.filter(user=request.user)
+                     .exclude(media_files='[]').order_by('-id')[:40])
+            for p in posts:
+                url = _post_first_media_url(p, request)
+                if not url:
+                    continue
+                is_video = url.lower().rsplit('.', 1)[-1] in ('mp4', 'mov', 'avi', 'webm', 'm4v', 'mkv')
+                if (is_video and not want_vid) or (not is_video and not want_img):
+                    continue
+                items.append({
+                    'id': f'post-{p.id}', 'kind': 'video' if is_video else 'image',
+                    'url': url, 'thumbnail': url, 'source': 'post',
+                    'label': (p.caption or 'Post media')[:60],
+                    'created_at': p.created_at.isoformat() if getattr(p, 'created_at', None) else None,
+                })
+        except Exception as e:
+            logger.warning('[media-library] post media list failed: %s', e)
+
+        return Response({'items': items, 'count': len(items)})
+
+
 class BoostFromPostView(APIView):
     """POST /ads/boost-from-post/ {
         post_id: int,
@@ -2536,6 +2768,13 @@ class BoostFromPostView(APIView):
         except Exception:
             pass
 
+        # Convert the frontend's friendly targeting dict (flat interests/
+        # behaviors ids, placement tokens, custom_audiences, geo) into the
+        # Meta targeting spec the API expects. Already-shaped specs pass
+        # through unchanged (backward-compatible). Persist the friendly
+        # original in targeting_json; only the service call gets the spec.
+        targeting_spec = _normalize_targeting(targeting)
+
         try:
             result = meta_ads.boost_post(
                 ad_account=ad_account,
@@ -2543,7 +2782,7 @@ class BoostFromPostView(APIView):
                 fb_post_id=post.facebook_post_id,
                 daily_budget_cents=daily_budget_cents,
                 duration_days=duration_days,
-                targeting=targeting,
+                targeting=targeting_spec,
                 campaign_name=f'Boost: {post.caption[:40] if post.caption else post.id}',
                 page_access_token=sa.facebook_access_token or '',
             )
@@ -2624,6 +2863,14 @@ class MetaCreateCampaignView(APIView):
         message/headline/description/image_url: creative text + optional image
         targeting:        {geo_locations, age_min, age_max, interests, ...}
         activate:         bool (go live immediately; default false = paused)
+        budget_type:      'daily' (default) | 'lifetime'
+        lifetime_budget_usd: float (required when budget_type='lifetime', >= 1.50)
+        start_time/end_time: ISO-8601 schedule (optional; auto when absent)
+        bid_strategy:     LOWEST_COST_WITHOUT_CAP (default) | LOWEST_COST_WITH_BID_CAP
+                          | COST_CAP | LOWEST_COST_WITH_MIN_ROAS
+        bid_amount_usd:   float (cap/target for the cap bid strategies)
+        spend_cap_usd:    float (campaign-level lifetime spend ceiling)
+        optimization_goal/billing_event: override the objective-mapped defaults
     """
     permission_classes = [IsAuthenticated]
 
@@ -2640,6 +2887,38 @@ class MetaCreateCampaignView(APIView):
         image_url = (request.data.get('image_url') or '').strip()
         cta = (request.data.get('cta') or 'LEARN_MORE').strip().upper()
         display_link = (request.data.get('display_link') or '').strip()
+        # Advantage+ multi-version copy (all optional; blanks dropped). When any
+        # list has >1 entry the service builds an asset_feed_spec creative.
+        def _str_list(v):
+            if not isinstance(v, (list, tuple)):
+                return []
+            return [str(s).strip() for s in v if str(s).strip()]
+        headlines = _str_list(request.data.get('headlines'))
+        messages = _str_list(request.data.get('messages'))
+        descriptions = _str_list(request.data.get('descriptions'))
+        cta_types = [s.upper() for s in _str_list(request.data.get('cta_types'))]
+        # UTM url_tags (creative-level) + regulated special ad categories. Both
+        # optional; the service validates categories and defaults to today's
+        # behavior (no url_tags, empty categories) when omitted.
+        url_tags = (request.data.get('url_tags') or '').strip()
+        special_ad_categories = _str_list(request.data.get('special_ad_categories'))
+        # Bid / budget / schedule (all optional; defaults reproduce current
+        # daily-budget, auto-schedule, lowest-cost behavior). The service layer
+        # validates enums and ignores anything it doesn't recognize.
+        budget_type = (request.data.get('budget_type') or 'daily').strip().lower()
+        lifetime_budget_usd = request.data.get('lifetime_budget_usd')
+        start_time = (request.data.get('start_time') or '').strip()
+        end_time = (request.data.get('end_time') or '').strip()
+        bid_strategy = (request.data.get('bid_strategy') or '').strip().upper()
+        bid_amount_usd = request.data.get('bid_amount_usd')
+        spend_cap_usd = request.data.get('spend_cap_usd')
+        optimization_goal = (request.data.get('optimization_goal') or '').strip().upper()
+        billing_event = (request.data.get('billing_event') or '').strip().upper()
+        # Conversion tracking (sales/leads): a Meta Pixel + the conversion event
+        # to optimize for. Both optional; without pixel_id the service keeps the
+        # page_id-only promoted_object (today's behavior).
+        pixel_id = (request.data.get('pixel_id') or '').strip()
+        custom_event_type = (request.data.get('custom_event_type') or '').strip().upper()
         targeting = request.data.get('targeting') or {}
         # SAFETY: default to PAUSED. Use _parse_bool so the string "false"
         # (which bool("false") wrongly treats as True) cannot accidentally
@@ -2706,7 +2985,58 @@ class MetaCreateCampaignView(APIView):
         if not targeting:
             targeting = {'geo_locations': {'countries': ['US']}, 'age_min': 18, 'age_max': 65}
 
+        # Convert the frontend's friendly targeting dict (flat interests/
+        # behaviors ids, placement tokens, custom_audiences, geo) into the
+        # Meta targeting spec the API expects. Already-shaped specs pass
+        # through unchanged (backward-compatible).
+        targeting_spec = _normalize_targeting(targeting)
+
         daily_budget_cents = _usd_to_account_cents(usd, ad_account.currency_code)
+
+        # Lifetime budget (optional). When budget_type='lifetime', the lifetime
+        # amount replaces the daily budget on the ad set. Apply the same finite +
+        # $1.50 minimum guard as the daily budget so the same floor holds.
+        lifetime_budget_cents = 0
+        if budget_type == 'lifetime':
+            try:
+                lt_usd = float(lifetime_budget_usd)
+            except (TypeError, ValueError):
+                return Response({'error': 'Invalid lifetime_budget_usd.'},
+                                status=status.HTTP_400_BAD_REQUEST)
+            if not math.isfinite(lt_usd):
+                return Response({'error': 'lifetime_budget_usd must be a finite number.'},
+                                status=status.HTTP_400_BAD_REQUEST)
+            if lt_usd < 1.5:
+                return Response({'error': 'Minimum lifetime budget is $1.50.'},
+                                status=status.HTTP_400_BAD_REQUEST)
+            lifetime_budget_cents = _usd_to_account_cents(lt_usd, ad_account.currency_code)
+
+        # Optional bid cap / target (account minor units) — only meaningful for
+        # the cap/target bid strategies; the service ignores it otherwise.
+        bid_amount_cents = 0
+        if bid_amount_usd not in (None, ''):
+            try:
+                ba_usd = float(bid_amount_usd)
+            except (TypeError, ValueError):
+                return Response({'error': 'Invalid bid_amount_usd.'},
+                                status=status.HTTP_400_BAD_REQUEST)
+            if not math.isfinite(ba_usd) or ba_usd < 0:
+                return Response({'error': 'bid_amount_usd must be a finite, non-negative number.'},
+                                status=status.HTTP_400_BAD_REQUEST)
+            bid_amount_cents = _usd_to_account_cents(ba_usd, ad_account.currency_code)
+
+        # Optional campaign-level lifetime spend cap (account minor units).
+        spend_cap_cents = 0
+        if spend_cap_usd not in (None, ''):
+            try:
+                sc_usd = float(spend_cap_usd)
+            except (TypeError, ValueError):
+                return Response({'error': 'Invalid spend_cap_usd.'},
+                                status=status.HTTP_400_BAD_REQUEST)
+            if not math.isfinite(sc_usd) or sc_usd < 0:
+                return Response({'error': 'spend_cap_usd must be a finite, non-negative number.'},
+                                status=status.HTTP_400_BAD_REQUEST)
+            spend_cap_cents = _usd_to_account_cents(sc_usd, ad_account.currency_code)
 
         try:
             from accounts.services.diamond_service import pre_check, deduct_diamonds
@@ -2723,10 +3053,19 @@ class MetaCreateCampaignView(APIView):
                 ad_account=ad_account, page_id=sa.facebook_page_id,
                 objective=objective, name=name or f'Sellanto {objective.title()}',
                 daily_budget_cents=daily_budget_cents, duration_days=duration_days,
-                targeting=targeting, link_url=link_url, message=message,
+                targeting=targeting_spec, link_url=link_url, message=message,
                 headline=headline, description=description, image_url=image_url,
                 page_access_token=sa.facebook_access_token or '', status_active=activate,
-                cta=cta, display_link=display_link)
+                cta=cta, display_link=display_link,
+                headlines=headlines, messages=messages,
+                descriptions=descriptions, cta_types=cta_types,
+                url_tags=url_tags, special_ad_categories=special_ad_categories,
+                bid_strategy=bid_strategy, bid_amount_cents=bid_amount_cents,
+                lifetime_budget_cents=lifetime_budget_cents,
+                start_time_iso=start_time, end_time_iso=end_time,
+                spend_cap_cents=spend_cap_cents,
+                optimization_goal=optimization_goal, billing_event=billing_event,
+                pixel_id=pixel_id, custom_event_type=custom_event_type)
         except meta_ads.MetaAdsError as e:
             display = _friendly_meta_error(e, ad_account)
             return Response({'error': display, 'code': e.code, 'subcode': e.subcode},
@@ -2741,10 +3080,149 @@ class MetaCreateCampaignView(APIView):
             external_campaign_id=result['campaign_id'], external_adset_id=result['adset_id'],
             external_creative_id=result['creative_id'], external_ad_id=result['ad_id'],
             daily_budget_minor=daily_budget_cents,
+            lifetime_budget_minor=lifetime_budget_cents or None,
             start_date=now, end_date=now + timedelta(days=duration_days),
             targeting_json=targeting,
             creative_json={'link_url': link_url, 'message': message, 'headline': headline,
-                           'description': description, 'image_url': image_url})
+                           'description': description, 'image_url': image_url,
+                           'headlines': headlines, 'messages': messages,
+                           'descriptions': descriptions, 'cta_types': cta_types})
+
+        if deduct_diamonds:
+            try:
+                deduct_diamonds(user=request.user, feature='ads_campaign_create', provider='meta')
+            except Exception:
+                pass
+
+        return Response(_serialize_campaign(campaign), status=status.HTTP_201_CREATED)
+
+
+class MetaCreateCarouselView(APIView):
+    """POST -- create a from-scratch Meta carousel campaign (2-10 cards).
+
+    Body:
+        ad_account_id:    int (provider='meta')
+        objective:        awareness|traffic|engagement|leads|sales
+        name:             str
+        daily_budget_usd: float (>= 1.50)
+        duration_days:    int
+        targeting:        {geo_locations, age_min, age_max, interests, ...}
+        cards:            [{link, name, description, image_url, cta}] (2-10)
+        activate:         bool (go live immediately; default false = paused)
+        confirm_live:     bool (required to activate/spend on a LIVE account)
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        ad_account_id = request.data.get('ad_account_id')
+        objective = (request.data.get('objective') or 'traffic').strip().lower()
+        name = (request.data.get('name') or '').strip()
+        daily_budget_usd = request.data.get('daily_budget_usd')
+        duration_days = int(request.data.get('duration_days', 7) or 7)
+        cards = request.data.get('cards') or []
+        targeting = request.data.get('targeting') or {}
+        # SAFETY: default to PAUSED. Use _parse_bool so the string "false"
+        # cannot accidentally activate a campaign and start real spend.
+        activate = _parse_bool(request.data.get('activate'), default=False)
+
+        if not (ad_account_id and daily_budget_usd):
+            return Response({'error': 'ad_account_id and daily_budget_usd are required.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if not isinstance(cards, list) or not (2 <= len(cards) <= 10):
+            return Response({'error': 'cards must be a list of 2 to 10 cards.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if objective not in ('awareness', 'traffic', 'engagement', 'leads', 'sales'):
+            return Response({'error': f'Unsupported objective {objective!r}.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        try:
+            usd = float(daily_budget_usd)
+        except (TypeError, ValueError):
+            return Response({'error': 'Invalid daily_budget_usd.'}, status=status.HTTP_400_BAD_REQUEST)
+        if not math.isfinite(usd):
+            return Response({'error': 'daily_budget_usd must be a finite number.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if usd < 1.5:
+            return Response({'error': 'Minimum daily budget is $1.50.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            ad_account = AdAccount.objects.get(
+                id=ad_account_id, user=request.user, provider='meta', is_active=True)
+        except AdAccount.DoesNotExist:
+            return Response({'error': 'Meta ad account not found or not connected.'},
+                            status=status.HTTP_404_NOT_FOUND)
+
+        # Guard: LIVE accounts require explicit confirmation (real spend).
+        guard = _live_spend_guard(ad_account, request)
+        if guard is not None:
+            return guard
+
+        # SAFETY: only *activation* starts spend. On a LIVE account, refuse to
+        # go live unless the user explicitly asked to activate AND confirmed.
+        if activate and not getattr(ad_account, 'is_sandbox', False):
+            if not _parse_bool(request.data.get('confirm_live')):
+                return Response(
+                    {
+                        'error': 'live_activation_requires_confirmation',
+                        'detail': (
+                            'Activating a campaign on the LIVE account '
+                            f'"{ad_account.name or ad_account.external_id}" will '
+                            'start spending real money immediately. Re-submit with '
+                            'activate=true and confirm_live=true, or leave it '
+                            'paused (activate=false) to create without spending.'
+                        ),
+                        'requires_confirmation': True,
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+        from platforms.models import SocialAccount
+        sa = SocialAccount.objects.filter(
+            user=request.user, platform='facebook', is_active=True).first()
+        if not sa or not sa.facebook_page_id:
+            return Response({'error': 'No connected Facebook Page found.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        # Default targeting if none supplied (US, broad age).
+        if not targeting:
+            targeting = {'geo_locations': {'countries': ['US']}, 'age_min': 18, 'age_max': 65}
+
+        daily_budget_cents = _usd_to_account_cents(usd, ad_account.currency_code)
+
+        try:
+            from accounts.services.diamond_service import pre_check, deduct_diamonds
+            can_afford, cost, balance = pre_check(request.user, 'ads_campaign_create')
+            if not can_afford:
+                return Response({'error': 'Insufficient Diamond Tokens', 'diamond_cost': cost,
+                                 'diamond_balance': balance, 'code': 'INSUFFICIENT_DIAMONDS'},
+                                status=402)
+        except Exception:
+            deduct_diamonds = None
+
+        try:
+            result = meta_ads.create_carousel_campaign(
+                ad_account=ad_account, page_id=sa.facebook_page_id,
+                objective=objective, name=name or f'Sellanto {objective.title()} Carousel',
+                daily_budget_cents=daily_budget_cents, duration_days=duration_days,
+                targeting=targeting, cards=cards,
+                page_access_token=sa.facebook_access_token or '', status_active=activate)
+        except meta_ads.MetaAdsError as e:
+            display = _friendly_meta_error(e, ad_account)
+            return Response({'error': display, 'code': e.code, 'subcode': e.subcode},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        now = timezone.now()
+        campaign = AdCampaign.objects.create(
+            user=request.user, brand=_first_brand(request.user), ad_account=ad_account,
+            name=name or f'Sellanto {objective.title()} Carousel',
+            objective=objective if objective in dict(_OBJECTIVE_KEYS) else 'traffic',
+            status='active' if activate else 'paused',
+            external_campaign_id=result['campaign_id'], external_adset_id=result['adset_id'],
+            external_creative_id=result['creative_id'], external_ad_id=result['ad_id'],
+            daily_budget_minor=daily_budget_cents,
+            start_date=now, end_date=now + timedelta(days=duration_days),
+            targeting_json=targeting,
+            creative_json={'format': 'carousel', 'cards': cards})
 
         if deduct_diamonds:
             try:
@@ -2852,6 +3330,34 @@ class MetaGeoSearchView(APIView):
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
         return Response({'success': True, 'results': results})
+
+
+class MetaPixelsView(APIView):
+    """GET ?ad_account_id= → the Meta Pixels on the ad account.
+
+    Powers the conversion-tracking picker in the Create Campaign form: the user
+    selects a pixel (+ conversion event) for sales/leads objectives. Read-only.
+    Returns {pixels: [{id, name, last_fired_time}]}.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        ad_account, err = _resolve_meta_ad_account_for_token(request)
+        if err:
+            return err
+
+        try:
+            pixels = meta_ads.list_ad_pixels(ad_account)
+        except meta_ads.MetaAdsError as e:
+            display = _friendly_meta_error(e, ad_account)
+            return Response({'error': display, 'code': e.code, 'subcode': e.subcode},
+                            status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            logger.exception('meta pixels list error user=%s', request.user.id)
+            return Response({'error': f'Unexpected error: {e}'},
+                            status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        return Response({'pixels': pixels})
 
 
 # ─────────────────────────── Run Video Ad (Path A) ───────────────────────────
@@ -2992,7 +3498,7 @@ class RunVideoAdView(APIView):
                 caption=caption,
                 daily_budget_minor=daily_budget_minor,
                 duration_days=duration_days,
-                targeting=targeting,
+                targeting=_normalize_targeting(targeting),
             )
         except VideoAdError as e:
             logger.warning(
@@ -3022,6 +3528,112 @@ class RunVideoAdView(APIView):
 
 
 # ────────────────────────── Meta — Account Summary ──────────────────
+
+
+class MetaEntityInsightsView(APIView):
+    """GET /ads/meta/insights/?entity_id=&level=adset|ad&date_preset=
+
+    Deeper drill-down insights for a single Meta ad set or ad (or campaign),
+    so the UI can go campaign → ad set → ad. Ownership is enforced by resolving
+    the ad account the entity lives under: pass `ad_account_id` OR `campaign_id`
+    (the entity must belong to an account the user owns). Read-only; billed with
+    'ads_insights_pull'.
+
+    Query params:
+        entity_id   (required) — Graph adset/ad/campaign id.
+        level       — adset | ad | campaign | account (default 'ad').
+        date_preset — last_7d (default) | any Meta date_preset.
+        ad_account_id | campaign_id — how to resolve + authorize the account.
+
+    Returns {level, entity_id, insights: [rows], count} where each row carries
+    the same deep metric shape as the campaign insights endpoint (date,
+    impressions, reach, clicks, link_clicks, spend_minor, ctr, cpc, cpm,
+    frequency, conversions, roas, cpa).
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        entity_id = (request.GET.get('entity_id') or '').strip()
+        if not entity_id:
+            return Response({'error': 'entity_id is required.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        level = (request.GET.get('level') or 'ad').strip().lower()
+        date_preset = request.GET.get('date_preset', 'last_7d')
+
+        # Resolve + authorize the ad account this entity lives under.
+        ad_account = None
+        ad_account_id = request.GET.get('ad_account_id')
+        campaign_id = request.GET.get('campaign_id')
+        if ad_account_id:
+            ad_account = AdAccount.objects.filter(
+                id=ad_account_id, user=request.user,
+                provider='meta', is_active=True).first()
+        elif campaign_id:
+            camp = AdCampaign.objects.filter(
+                id=campaign_id, user=request.user).select_related('ad_account').first()
+            if camp and camp.ad_account.provider == 'meta':
+                ad_account = camp.ad_account
+        else:
+            ad_account = AdAccount.objects.filter(
+                user=request.user, provider='meta', is_active=True).first()
+
+        if not ad_account:
+            return Response(
+                {'error': 'Meta ad account not found or not connected. '
+                          'Pass ad_account_id or campaign_id.'},
+                status=status.HTTP_404_NOT_FOUND)
+
+        # Diamond pre-check (insights pull).
+        try:
+            from accounts.services.diamond_service import pre_check, deduct_diamonds
+            can_afford, cost, balance = pre_check(request.user, 'ads_insights_pull')
+            if not can_afford:
+                return Response({
+                    'error': 'Insufficient Diamond Tokens',
+                    'diamond_cost': cost,
+                    'diamond_balance': balance,
+                    'code': 'INSUFFICIENT_DIAMONDS',
+                }, status=status.HTTP_402_PAYMENT_REQUIRED)
+        except Exception:
+            deduct_diamonds = None
+
+        try:
+            rows = meta_ads.get_insights(
+                ad_account, entity_id, level=level, date_preset=date_preset)
+        except meta_ads.MetaAdsError as e:
+            return Response({'error': _friendly_meta_error(e, ad_account)},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        out = []
+        for r in rows:
+            spend_minor = int(_num(r.get('spend')) * 100)
+            out.append({
+                'date': r.get('date_start'),
+                'impressions': int(_num(r.get('impressions'))),
+                'reach': int(_num(r.get('reach'))),
+                'clicks': int(_num(r.get('clicks'))),
+                'link_clicks': _meta_link_clicks(r),
+                'spend_minor': spend_minor,
+                'ctr': _num(r.get('ctr')) / 100.0,   # Meta returns %
+                'cpc': _num(r.get('cpc')),
+                'cpm': _num(r.get('cpm')),
+                'frequency': _num(r.get('frequency')),
+                'conversions': _meta_conversions(r),
+                'roas': _meta_first_roas(r),
+                'cpa': _meta_cpa(r),
+            })
+
+        if deduct_diamonds:
+            try:
+                deduct_diamonds(user=request.user, feature='ads_insights_pull', provider='meta')
+            except Exception:
+                pass
+
+        return Response({
+            'level': level, 'entity_id': entity_id,
+            'insights': out, 'count': len(out),
+        })
 
 
 class MetaAccountSummaryView(APIView):
@@ -3130,3 +3742,216 @@ class MetaRecommendationsView(APIView):
             pass
 
         return Response({'recommendations': recommendations})
+
+
+class MetaAdPreviewView(APIView):
+    """POST — render a live Meta ad preview (no spend, nothing created).
+
+    Builds an object_story_spec link_data creative from the same fields as
+    MetaCreateCampaignView and calls Meta's generatepreviews to get back a
+    ready-to-embed <iframe> HTML string. Purely read-only: it does NOT create a
+    campaign/adset/ad and never spends, so no live-spend guard is needed.
+
+    Body:
+        ad_account_id: int (provider='meta') — required
+        ad_format:     DESKTOP_FEED_STANDARD | MOBILE_FEED_STANDARD |
+                       INSTAGRAM_STANDARD | INSTAGRAM_STORY |
+                       FACEBOOK_STORY_MOBILE | INSTAGRAM_REELS
+        link_url:      str (destination) — required
+        message/headline/description/image_url/cta/display_link: creative fields
+        page_id:       str (optional; resolved from the user's active FB page)
+
+    Returns: {preview_html, ad_format}
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        ad_account_id = request.data.get('ad_account_id')
+        ad_format = (request.data.get('ad_format') or 'MOBILE_FEED_STANDARD').strip().upper()
+        link_url = (request.data.get('link_url') or '').strip()
+        message = (request.data.get('message') or '').strip()
+        headline = (request.data.get('headline') or '').strip()
+        description = (request.data.get('description') or '').strip()
+        image_url = (request.data.get('image_url') or '').strip()
+        cta = (request.data.get('cta') or 'LEARN_MORE').strip().upper()
+        display_link = (request.data.get('display_link') or '').strip()
+        page_id = (request.data.get('page_id') or '').strip()
+
+        if not (ad_account_id and link_url):
+            return Response({'error': 'ad_account_id and link_url are required.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            ad_account = AdAccount.objects.get(
+                id=ad_account_id, user=request.user, provider='meta', is_active=True)
+        except AdAccount.DoesNotExist:
+            return Response({'error': 'Meta ad account not found or not connected.'},
+                            status=status.HTTP_404_NOT_FOUND)
+
+        # Resolve the Page ID (needed for object_story_spec) from the user's
+        # active Facebook SocialAccount when the client didn't pass one.
+        if not page_id:
+            from platforms.models import SocialAccount
+            sa = SocialAccount.objects.filter(
+                user=request.user, platform='facebook', is_active=True).first()
+            if not sa or not sa.facebook_page_id:
+                return Response({'error': 'No connected Facebook Page found.'},
+                                status=status.HTTP_400_BAD_REQUEST)
+            page_id = sa.facebook_page_id
+
+        # Build link_data mirroring create_link_campaign's field mapping.
+        link_data = {'link': link_url, 'message': message or ''}
+        if headline:
+            link_data['name'] = headline[:255]
+        if description:
+            link_data['description'] = description[:255]
+
+        # Prefer an uploaded image_hash over a raw picture URL (same as create).
+        image_hash = meta_ads.upload_image_from_url(ad_account, image_url) if image_url else ''
+        if image_hash:
+            link_data['image_hash'] = image_hash
+        elif image_url:
+            link_data['picture'] = image_url
+
+        caption_url = meta_ads._normalize_display_link(display_link)
+        if caption_url:
+            link_data['caption'] = caption_url[:255]
+
+        cta_type = (cta or 'LEARN_MORE').strip().upper()
+        if cta_type not in meta_ads._META_CTA_TYPES:
+            cta_type = 'LEARN_MORE'
+        if cta_type != 'NO_BUTTON':
+            link_data['call_to_action'] = {'type': cta_type, 'value': {'link': link_url}}
+
+        creative_spec = {'object_story_spec': {'page_id': page_id, 'link_data': link_data}}
+
+        try:
+            preview_html = meta_ads.get_creative_preview(
+                ad_account, creative_spec, ad_format=ad_format)
+        except meta_ads.MetaAdsError as e:
+            return Response({'error': _friendly_meta_error(e, ad_account),
+                             'code': e.code, 'subcode': e.subcode},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        return Response({'preview_html': preview_html, 'ad_format': ad_format})
+
+
+# ────────────────────────── Meta — Instant Lead Forms ───────────────
+
+
+def _resolve_facebook_page(request):
+    """Resolve the user's active Facebook Page id + Page access token.
+
+    Returns (page_id, page_access_token, error_response). On success the third
+    element is None; on failure page_id/token are '' and the third element is a
+    ready-to-return DRF Response.
+    """
+    from platforms.models import SocialAccount
+    sa = SocialAccount.objects.filter(
+        user=request.user, platform='facebook', is_active=True,
+    ).first()
+    if not sa or not sa.facebook_page_id:
+        return '', '', Response(
+            {'error': 'No connected Facebook Page found.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    page_token = sa.facebook_access_token or ''
+    if not page_token:
+        return '', '', Response(
+            {'error': 'The connected Facebook Page has no access token — reconnect it.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    return sa.facebook_page_id, page_token, None
+
+
+class MetaLeadFormListCreateView(APIView):
+    """GET + POST /ads/meta/lead-forms/ — native Instant Lead Forms.
+
+    Page id + Page access token are resolved from the user's active Facebook
+    SocialAccount (lead forms live on the Page, not the ad account).
+
+    GET  → list the Page's lead forms (id, name, status, leads_count).
+    POST → create a lead form. Body:
+        name:                str
+        questions:           [str | {type} | {type:'CUSTOM', key, label, options?}]
+        privacy_policy_url:  str  (required by Meta)
+        thank_you:           {title, body, button_text, button_type, website_url}
+        intro:               {title, style, content, button_text}   (optional)
+    Returns {form_id}.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        page_id, page_token, err = _resolve_facebook_page(request)
+        if err is not None:
+            return err
+        try:
+            forms = meta_ads.list_lead_forms(page_id, page_token)
+        except meta_ads.MetaAdsError as e:
+            logger.warning('list lead forms failed user=%s err=%s', request.user.id, e)
+            return Response(
+                {'error': _friendly_meta_error(e), 'code': e.code, 'subcode': e.subcode},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response({'forms': forms, 'count': len(forms)})
+
+    def post(self, request):
+        page_id, page_token, err = _resolve_facebook_page(request)
+        if err is not None:
+            return err
+
+        name = (request.data.get('name') or '').strip()
+        questions = request.data.get('questions') or []
+        privacy_policy_url = (request.data.get('privacy_policy_url') or '').strip()
+        thank_you = request.data.get('thank_you') or {}
+        intro = request.data.get('intro') or None
+
+        if not questions:
+            return Response({'error': 'At least one question is required.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        if not privacy_policy_url:
+            return Response({'error': 'privacy_policy_url is required.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            form_id = meta_ads.create_lead_form(
+                page_id=page_id,
+                page_access_token=page_token,
+                name=name,
+                questions=questions,
+                privacy_policy_url=privacy_policy_url,
+                thank_you=thank_you if isinstance(thank_you, dict) else {},
+                intro=intro if isinstance(intro, dict) else None,
+            )
+        except meta_ads.MetaAdsError as e:
+            logger.warning('create lead form failed user=%s err=%s raw=%s',
+                           request.user.id, e, e.raw)
+            return Response(
+                {'error': _friendly_meta_error(e), 'code': e.code, 'subcode': e.subcode},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response({'form_id': form_id}, status=status.HTTP_201_CREATED)
+
+
+class MetaLeadFormLeadsView(APIView):
+    """GET /ads/meta/lead-forms/<form_id>/leads/ — leads submitted to a form.
+
+    Uses the user's active Facebook Page access token. Returns the raw lead
+    rows: [{id, created_time, field_data:[{name, values}]}].
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, form_id):
+        page_id, page_token, err = _resolve_facebook_page(request)
+        if err is not None:
+            return err
+        try:
+            leads = meta_ads.get_form_leads(form_id, page_token)
+        except meta_ads.MetaAdsError as e:
+            logger.warning('get form leads failed user=%s form=%s err=%s',
+                           request.user.id, form_id, e)
+            return Response(
+                {'error': _friendly_meta_error(e), 'code': e.code, 'subcode': e.subcode},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response({'leads': leads, 'count': len(leads)})

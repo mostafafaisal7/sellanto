@@ -24,6 +24,16 @@ urlpatterns = [
          views.MetaCreateCampaignView.as_view(),
          name='ads-meta-create-campaign'),
 
+    # Meta — create a from-scratch carousel campaign (2-10 cards)
+    path('meta/carousel/',
+         views.MetaCreateCarouselView.as_view(),
+         name='ads-meta-create-carousel'),
+
+    # Meta — live ad preview (generatepreviews; read-only, no spend)
+    path('meta/preview/',
+         views.MetaAdPreviewView.as_view(),
+         name='ads-meta-preview'),
+
     # Meta — advanced targeting lookups (interests/behaviors/demographics + geo)
     path('meta/targeting/search/',
          views.MetaTargetingSearchView.as_view(),
@@ -31,6 +41,11 @@ urlpatterns = [
     path('meta/targeting/geo/',
          views.MetaGeoSearchView.as_view(),
          name='ads-meta-targeting-geo'),
+
+    # Meta — list conversion Pixels on the ad account (sales/leads tracking)
+    path('meta/pixels/',
+         views.MetaPixelsView.as_view(),
+         name='ads-meta-pixels'),
 
     # ── Google Ads OAuth + account connection ──────────────────────────
     path('google/initiate/',  gads_oauth.google_ads_initiate,  name='ads-google-initiate'),
@@ -158,6 +173,9 @@ urlpatterns = [
     path('boost-from-post/',
          views.BoostFromPostView.as_view(),
          name='ads-boost-from-post'),
+    path('media-library/',
+         views.AdMediaLibraryView.as_view(),
+         name='ads-media-library'),
     path('boostable-posts/',
          views.BoostablePostsView.as_view(),
          name='ads-boostable-posts'),
@@ -170,6 +188,10 @@ urlpatterns = [
          views.RunVideoAdView.as_view(),
          name='ads-run-video-ad'),
 
+    # Meta — ad-set / ad level insights drill-down (read-only)
+    path('meta/insights/',
+         views.MetaEntityInsightsView.as_view(),
+         name='ads-meta-entity-insights'),
     # Meta — account-level dashboard rollup + recommendations (read-only)
     path('meta/account-summary/',
          views.MetaAccountSummaryView.as_view(),
@@ -177,4 +199,12 @@ urlpatterns = [
     path('meta/recommendations/',
          views.MetaRecommendationsView.as_view(),
          name='ads-meta-recommendations'),
+
+    # Meta -- native Instant Lead Forms (Page-scoped)
+    path('meta/lead-forms/',
+         views.MetaLeadFormListCreateView.as_view(),
+         name='ads-meta-lead-forms'),
+    path('meta/lead-forms/<str:form_id>/leads/',
+         views.MetaLeadFormLeadsView.as_view(),
+         name='ads-meta-lead-form-leads'),
 ]

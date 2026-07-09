@@ -80,6 +80,29 @@ export interface AdRule {
   trigger_count: number;
 }
 
+/**
+ * A deep per-day insight row returned by the campaign-insights and
+ * entity-insights endpoints. `roas`/`cpa`/`conversions` are parsed server-side
+ * from Meta's purchase_roas / cost_per_action_type / actions; they are 0 when
+ * Meta reports no data for the row. `spend_minor`/`cpc`/`cpm` are money;
+ * spend_minor is account-currency minor units (cents), cpc/cpm are major units.
+ */
+export interface DeepInsightRow {
+  date: string;
+  impressions: number;
+  reach: number;
+  clicks: number;
+  link_clicks: number;
+  spend_minor: number;
+  ctr: number;
+  cpc: number;
+  cpm: number;
+  frequency: number;
+  conversions: number;
+  roas: number;
+  cpa: number;
+}
+
 /** Breakdown dimensions supported by /ads/campaigns/{id}/breakdown/. */
 export type BreakdownDimension =
   | 'age'
@@ -198,6 +221,46 @@ export interface BoostablePost {
   thumbnail?: string | null;
 }
 
+/** A reusable media asset for ad creatives, from the media library. */
+export interface MediaItem {
+  /** Prefixed id, e.g. "img-12", "mvid-3", "clip-7", "post-9". */
+  id: string;
+  kind: 'image' | 'video';
+  /** Absolute URL Meta/the frontend can fetch. */
+  url: string;
+  thumbnail: string;
+  source: 'generated_image' | 'generated_video' | 'post';
+  label: string;
+  created_at: string | null;
+}
+
+export interface MediaLibraryResponse {
+  items: MediaItem[];
+  count: number;
+}
+
+/** A native Instant Lead Form on a Facebook Page. */
+export interface LeadForm {
+  id: string;
+  name: string;
+  status?: string;
+  leads_count?: number;
+}
+
+/** One submitted lead: field_data is a list of {name, values} answers. */
+export interface FormLead {
+  id: string;
+  created_time: string;
+  field_data: Array<{ name: string; values: string[] }>;
+}
+
+/** A lead-form question: a standard field or a custom free-text field. */
+export type LeadFormQuestion =
+  | string
+  | { type: string }
+  | { type: 'CUSTOM'; key?: string; label: string; options?: unknown[] };
+
+
 // ── Service ───────────────────────────────────────────────────────────────────
 
 export const adsService = {
@@ -241,13 +304,7 @@ export const adsService = {
   },
 
   async getCampaignInsights(id: number, datePreset = 'last_7d'): Promise<{
-    insights: Array<{
-      date: string;
-      impressions: number;
-      clicks: number;
-      spend_minor: number;
-      ctr: number;
-    }>;
+    insights: DeepInsightRow[];
     count: number;
   }> {
     const res = await api.get(`/ads/campaigns/${id}/insights/`, {
@@ -287,10 +344,116 @@ export const adsService = {
     cta?: string;
     /** Short display link shown under the headline (e.g. yoursite.com). */
     display_link?: string;
+    /**
+     * Advantage+ multi-version copy (optional). When any of these has >1 entry,
+     * Meta builds a dynamic asset_feed_spec creative and optimizes across the
+     * variants. Falls back to the single fields (headline/message/description/cta)
+     * when omitted. Each list is capped at 5.
+     */
+    headlines?: string[];
+    messages?: string[];
+    descriptions?: string[];
+    cta_types?: string[];
+    /** UTM/query-string appended to the creative's destination URL (e.g. utm_source=fb&utm_medium=cpc). */
+    url_tags?: string;
+    /**
+     * Regulated ad categories (Meta special_ad_categories). Allowed values:
+     * HOUSING | CREDIT | EMPLOYMENT | ISSUES_ELECTIONS_POLITICS |
+     * FINANCIAL_PRODUCTS_SERVICES | ONLINE_GAMBLING_AND_GAMING. Unknown values
+     * are ignored server-side. Omit/empty for a standard campaign.
+     */
+    special_ad_categories?: string[];
+    /**
+     * Budget mode. 'daily' (default) uses daily_budget_usd; 'lifetime' uses
+     * lifetime_budget_usd on the ad set (an end_time is derived from
+     * duration_days when start_time/end_time are not supplied).
+     */
+    budget_type?: 'daily' | 'lifetime';
+    /** Lifetime budget in USD (required when budget_type='lifetime', min $1.50). */
+    lifetime_budget_usd?: number;
+    /** Explicit ISO-8601 ad-set start time (e.g. 2026-07-15T09:00:00Z). Optional. */
+    start_time?: string;
+    /** Explicit ISO-8601 ad-set end time. Optional (required by Meta for lifetime budgets — auto-derived when omitted). */
+    end_time?: string;
+    /** Bid strategy: LOWEST_COST_WITHOUT_CAP (default) | LOWEST_COST_WITH_BID_CAP | COST_CAP | LOWEST_COST_WITH_MIN_ROAS. */
+    bid_strategy?: 'LOWEST_COST_WITHOUT_CAP' | 'LOWEST_COST_WITH_BID_CAP' | 'COST_CAP' | 'LOWEST_COST_WITH_MIN_ROAS';
+    /** Bid cap/target in USD — used only by the cap/target bid strategies. */
+    bid_amount_usd?: number;
+    /** Campaign-level lifetime spend ceiling in USD. Optional. */
+    spend_cap_usd?: number;
+    /** Override the objective-mapped ad-set optimization goal (validated server-side; ignored if unknown). */
+    optimization_goal?: string;
+    /** Override the ad-set billing event (validated server-side; ignored if unknown). */
+    billing_event?: string;
+    /**
+     * Meta Pixel id for conversion tracking. When set on a 'sales' or 'leads'
+     * objective, the ad set optimizes for the pixel + custom_event_type instead
+     * of just the Page. Ignored for other objectives / when omitted.
+     */
+    pixel_id?: string;
+    /** Conversion event to optimize for, e.g. PURCHASE | LEAD | ADD_TO_CART | COMPLETE_REGISTRATION. Defaults to PURCHASE server-side. */
+    custom_event_type?: string;
     /** Required (true) to proceed on a LIVE (non-sandbox) ad account — real spend. */
     confirm_live?: boolean;
   }): Promise<AdCampaign> {
     const res = await api.post('/ads/meta/campaigns/create/', params);
+    return res.data;
+  },
+
+  /** GET /ads/meta/pixels/ — Meta Pixels on the ad account (conversion tracking picker). */
+  async listMetaPixels(
+    adAccountId?: number,
+  ): Promise<{ pixels: Array<{ id: string; name: string; last_fired_time: string }> }> {
+    const res = await api.get('/ads/meta/pixels/', {
+      params: adAccountId ? { ad_account_id: adAccountId } : undefined,
+    });
+    return res.data;
+  },
+
+  /** Create a from-scratch Meta carousel campaign (2-10 swipeable cards). */
+  async createCarousel(params: {
+    ad_account_id: number;
+    objective: 'awareness' | 'traffic' | 'engagement' | 'leads' | 'sales';
+    name?: string;
+    daily_budget_usd: number;
+    duration_days?: number;
+    targeting?: Record<string, unknown>;
+    /** 2-10 cards. Each card needs a link + image_url; name/description/cta optional. */
+    cards: Array<{
+      link: string;
+      name?: string;
+      description?: string;
+      image_url: string;
+      cta?: string;
+    }>;
+    activate?: boolean;
+    /** Required (true) to proceed on a LIVE (non-sandbox) ad account — real spend. */
+    confirm_live?: boolean;
+  }): Promise<AdCampaign> {
+    const res = await api.post('/ads/meta/carousel/', params);
+    return res.data;
+  },
+
+  /**
+   * Render a live Meta ad preview (generatepreviews) — no spend, nothing is
+   * created. Returns an <iframe> HTML string to embed, plus the ad_format used.
+   * Builds the same object_story_spec link_data creative as createMetaCampaign.
+   */
+  async getMetaAdPreview(params: {
+    ad_account_id: number;
+    /** DESKTOP_FEED_STANDARD | MOBILE_FEED_STANDARD | INSTAGRAM_STANDARD | INSTAGRAM_STORY | FACEBOOK_STORY_MOBILE | INSTAGRAM_REELS */
+    ad_format?: string;
+    link_url: string;
+    message?: string;
+    headline?: string;
+    description?: string;
+    image_url?: string;
+    cta?: string;
+    display_link?: string;
+    /** Optional — resolved server-side from the active FB page when omitted. */
+    page_id?: string;
+  }): Promise<{ preview_html: string; ad_format: string }> {
+    const res = await api.post('/ads/meta/preview/', params);
     return res.data;
   },
 
@@ -489,6 +652,36 @@ export const adsService = {
     return res.data;
   },
 
+  // ── Entity-scoped insights drill-down (ad set / ad) ───────────────────────
+  /**
+   * GET /ads/meta/insights/ — deep insights for a single Meta ad set or ad,
+   * so the UI can drill campaign → ad set → ad. Authorize by passing
+   * ad_account_id OR campaign_id (the entity must belong to an owned account).
+   */
+  async getEntityInsights(params: {
+    entity_id: string;
+    level?: 'adset' | 'ad' | 'campaign' | 'account';
+    date_preset?: string;
+    ad_account_id?: number;
+    campaign_id?: number;
+  }): Promise<{
+    level: string;
+    entity_id: string;
+    insights: DeepInsightRow[];
+    count: number;
+  }> {
+    const res = await api.get('/ads/meta/insights/', {
+      params: {
+        entity_id: params.entity_id,
+        level: params.level || 'ad',
+        date_preset: params.date_preset || 'last_7d',
+        ad_account_id: params.ad_account_id,
+        campaign_id: params.campaign_id,
+      },
+    });
+    return res.data;
+  },
+
   // ── Boost from content (published or scheduled posts) ─────────────────────
   /** 8) GET /ads/boostable-posts/ — posts eligible to boost. */
   async getBoostablePosts(): Promise<{ posts: BoostablePost[] }> {
@@ -523,6 +716,133 @@ export const adsService = {
     const res = await api.get('/ads/prefill-from-post/', {
       params: { post_id: postId },
     });
+    return res.data;
+  },
+
+  /**
+   * 11) POST /ads/google/image-upload/ — upload an ad image, get a public URL.
+   * Provider-neutral (just stores the file + returns a URL); reused for Meta
+   * creatives. Accepts PNG/JPG/GIF up to 10 MB.
+   */
+  async uploadAdImage(
+    file: File,
+    onUploadProgress?: (percent: number) => void,
+  ): Promise<{ image_url: string }> {
+    const fd = new FormData();
+    fd.append('image', file);
+    const res = await api.post('/ads/google/image-upload/', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      onUploadProgress: (e) => {
+        if (onUploadProgress && e.total) {
+          onUploadProgress(Math.round((e.loaded * 100) / e.total));
+        }
+      },
+    });
+    return res.data;
+  },
+
+  /**
+   * 12) GET /ads/media-library/?kind= — list reusable ad-creative media
+   * (AI-generated images/videos + media already on the user's posts).
+   * Read-only, no billing. `kind` defaults to 'all'.
+   */
+  async listMediaLibrary(
+    kind: 'image' | 'video' | 'all' = 'all',
+  ): Promise<MediaLibraryResponse> {
+    const res = await api.get('/ads/media-library/', { params: { kind } });
+    return res.data;
+  },
+
+  /**
+   * 13) POST /ads/google/generate-image/ — AI-generate an ad image.
+   * Provider-neutral (OpenAI/Gemini under the hood); reused for Meta creatives.
+   * `kind` ∈ {marketing, square, logo} picks the aspect ratio (default
+   * 'marketing'). Returns a hosted image_url that drops into the creative.
+   * Diamond-billed.
+   */
+  async generateAdImage(
+    prompt: string,
+    kind: 'marketing' | 'square' | 'logo' = 'marketing',
+    brandId?: number,
+  ): Promise<{
+    success: boolean;
+    image_url: string;
+    kind: string;
+    provider: string;
+    model: string;
+    enhanced_prompt: string;
+  }> {
+    const res = await api.post('/ads/google/generate-image/', {
+      prompt,
+      kind,
+      brand_id: brandId,
+    });
+    return res.data;
+  },
+
+  /**
+   * 14) POST /ads/google/generate-video/ — AI-generate an ad video (Gemini Veo).
+   * Returns a hosted video_url; if a YouTube account is connected the clip is
+   * auto-uploaded (unlisted) and youtube_url/youtube_video_id are filled in.
+   * `note` explains the YouTube requirement for Google video ads. Diamond-billed.
+   */
+  async generateAdVideo(
+    prompt: string,
+    opts?: {
+      brandId?: number;
+      duration?: number;
+      aspectRatio?: '16:9' | '9:16' | '1:1' | string;
+    },
+  ): Promise<{
+    success: boolean;
+    video_url: string;
+    youtube_url: string;
+    youtube_video_id: string;
+    model: string;
+    note: string;
+  }> {
+    const res = await api.post('/ads/google/generate-video/', {
+      prompt,
+      brand_id: opts?.brandId,
+      duration: opts?.duration,
+      aspect_ratio: opts?.aspectRatio,
+    });
+    return res.data;
+  },
+
+  // ── Native Instant Lead Forms (Page-scoped) ─────────────────────
+  /** GET /ads/meta/lead-forms/ — list the Page's lead forms. */
+  async listLeadForms(): Promise<{ forms: LeadForm[]; count: number }> {
+    const res = await api.get('/ads/meta/lead-forms/');
+    return res.data;
+  },
+
+  /** POST /ads/meta/lead-forms/ — create a native Instant Lead Form. */
+  async createLeadForm(params: {
+    name: string;
+    questions: LeadFormQuestion[];
+    privacy_policy_url: string;
+    thank_you?: {
+      title?: string;
+      body?: string;
+      button_text?: string;
+      button_type?: 'VIEW_WEBSITE' | 'CALL_BUSINESS' | 'DOWNLOAD';
+      website_url?: string;
+    };
+    intro?: {
+      title?: string;
+      style?: 'PARAGRAPH_STYLE' | 'LIST_STYLE';
+      content?: string | string[];
+      button_text?: string;
+    };
+  }): Promise<{ form_id: string }> {
+    const res = await api.post('/ads/meta/lead-forms/', params);
+    return res.data;
+  },
+
+  /** GET /ads/meta/lead-forms/{formId}/leads/ — submitted leads for a form. */
+  async getFormLeads(formId: string): Promise<{ leads: FormLead[]; count: number }> {
+    const res = await api.get(`/ads/meta/lead-forms/${formId}/leads/`);
     return res.data;
   },
 };
