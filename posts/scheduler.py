@@ -106,6 +106,16 @@ def start_scheduler():
         replace_existing=True
     )
 
+    # Ads: safety net for boost-on-publish queued campaigns (every 5 minutes).
+    # The publish hook launches these immediately; this catches any missed.
+    scheduler.add_job(
+        run_pending_boosts,
+        'interval',
+        minutes=5,
+        id='pending_boosts',
+        replace_existing=True
+    )
+
     scheduler.start()
     print("[SCHEDULER] Auto-posting scheduler active (checks every 60 seconds)")
     print("[SCHEDULER] SLA checker active (checks every 30 minutes)")
@@ -132,6 +142,17 @@ def run_ad_rules():
         evaluate_all_active_rules()
     except Exception as e:
         print(f"[AD RULES] Error: {e}")
+
+
+def run_pending_boosts():
+    """Safety net: launch queued boost-on-publish campaigns whose post published."""
+    try:
+        from ads.services.boost_scheduler import run_pending_boosts as _run
+        launched = _run()
+        if launched:
+            print(f"[PENDING BOOSTS] launched {launched} queued boost(s)")
+    except Exception as e:
+        print(f"[PENDING BOOSTS] Error: {e}")
 
 
 def run_analytics_sync():
@@ -253,6 +274,15 @@ def post_facebook(post, account, caption, media_files):
             post.facebook_post_id = result
             post.facebook_error = None
             post.save()
+            # Fire any "boost this after it publishes" campaigns queued for
+            # this post (BoostFromPostView Path B). Non-fatal on error.
+            try:
+                from ads.services.boost_scheduler import launch_pending_boosts_for_post
+                launched = launch_pending_boosts_for_post(post)
+                if launched:
+                    print(f"[BOOST-ON-PUBLISH] launched {launched} queued boost(s) for post {post.id}")
+            except Exception as e:
+                print(f"[BOOST-ON-PUBLISH] error for post {post.id}: {e}")
             return True, None
         else:
             post.facebook_error = result
