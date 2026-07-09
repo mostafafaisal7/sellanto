@@ -1764,7 +1764,9 @@ def get_creative_preview(
         fmt = 'MOBILE_FEED_STANDARD'
 
     act_id = f'act_{ad_account.external_id}'
-    body = _post(
+    # generatepreviews is a GET edge — a POST returns GraphMethodException
+    # subcode 33 ("does not support this operation").
+    body = _get(
         f'{act_id}/generatepreviews', token,
         creative=_json.dumps(creative_spec),
         ad_format=fmt,

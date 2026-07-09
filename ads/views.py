@@ -3598,9 +3598,14 @@ class MetaEntityInsightsView(APIView):
         except Exception:
             deduct_diamonds = None
 
+        # For account-level, the Graph node is act_<external_id>, not the
+        # caller-supplied entity_id (which may be a local DB id). Adset/ad/
+        # campaign levels use the real Graph object id passed in entity_id.
+        graph_entity = (f'act_{ad_account.external_id}'
+                        if level == 'account' else entity_id)
         try:
             rows = meta_ads.get_insights(
-                ad_account, entity_id, level=level, date_preset=date_preset)
+                ad_account, graph_entity, level=level, date_preset=date_preset)
         except meta_ads.MetaAdsError as e:
             return Response({'error': _friendly_meta_error(e, ad_account)},
                             status=status.HTTP_400_BAD_REQUEST)
