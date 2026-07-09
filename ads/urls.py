@@ -14,10 +14,23 @@ urlpatterns = [
          views.ConnectMetaAdAccountView.as_view(),
          name='ads-connect-meta'),
 
+    # Meta — AI campaign suggestion from Brand DNA + topic
+    path('meta/suggest/',
+         views.MetaAdsSuggestCampaignView.as_view(),
+         name='ads-meta-suggest'),
+
     # Meta — create a from-scratch link/website campaign
     path('meta/campaigns/create/',
          views.MetaCreateCampaignView.as_view(),
          name='ads-meta-create-campaign'),
+
+    # Meta — advanced targeting lookups (interests/behaviors/demographics + geo)
+    path('meta/targeting/search/',
+         views.MetaTargetingSearchView.as_view(),
+         name='ads-meta-targeting-search'),
+    path('meta/targeting/geo/',
+         views.MetaGeoSearchView.as_view(),
+         name='ads-meta-targeting-geo'),
 
     # ── Google Ads OAuth + account connection ──────────────────────────
     path('google/initiate/',  gads_oauth.google_ads_initiate,  name='ads-google-initiate'),
@@ -106,6 +119,9 @@ urlpatterns = [
     path('campaigns/<int:pk>/insights/',
          views.CampaignInsightsView.as_view(),
          name='ads-campaign-insights'),
+    path('campaigns/<int:pk>/breakdown/',
+         views.MetaInsightBreakdownView.as_view(),
+         name='ads-campaign-breakdown'),
     path('campaigns/<int:pk>/keywords/',
          views.CampaignKeywordInsightsView.as_view(),
          name='ads-campaign-keywords'),
@@ -128,14 +144,37 @@ urlpatterns = [
     path('audiences/<int:pk>/',
          views.AdAudienceDetailView.as_view(),
          name='ads-audience-detail'),
+    # Live Meta Custom/Lookalike audiences (real Graph API, read-only)
+    path('meta/audiences/live/',
+         views.MetaAudienceSyncView.as_view(),
+         name='ads-meta-audiences-live'),
 
     # MVP — Boost Post
     path('boost-post/',
          views.BoostPostView.as_view(),
          name='ads-boost-post'),
 
+    # Boost from content — turn a scheduled/published/AI post into a Meta ad
+    path('boost-from-post/',
+         views.BoostFromPostView.as_view(),
+         name='ads-boost-from-post'),
+    path('boostable-posts/',
+         views.BoostablePostsView.as_view(),
+         name='ads-boostable-posts'),
+    path('prefill-from-post/',
+         views.PrefillFromContentView.as_view(),
+         name='ads-prefill-from-post'),
+
     # Path A — One-click "Publish video + Boost" as a paid video ad
     path('run-video-ad/',
          views.RunVideoAdView.as_view(),
          name='ads-run-video-ad'),
+
+    # Meta — account-level dashboard rollup + recommendations (read-only)
+    path('meta/account-summary/',
+         views.MetaAccountSummaryView.as_view(),
+         name='ads-meta-account-summary'),
+    path('meta/recommendations/',
+         views.MetaRecommendationsView.as_view(),
+         name='ads-meta-recommendations'),
 ]

@@ -83,6 +83,8 @@ DIAMOND_COSTS = {
     'ads_insights_pull': 2,           # pull fresh insights (cheap, runs often)
     'ads_google_campaign': 100,       # create a Google Ads campaign (Search/Display/PMax)
     'ads_ai_campaign_suggest': 15,    # AI proposes a full Google Ads campaign (LLM)
+    'ads_meta_ai_suggest': 15,        # AI proposes a full Meta campaign (LLM)
+    'ads_meta_recommendations': 3,    # pull Meta's native optimization recommendations
 
     # Google Business Profile
     'gbp_post': 2,                    # publish a Google Post (non-AI, cheap)

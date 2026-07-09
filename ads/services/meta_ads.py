@@ -311,6 +311,108 @@ def boost_post(
 # ───────────────────────────── From-scratch campaign ────────────────────────
 
 
+# Valid Meta call-to-action button types we expose. NO_BUTTON means omit the CTA.
+_META_CTA_TYPES = {
+    'LEARN_MORE', 'SHOP_NOW', 'SIGN_UP', 'BOOK_TRAVEL', 'CONTACT_US',
+    'DOWNLOAD', 'GET_OFFER', 'SUBSCRIBE', 'WATCH_MORE', 'NO_BUTTON',
+}
+
+
+def upload_image_from_url(ad_account: AdAccount, image_url: str) -> str:
+    """Upload an image to the ad account's library by URL, return its image_hash.
+
+    POSTs to act_<id>/adimages with the `url` param so Meta fetches the image
+    itself (no local bytes). Returns the image_hash string, or '' on any failure
+    (caller falls back to using the raw picture URL in link_data).
+    """
+    if not image_url:
+        return ''
+    token = decrypt_token(ad_account.encrypted_token)
+    if not token:
+        return ''
+    act_id = f'act_{ad_account.external_id}'
+    try:
+        body = _post(f'{act_id}/adimages', token, url=image_url)
+    except MetaAdsError as e:
+        logger.warning(f'[upload_image_from_url] adimages failed (non-fatal): {e}')
+        return ''
+    # Response shape: {"images": {"<original_url_or_name>": {"hash": "...", ...}}}
+    images = body.get('images') if isinstance(body, dict) else None
+    if isinstance(images, dict):
+        for entry in images.values():
+            if isinstance(entry, dict) and entry.get('hash'):
+                return entry['hash']
+    return ''
+
+
+# ───────────────────────────── Custom / Lookalike audiences ─────────────────
+
+
+def create_custom_audience(
+    ad_account: AdAccount,
+    name: str,
+    description: str = '',
+    subtype: str = 'CUSTOM',
+) -> str:
+    """Create a Custom Audience on Meta. Returns the new audience id.
+
+    POSTs to act_<id>/customaudiences. `customer_file_source` is required by
+    Meta for USER-provided list audiences.
+    """
+    token = decrypt_token(ad_account.encrypted_token)
+    act_id = f'act_{ad_account.external_id}'
+    body = _post(
+        f'{act_id}/customaudiences', token,
+        name=name,
+        subtype=subtype,
+        description=description,
+        customer_file_source='USER_PROVIDED_ONLY',
+    )
+    return body.get('id', '')
+
+
+def create_lookalike_audience(
+    ad_account: AdAccount,
+    name: str,
+    origin_audience_id: str,
+    country: str = 'US',
+    ratio: float = 0.01,
+) -> str:
+    """Create a Lookalike Audience on Meta from a source audience.
+
+    Returns the new audience id. `lookalike_spec` is a JSON-encoded object
+    describing the similarity target market and expansion ratio.
+    """
+    import json as _json
+    token = decrypt_token(ad_account.encrypted_token)
+    act_id = f'act_{ad_account.external_id}'
+    body = _post(
+        f'{act_id}/customaudiences', token,
+        name=name,
+        subtype='LOOKALIKE',
+        origin_audience_id=origin_audience_id,
+        lookalike_spec=_json.dumps({
+            'type': 'similarity',
+            'country': country,
+            'ratio': ratio,
+        }),
+    )
+    return body.get('id', '')
+
+
+def list_ad_account_audiences(ad_account: AdAccount) -> list:
+    """List the Custom/Lookalike audiences on the ad account.
+
+    Returns the raw list of dicts from Graph API with fields id, name, subtype,
+    approximate_count, delivery_status, operation_status.
+    """
+    token = decrypt_token(ad_account.encrypted_token)
+    act_id = f'act_{ad_account.external_id}'
+    fields = 'id,name,subtype,approximate_count,delivery_status,operation_status'
+    body = _get(f'{act_id}/customaudiences', token, fields=fields, limit=200)
+    return body.get('data', []) if isinstance(body, dict) else []
+
+
 # Sellanto objective → Meta ODAX objective + a sensible ad-set optimization goal.
 _META_OBJECTIVE_MAP = {
     'awareness':  ('OUTCOME_AWARENESS', 'REACH'),
@@ -336,6 +438,8 @@ def create_link_campaign(
     image_url: str = '',
     page_access_token: str = '',
     status_active: bool = False,
+    cta: str = 'LEARN_MORE',
+    display_link: str = '',
 ) -> dict:
     """Create a from-scratch Meta campaign (link/website ad) end-to-end.
 
@@ -396,11 +500,34 @@ def create_link_campaign(
     # 3. Ad Creative — link_data referencing the Page.
     link_data = {'link': link_url, 'message': message or ''}
     if headline:
+        # `name` is the primary headline; Meta also supports multiple headlines
+        # for dynamic optimization via asset_feed_spec — noted for future work.
         link_data['name'] = headline[:255]
     if description:
         link_data['description'] = description[:255]
-    if image_url:
+
+    # Prefer an uploaded image_hash over a raw picture URL when available: Meta
+    # serves hashed images more reliably and they persist in the ad library.
+    image_hash = upload_image_from_url(ad_account, image_url) if image_url else ''
+    if image_hash:
+        link_data['image_hash'] = image_hash
+    elif image_url:
         link_data['picture'] = image_url
+
+    # Shown/display domain (e.g. "example.com") under the headline.
+    if display_link:
+        link_data['caption'] = display_link[:255]
+
+    # Call-to-action button. Omit entirely for NO_BUTTON.
+    cta_type = (cta or 'LEARN_MORE').strip().upper()
+    if cta_type not in _META_CTA_TYPES:
+        cta_type = 'LEARN_MORE'
+    if cta_type != 'NO_BUTTON':
+        link_data['call_to_action'] = {
+            'type': cta_type,
+            'value': {'link': link_url},
+        }
+
     object_story_spec = {'page_id': page_id, 'link_data': link_data}
     try:
         creative = _post(
@@ -482,6 +609,237 @@ def get_campaign_insights(campaign: AdCampaign, date_preset='last_7d') -> list:
     return body.get('data', [])
 
 
+# Meta breakdown dimensions Sellanto exposes → the raw `breakdowns=` value.
+# Keys are the friendly names accepted by our API; values are what Graph expects.
+META_INSIGHT_BREAKDOWNS = {
+    'age':                'age',
+    'gender':             'gender',
+    'age,gender':         'age,gender',
+    'publisher_platform': 'publisher_platform',   # placement
+    'region':             'region',
+    'country':            'country',
+    'impression_device':  'impression_device',
+    'device_platform':    'device_platform',
+}
+
+
+def get_campaign_insights_breakdown(
+    campaign: AdCampaign,
+    date_preset='last_7d',
+    breakdown='age',
+) -> list:
+    """Pull campaign insights segmented by a Meta breakdown dimension.
+
+    Same metric `fields` as get_campaign_insights (minus the daily time_increment
+    — we segment by the breakdown dimension, not by day), plus the breakdown
+    columns Meta appends to each row.
+
+    `breakdown`: one of the keys in META_INSIGHT_BREAKDOWNS —
+        age | gender | age,gender | publisher_platform | region | country |
+        impression_device | device_platform.
+    `date_preset`: today | yesterday | last_3d | last_7d | last_14d | last_28d |
+                   last_30d | last_90d | this_month | last_month | maximum.
+
+    Returns list of insight dicts, each carrying the metric fields plus the
+    breakdown dimension value(s). Raises MetaAdsError on an unsupported breakdown.
+    """
+    graph_breakdown = META_INSIGHT_BREAKDOWNS.get(breakdown)
+    if not graph_breakdown:
+        raise MetaAdsError(f'Unsupported breakdown {breakdown!r}.')
+
+    token = decrypt_token(campaign.ad_account.encrypted_token)
+    if not token or not campaign.external_campaign_id:
+        return []
+
+    fields = (
+        'impressions,reach,clicks,spend,cpc,cpm,ctr,frequency,'
+        'actions,action_values,date_start,date_stop'
+    )
+    body = _get(
+        f'{campaign.external_campaign_id}/insights', token,
+        fields=fields,
+        breakdowns=graph_breakdown,
+        date_preset=date_preset,
+        level='campaign',
+    )
+    return body.get('data', [])
+
+
+def _to_float(v, default=0.0):
+    """Coerce a Meta insight string to float (Meta returns numerics as strings)."""
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return default
+
+
+def _sum_conversions(actions) -> float:
+    """Sum purchase/lead/registration-type conversion actions from an insights row.
+
+    Meta returns `actions` as a list of {action_type, value}. We count the
+    common conversion action types so a summary "conversions" number is useful
+    regardless of the campaign objective.
+    """
+    if not isinstance(actions, list):
+        return 0.0
+    conversion_types = {
+        'purchase', 'omni_purchase',
+        'offsite_conversion.fb_pixel_purchase',
+        'lead', 'onsite_conversion.lead_grouped',
+        'offsite_conversion.fb_pixel_lead',
+        'complete_registration',
+        'offsite_conversion.fb_pixel_complete_registration',
+    }
+    total = 0.0
+    for a in actions:
+        if a.get('action_type') in conversion_types:
+            total += _to_float(a.get('value'))
+    return total
+
+
+def get_account_summary(ad_account: AdAccount, date_preset='last_30d') -> dict:
+    """Account-level dashboard rollup for a Meta ad account.
+
+    Pulls act_<id>/insights at level=account for the date_preset AND counts
+    campaigns by effective_status via act_<id>/campaigns. Returns:
+        {spend, impressions, clicks, ctr, cpc, reach, conversions,
+         active_campaigns, paused_campaigns, total_campaigns}
+
+    `date_preset`: today | yesterday | last_3d | last_7d | last_14d | last_28d
+                   last_30d | last_90d | this_month | last_month | maximum
+    """
+    token = decrypt_token(ad_account.encrypted_token)
+    if not token:
+        raise MetaAdsError('No token on AdAccount -- re-authenticate.')
+
+    act_id = f'act_{ad_account.external_id}'
+
+    # ── Account-level insight totals ────────────────────────────────────
+    fields = (
+        'impressions,reach,clicks,spend,cpc,cpm,ctr,frequency,'
+        'actions,action_values'
+    )
+    body = _get(
+        f'{act_id}/insights', token,
+        fields=fields,
+        date_preset=date_preset,
+        level='account',
+    )
+    rows = body.get('data', [])
+    row = rows[0] if rows else {}
+
+    # ── Campaign counts by effective_status ─────────────────────────────
+    active = paused = total = 0
+    camp_body = _get(
+        f'{act_id}/campaigns', token,
+        fields='effective_status',
+        limit=200,
+    )
+    for c in camp_body.get('data', []):
+        total += 1
+        eff = c.get('effective_status')
+        if eff == 'ACTIVE':
+            active += 1
+        elif eff == 'PAUSED':
+            paused += 1
+
+    return {
+        'spend': _to_float(row.get('spend')),
+        'impressions': int(_to_float(row.get('impressions'))),
+        'clicks': int(_to_float(row.get('clicks'))),
+        'ctr': _to_float(row.get('ctr')),
+        'cpc': _to_float(row.get('cpc')),
+        'reach': int(_to_float(row.get('reach'))),
+        'conversions': _sum_conversions(row.get('actions')),
+        'active_campaigns': active,
+        'paused_campaigns': paused,
+        'total_campaigns': total,
+    }
+
+
+def get_account_recommendations(ad_account: AdAccount) -> list:
+    """Recommendations for a Meta ad account: Meta-native + heuristic tips.
+
+    Fetches act_<id>/recommendations (when the account exposes any) and ALSO
+    derives simple heuristic tips from recent (last_7d) account insights so the
+    endpoint stays useful even when Meta returns none. Returns a list of
+    {title, message, severity} dicts (severity: info | warning | critical).
+    """
+    token = decrypt_token(ad_account.encrypted_token)
+    if not token:
+        raise MetaAdsError('No token on AdAccount -- re-authenticate.')
+
+    act_id = f'act_{ad_account.external_id}'
+    out = []
+
+    # ── Meta-native recommendations (best-effort; not all accounts expose) ──
+    try:
+        rec_body = _get(
+            act_id, token,
+            fields='recommendations{title,message,confidence,importance}',
+        )
+        recs = (rec_body.get('recommendations') or {})
+        rec_list = recs.get('data', []) if isinstance(recs, dict) else (recs or [])
+        for r in rec_list:
+            importance = (r.get('importance') or '').upper()
+            severity = 'critical' if importance == 'HIGH' else (
+                'warning' if importance == 'MEDIUM' else 'info')
+            out.append({
+                'title': r.get('title') or 'Meta recommendation',
+                'message': r.get('message') or '',
+                'severity': severity,
+            })
+    except MetaAdsError as e:
+        # The recommendations edge is not available on every account/token;
+        # log and fall through to the heuristic tips rather than failing.
+        logger.info(f'[recommendations] Meta-native fetch unavailable: {e}')
+
+    # ── Heuristic tips derived from recent account insights ─────────────
+    try:
+        body = _get(
+            f'{act_id}/insights', token,
+            fields='impressions,clicks,spend,ctr,frequency,actions',
+            date_preset='last_7d',
+            level='account',
+        )
+        rows = body.get('data', [])
+        row = rows[0] if rows else {}
+    except MetaAdsError as e:
+        logger.info(f'[recommendations] insights fetch failed: {e}')
+        row = {}
+
+    if row:
+        ctr = _to_float(row.get('ctr'))
+        frequency = _to_float(row.get('frequency'))
+        spend = _to_float(row.get('spend'))
+        impressions = _to_float(row.get('impressions'))
+        conversions = _sum_conversions(row.get('actions'))
+
+        if impressions > 0 and ctr < 1.0:
+            out.append({
+                'title': 'Low click-through rate',
+                'message': (f'CTR is {ctr:.2f}% (below 1%) over the last 7 days. '
+                            'Refresh your creative or tighten the offer.'),
+                'severity': 'warning',
+            })
+        if spend > 0 and conversions == 0:
+            out.append({
+                'title': 'No conversions in 7 days',
+                'message': ('You spent on ads but recorded no conversions in the '
+                            'last 7 days. Check your targeting and pixel setup.'),
+                'severity': 'critical',
+            })
+        if frequency > 3.0:
+            out.append({
+                'title': 'High ad frequency',
+                'message': (f'Average frequency is {frequency:.1f} (above 3). '
+                            'Widen your audience to reduce ad fatigue.'),
+                'severity': 'warning',
+            })
+
+    return out
+
+
 def pause_campaign(campaign: AdCampaign) -> bool:
     """Pause a running campaign."""
     token = decrypt_token(campaign.ad_account.encrypted_token)
@@ -536,6 +894,182 @@ def remove_campaign(campaign: AdCampaign) -> bool:
     body = resp.json()
     _check_error(body)
     return True
+
+
+# ───────────────────────────── Advanced targeting ───────────────────────────
+
+
+# Friendly targeting-category type → Meta /search type + optional `class` filter.
+#   interest    → adinterest
+#   behavior    → adTargetingCategory, class=behaviors
+#   demographic → adTargetingCategory, class=demographics
+_TARGETING_SEARCH_TYPES = {
+    'interest':    ('adinterest', None),
+    'behavior':    ('adTargetingCategory', 'behaviors'),
+    'demographic': ('adTargetingCategory', 'demographics'),
+}
+
+
+def search_targeting(token, q, type='interest'):
+    """Search Meta's targeting categories (interests / behaviors / demographics).
+
+    `type`: one of interest | behavior | demographic (see _TARGETING_SEARCH_TYPES).
+    Interests use /search?type=adinterest; behaviors and demographics use
+    /search?type=adTargetingCategory with a `class` filter.
+
+    Returns list of dicts: [{id, name, audience_size, path, type}]. `path` is
+    Meta's category breadcrumb (list of strings) when present.
+    """
+    if not q:
+        return []
+    meta_type, klass = _TARGETING_SEARCH_TYPES.get(
+        type, _TARGETING_SEARCH_TYPES['interest'])
+
+    params = {'type': meta_type, 'q': q, 'limit': 50}
+    if klass:
+        params['class'] = klass
+    body = _get('search', token, **params)
+
+    out = []
+    for c in body.get('data', []):
+        # Meta returns audience_size_lower_bound/upper_bound on newer versions;
+        # older responses carry a flat audience_size. Prefer the lower bound.
+        audience_size = (
+            c.get('audience_size')
+            or c.get('audience_size_lower_bound')
+        )
+        out.append({
+            'id': c.get('id'),
+            'name': c.get('name', ''),
+            'audience_size': audience_size,
+            'path': c.get('path') or [],
+            'type': c.get('type') or meta_type,
+        })
+    return out
+
+
+def search_geo(token, q):
+    """Search Meta's ad geo-locations (countries / regions / cities).
+
+    GET /search?type=adgeolocation&location_types=['country','region','city'].
+    Returns normalized list: [{key, name, type, country_code}]. `key` is the
+    value to feed back into targeting geo_locations (country codes for countries,
+    numeric keys for regions/cities).
+    """
+    if not q:
+        return []
+    import json as _json
+    body = _get(
+        'search', token,
+        type='adgeolocation',
+        location_types=_json.dumps(['country', 'region', 'city']),
+        q=q,
+        limit=50,
+    )
+    out = []
+    for loc in body.get('data', []):
+        loc_type = loc.get('type', '')
+        # Countries key off country_code; regions/cities key off numeric `key`.
+        key = loc.get('key') or loc.get('country_code')
+        out.append({
+            'key': key,
+            'name': loc.get('name', ''),
+            'type': loc_type,
+            'country_code': loc.get('country_code', ''),
+        })
+    return out
+
+
+def build_targeting_spec(friendly: dict) -> dict:
+    """Convert a friendly targeting dict into a Meta targeting spec.
+
+    Friendly input keys (all optional):
+        geo: {countries: ['US'], regions: [{key}], cities: [{key}]}  OR
+             already-shaped geo_locations dict
+        age_min, age_max: int
+        genders: [1] (male) | [2] (female) | [1, 2] (all)
+        interests: [id, ...]            # ids from search_targeting(type=interest)
+        behaviors: [id, ...]            # ids from search_targeting(type=behavior)
+        placements: ['facebook', 'instagram'] and/or position tokens like
+                    'facebook:feed', 'instagram:story' — see below
+        custom_audiences: [id, ...]     # saved/custom/lookalike audience ids
+
+    Interests + behaviors are wrapped in flexible_spec (AND across groups,
+    OR within a group). Placements expand into publisher_platforms +
+    facebook_positions / instagram_positions. custom_audiences attaches
+    saved/custom/lookalike audiences.
+
+    Returns a Meta-ready targeting spec dict.
+    """
+    spec = {}
+
+    # ── Geo ──────────────────────────────────────────────────────────────
+    geo = friendly.get('geo') or {}
+    if geo:
+        # Accept either a pre-shaped geo_locations dict or the friendly form.
+        if any(k in geo for k in ('countries', 'regions', 'cities')):
+            geo_locations = {}
+            if geo.get('countries'):
+                geo_locations['countries'] = list(geo['countries'])
+            for level in ('regions', 'cities'):
+                vals = geo.get(level)
+                if vals:
+                    # Accept [{key}] or [key] and normalize to [{key}].
+                    geo_locations[level] = [
+                        v if isinstance(v, dict) else {'key': str(v)}
+                        for v in vals
+                    ]
+            spec['geo_locations'] = geo_locations
+        else:
+            spec['geo_locations'] = geo
+
+    # ── Age / gender ─────────────────────────────────────────────────────
+    if friendly.get('age_min') is not None:
+        spec['age_min'] = int(friendly['age_min'])
+    if friendly.get('age_max') is not None:
+        spec['age_max'] = int(friendly['age_max'])
+    if friendly.get('genders'):
+        spec['genders'] = [int(g) for g in friendly['genders']]
+
+    # ── Interests + behaviors → flexible_spec ────────────────────────────
+    flex_group = {}
+    if friendly.get('interests'):
+        flex_group['interests'] = [{'id': str(i)} for i in friendly['interests']]
+    if friendly.get('behaviors'):
+        flex_group['behaviors'] = [{'id': str(b)} for b in friendly['behaviors']]
+    if flex_group:
+        spec['flexible_spec'] = [flex_group]
+
+    # ── Placements → publisher_platforms + positions ─────────────────────
+    placements = friendly.get('placements') or []
+    if placements:
+        platforms = set()
+        fb_positions, ig_positions = [], []
+        for p in placements:
+            p = str(p).strip().lower()
+            if ':' in p:
+                plat, pos = p.split(':', 1)
+                platforms.add(plat)
+                if plat == 'facebook':
+                    fb_positions.append(pos)
+                elif plat == 'instagram':
+                    ig_positions.append(pos)
+            else:
+                platforms.add(p)
+        if platforms:
+            spec['publisher_platforms'] = sorted(platforms)
+        if fb_positions:
+            spec['facebook_positions'] = fb_positions
+        if ig_positions:
+            spec['instagram_positions'] = ig_positions
+
+    # ── Custom / lookalike audiences ─────────────────────────────────────
+    if friendly.get('custom_audiences'):
+        spec['custom_audiences'] = [
+            {'id': str(a)} for a in friendly['custom_audiences']
+        ]
+
+    return spec
 
 
 # ───────────────────────────── Token exchange ───────────────────────────────
