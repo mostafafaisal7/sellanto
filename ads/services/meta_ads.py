@@ -263,6 +263,7 @@ def boost_post(
         adset_id = adset['id']
         logger.info(f'[boost_post] step 2 OK adset_id={adset_id}')
     except MetaAdsError as e:
+        _delete_quietly(campaign_id, token)  # roll back the orphan campaign
         raise MetaAdsError(f'Step 2 (adset): {e}', code=e.code, subcode=e.subcode, raw=e.raw)
 
     # ---- 3. Create Ad Creative referencing the organic post -----------
@@ -276,6 +277,8 @@ def boost_post(
         creative_id = creative['id']
         logger.info(f'[boost_post] step 3 OK creative_id={creative_id}')
     except MetaAdsError as e:
+        _delete_quietly(adset_id, token)
+        _delete_quietly(campaign_id, token)
         raise MetaAdsError(f'Step 3 (creative): {e}', code=e.code, subcode=e.subcode, raw=e.raw)
 
     # ---- 4. Create the Ad, ACTIVE so the chain goes live ---------------
@@ -291,6 +294,9 @@ def boost_post(
         ad_id = ad['id']
         logger.info(f'[boost_post] step 4 OK ad_id={ad_id}')
     except MetaAdsError as e:
+        _delete_quietly(creative_id, token)
+        _delete_quietly(adset_id, token)
+        _delete_quietly(campaign_id, token)
         raise MetaAdsError(f'Step 4 (ad): {e}', code=e.code, subcode=e.subcode, raw=e.raw)
 
     # Flip parents to ACTIVE so the ad actually serves

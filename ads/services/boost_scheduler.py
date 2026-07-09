@@ -36,14 +36,25 @@ def _launch_one(campaign) -> bool:
     if post is None or not post.facebook_post_id:
         return False  # not ready yet
 
-    # Resolve the publishing Page token (same pattern as BoostPostView).
+    # Resolve the publishing Page (id + token) — boost_post needs the page_id
+    # as the creative's page, same as BoostPostView.
     sa = SocialAccount.objects.filter(
         user=campaign.user, platform='facebook', is_active=True).first()
     page_access_token = (sa.facebook_access_token if sa else '') or ''
+    page_id = (sa.facebook_page_id if sa else '') or ''
+
+    if not page_id:
+        logger.warning('[boost-on-publish] campaign=%s no connected FB Page — cannot boost',
+                       campaign.id)
+        campaign.status = 'failed'
+        campaign.rejection_reason = 'No connected Facebook Page to run the ad from.'
+        campaign.save(update_fields=['status', 'rejection_reason'])
+        return False
 
     try:
         result = meta_ads.boost_post(
             ad_account=campaign.ad_account,
+            page_id=page_id,
             fb_post_id=post.facebook_post_id,
             daily_budget_cents=campaign.daily_budget_minor,
             duration_days=int(cfg.get('duration_days', 7) or 7),
@@ -58,7 +69,12 @@ def _launch_one(campaign) -> bool:
         campaign.save(update_fields=['status', 'rejection_reason'])
         return False
     except Exception as e:  # noqa: BLE001
+        # Any non-Meta error (bug, network, bad data) must NOT leave the campaign
+        # stuck as 'draft' forever — mark it failed so it isn't retried endlessly.
         logger.error('[boost-on-publish] campaign=%s unexpected: %s', campaign.id, e)
+        campaign.status = 'failed'
+        campaign.rejection_reason = f'Boost error: {e}'[:500]
+        campaign.save(update_fields=['status', 'rejection_reason'])
         return False
 
     # Success — record the provider ids and flip to paused (Meta review state).
