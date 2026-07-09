@@ -75,6 +75,41 @@ def _live_spend_guard(ad_account: 'AdAccount', request):
     )
 
 
+def _friendly_meta_error(e, ad_account=None) -> str:
+    """Turn a raw MetaAdsError into a message a user can act on.
+
+    Meta collapses several very different problems into the same opaque
+    "Permission error" (code 200 / subcode 1487194,
+    has_write_ad_account_permissions:false). The most common cause we've
+    observed is trying to create an ad *creative* on a Sandbox (test) ad
+    account — Meta lets you create the campaign + ad set there but blocks the
+    creative, so the generic permission text is misleading.
+    """
+    raw = e.raw or {}
+    subcode = e.subcode or raw.get('error_subcode')
+
+    if subcode == 1487194:
+        if ad_account is not None and getattr(ad_account, 'is_sandbox', False):
+            return (
+                'This is a Sandbox (test) ad account. Meta lets you create the '
+                'campaign structure here but blocks the actual ad creative, so '
+                'ads can\'t be fully created or delivered on it. To test the full '
+                'flow, use a real ad account and keep the campaign paused '
+                '(no budget is spent until you activate it).'
+            )
+        return (
+            'You don\'t have permission to create ads on this ad account. Make '
+            'sure you have Advertiser or Admin access to it in Meta Business '
+            'Settings, that a Facebook Page is linked to the account, and that '
+            'the account is active with a valid payment method.'
+        )
+
+    # Fall back to Meta's own user-facing text when it provides one.
+    display = ' - '.join(filter(None, [raw.get('error_user_title'),
+                                       raw.get('error_user_msg')]))
+    return display or str(e)
+
+
 def _serialize_account(a: AdAccount) -> dict:
     return {
         'id': a.id,
@@ -1855,7 +1890,7 @@ class BoostPostView(APIView):
             raw = e.raw or {}
             user_title = raw.get('error_user_title')
             user_msg = raw.get('error_user_msg')
-            display = ' - '.join(filter(None, [user_title, user_msg])) or str(e)
+            display = _friendly_meta_error(e, ad_account)
             return Response(
                 {
                     'error': display,
@@ -2006,9 +2041,7 @@ class MetaCreateCampaignView(APIView):
                 headline=headline, description=description, image_url=image_url,
                 page_access_token=sa.facebook_access_token or '', status_active=activate)
         except meta_ads.MetaAdsError as e:
-            raw = e.raw or {}
-            display = ' - '.join(filter(None, [raw.get('error_user_title'),
-                                               raw.get('error_user_msg')])) or str(e)
+            display = _friendly_meta_error(e, ad_account)
             return Response({'error': display, 'code': e.code, 'subcode': e.subcode},
                             status=status.HTTP_400_BAD_REQUEST)
 

@@ -63,6 +63,21 @@ def _get(path, token, **params):
     return body
 
 
+def _delete_quietly(node_id, token):
+    """Best-effort DELETE of a Meta object. Never raises.
+
+    Used to roll back half-built campaigns when a later step fails, so we don't
+    leave orphan campaign/adset shells cluttering the user's Ads Manager.
+    """
+    if not node_id:
+        return
+    try:
+        requests.delete(f'{GRAPH}/{node_id}', params={'access_token': token},
+                        timeout=REQUEST_TIMEOUT)
+    except Exception as e:  # noqa: BLE001 — rollback must never mask the real error
+        logger.warning(f'[rollback] could not delete {node_id}: {e}')
+
+
 # ───────────────────────────── Ad account discovery ─────────────────────────
 
 
@@ -375,6 +390,7 @@ def create_link_campaign(
         )
         adset_id = adset['id']
     except MetaAdsError as e:
+        _delete_quietly(campaign_id, token)  # roll back the orphan campaign
         raise MetaAdsError(f'Step 2 (adset): {e}', code=e.code, subcode=e.subcode, raw=e.raw)
 
     # 3. Ad Creative — link_data referencing the Page.
@@ -394,6 +410,9 @@ def create_link_campaign(
         )
         creative_id = creative['id']
     except MetaAdsError as e:
+        # roll back the orphan adset + campaign (this is the sandbox failure point)
+        _delete_quietly(adset_id, token)
+        _delete_quietly(campaign_id, token)
         raise MetaAdsError(f'Step 3 (creative): {e}', code=e.code, subcode=e.subcode, raw=e.raw)
 
     # 4. Ad
@@ -406,6 +425,9 @@ def create_link_campaign(
         )
         ad_id = ad['id']
     except MetaAdsError as e:
+        _delete_quietly(creative_id, token)
+        _delete_quietly(adset_id, token)
+        _delete_quietly(campaign_id, token)
         raise MetaAdsError(f'Step 4 (ad): {e}', code=e.code, subcode=e.subcode, raw=e.raw)
 
     if status_active:
