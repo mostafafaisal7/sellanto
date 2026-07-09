@@ -245,10 +245,56 @@ export function CreateCampaignModal({ isOpen, onClose, onSuccess }: Props) {
             </div>
           </div>
 
-          <label className="flex items-center gap-2 text-xs text-text-secondary">
-            <input type="checkbox" checked={activate} onChange={(e) => setActivate(e.target.checked)} />
-            Activate immediately (otherwise created paused)
-          </label>
+          {/* Launch mode — explicit, defaults to PAUSED so nothing spends by accident */}
+          <div>
+            <label className="block text-xs font-semibold text-text-secondary mb-1.5">
+              Launch mode
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setActivate(false)}
+                className={`text-left p-3 rounded-xl border transition-colors ${
+                  !activate
+                    ? 'bg-green-500/15 border-green-500/50'
+                    : 'bg-dark-900/60 border-white/10 hover:border-white/20'
+                }`}
+              >
+                <p className="text-sm font-bold text-text-primary flex items-center gap-1.5">
+                  ⏸ Create paused
+                  {!activate && <span className="text-[10px] text-green-300 font-semibold">(default)</span>}
+                </p>
+                <p className="text-[10px] text-text-muted mt-0.5">
+                  Nothing is spent. Review it, then turn it on later.
+                </p>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActivate(true)}
+                className={`text-left p-3 rounded-xl border transition-colors ${
+                  activate
+                    ? 'bg-red-500/15 border-red-500/50'
+                    : 'bg-dark-900/60 border-white/10 hover:border-white/20'
+                }`}
+              >
+                <p className="text-sm font-bold text-text-primary">▶ Activate now</p>
+                <p className="text-[10px] text-text-muted mt-0.5">
+                  Starts delivering{selected && !selected.is_sandbox ? ' & spending' : ''} immediately.
+                </p>
+              </button>
+            </div>
+            {activate && selected && !selected.is_sandbox && (
+              <p className="mt-2 text-[11px] text-red-300 font-semibold">
+                🔴 This will spend up to ${parseFloat(dailyBudgetUsd || '0').toFixed(2)}/day of real money
+                on “{selected.name || `act_${selected.external_id}`}”. You’ll be asked to confirm.
+              </p>
+            )}
+            {activate && selected?.is_sandbox && (
+              <p className="mt-2 text-[11px] text-amber-400">
+                🧪 Sandbox account — no real money is spent even when active.
+              </p>
+            )}
+          </div>
 
           {result && (
             <div className={`p-3 rounded-xl text-xs ${result.type === 'success' ? 'bg-green-500/10 text-green-300' : 'bg-red-500/10 text-red-300'}`}>

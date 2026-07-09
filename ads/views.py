@@ -1978,7 +1978,10 @@ class MetaCreateCampaignView(APIView):
         description = (request.data.get('description') or '').strip()
         image_url = (request.data.get('image_url') or '').strip()
         targeting = request.data.get('targeting') or {}
-        activate = bool(request.data.get('activate', False))
+        # SAFETY: default to PAUSED. Use _parse_bool so the string "false"
+        # (which bool("false") wrongly treats as True) cannot accidentally
+        # activate a campaign and start real spend.
+        activate = _parse_bool(request.data.get('activate'), default=False)
 
         if not (ad_account_id and daily_budget_usd and link_url):
             return Response({'error': 'ad_account_id, daily_budget_usd and link_url are required.'},
@@ -2008,6 +2011,26 @@ class MetaCreateCampaignView(APIView):
         guard = _live_spend_guard(ad_account, request)
         if guard is not None:
             return guard
+
+        # SAFETY: only *activation* starts spend. On a LIVE account, refuse to
+        # go live unless the user explicitly asked to activate AND confirmed the
+        # real-money warning. A missing/false activate flag always => paused.
+        if activate and not getattr(ad_account, 'is_sandbox', False):
+            if not _parse_bool(request.data.get('confirm_live')):
+                return Response(
+                    {
+                        'error': 'live_activation_requires_confirmation',
+                        'detail': (
+                            'Activating a campaign on the LIVE account '
+                            f'"{ad_account.name or ad_account.external_id}" will '
+                            'start spending real money immediately. Re-submit with '
+                            'activate=true and confirm_live=true, or leave it '
+                            'paused (activate=false) to create without spending.'
+                        ),
+                        'requires_confirmation': True,
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
 
         from platforms.models import SocialAccount
         sa = SocialAccount.objects.filter(
