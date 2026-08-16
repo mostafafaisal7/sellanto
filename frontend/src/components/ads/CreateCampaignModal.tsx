@@ -357,6 +357,7 @@ export function CreateCampaignModal({ isOpen, onClose, onSuccess }: Props) {
         ...(messages.length ? { messages: [message.trim(), ...messages].filter(Boolean).slice(0, MAX_COPY_LINES) } : {}),
         ...(descriptions.length ? { descriptions: [description.trim(), ...descriptions].filter(Boolean).slice(0, MAX_COPY_LINES) } : {}),
         activate,
+        advantage_audience: advancedTargeting && !!targeting.advantage_audience,
         confirm_live: confirmLive,
       });
       setLiveConfirm(null);

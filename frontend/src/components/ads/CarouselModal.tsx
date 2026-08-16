@@ -155,6 +155,7 @@ export function CarouselModal({ isOpen, onClose, onSuccess }: Props) {
           cta: c.cta || undefined,
         })),
         activate,
+        advantage_audience: !!targeting.advantage_audience,
         confirm_live: confirmLive,
       });
       setLiveConfirm(null);

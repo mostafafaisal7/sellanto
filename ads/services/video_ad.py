@@ -160,6 +160,7 @@ def publish_and_boost_video(
     duration_days: int,
     targeting: dict,
     max_wait_sec: int = DEFAULT_MAX_WAIT_SEC,
+    advantage_audience: bool = False,
 ):
     """Full publish + boost flow.
 
@@ -247,6 +248,7 @@ def publish_and_boost_video(
             targeting=targeting,
             campaign_name=f'Video Ad: {(caption or "")[:40] or post.id}',
             page_access_token=page_token,
+            advantage_audience=advantage_audience,
         )
     except meta_ads.MetaAdsError as e:
         raise VideoAdError(

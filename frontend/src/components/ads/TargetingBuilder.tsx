@@ -37,6 +37,15 @@ export interface TargetingValue {
   cities?: string[];
   /** Custom/lookalike audience ids to include (Meta custom_audiences). */
   custom_audiences?: string[];
+  /**
+   * Meta Advantage audience. Meta REQUIRES this flag on every ad set create.
+   * false = the selections above are hard constraints; true = Meta may show
+   * the ad outside them when it predicts better results. Defaults to false so
+   * a user's explicit targeting is never silently widened. The backend stamps
+   * targeting_automation.advantage_audience either way, so omitting it here
+   * is still safe.
+   */
+  advantage_audience?: boolean;
 }
 
 type SearchType = 'interest' | 'behavior' | 'demographic';
@@ -510,6 +519,36 @@ export function TargetingBuilder({ value, onChange, adAccountId }: Props) {
             })}
           </div>
         )}
+      </div>
+
+      {/* Advantage audience — Meta requires this flag on every ad set create. */}
+      <div>
+        <label className="block text-xs font-semibold text-text-secondary mb-1.5">
+          Advantage audience
+        </label>
+        <button
+          type="button"
+          onClick={() => patch({ advantage_audience: !value.advantage_audience })}
+          className={`w-full flex items-start gap-2 px-3 py-2 rounded-lg text-xs font-medium text-left transition-colors ${
+            value.advantage_audience
+              ? 'bg-purple-500/15 text-purple-200 border border-purple-500/40'
+              : 'bg-dark-900/60 text-text-muted border border-white/10 hover:border-white/20'
+          }`}
+        >
+          <span className={`w-3.5 h-3.5 mt-0.5 rounded border flex items-center justify-center shrink-0 ${
+            value.advantage_audience ? 'bg-purple-500 border-purple-500 text-white' : 'border-white/20'
+          }`}>
+            {value.advantage_audience ? '✓' : ''}
+          </span>
+          <span className="min-w-0 flex-1">
+            Let Meta reach people beyond my targeting
+            <span className="block text-[10px] text-text-muted font-normal mt-0.5">
+              {value.advantage_audience
+                ? 'Meta may show this ad outside the audience selected above when it predicts better results.'
+                : 'Your selections above are used as strict limits.'}
+            </span>
+          </span>
+        </button>
       </div>
     </div>
   );

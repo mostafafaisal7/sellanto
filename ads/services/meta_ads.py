@@ -191,6 +191,7 @@ def boost_post(
     targeting: dict,
     campaign_name: str = '',
     page_access_token: str = '',
+    advantage_audience: bool = False,
 ) -> dict:
     """Boost an existing organic Facebook post via 4 chained API calls.
 
@@ -278,7 +279,8 @@ def boost_post(
             billing_event='IMPRESSIONS',
             optimization_goal='POST_ENGAGEMENT',
             bid_strategy='LOWEST_COST_WITHOUT_CAP',
-            targeting=_json.dumps(targeting),
+            targeting=_json.dumps(
+                apply_advantage_audience(targeting, advantage_audience)),
             start_time=start_time_ts,
             end_time=end_time_ts,
             status='PAUSED',
@@ -563,6 +565,7 @@ def create_link_campaign(
     billing_event: str = '',
     pixel_id: str = '',
     custom_event_type: str = '',
+    advantage_audience: bool = False,
 ) -> dict:
     """Create a from-scratch Meta campaign (link/website ad) end-to-end.
 
@@ -655,7 +658,8 @@ def create_link_campaign(
         name=f'{name} - Ad Set', campaign_id=campaign_id,
         billing_event='IMPRESSIONS',
         optimization_goal=opt_goal,
-        targeting=_json.dumps(targeting),
+        targeting=_json.dumps(
+            apply_advantage_audience(targeting, advantage_audience)),
         start_time=start_time_ts, end_time=end_time_ts,
         status='PAUSED', promoted_object=_json.dumps({'page_id': page_id}),
     )
@@ -846,6 +850,7 @@ def create_carousel_campaign(
     cards: list,
     page_access_token: str = '',
     status_active: bool = False,
+    advantage_audience: bool = False,
 ) -> dict:
     """Create a from-scratch Meta carousel campaign end-to-end.
 
@@ -929,7 +934,8 @@ def create_carousel_campaign(
             name=f'{name} - Ad Set', campaign_id=campaign_id,
             daily_budget=daily_budget_cents, billing_event='IMPRESSIONS',
             optimization_goal=opt_goal, bid_strategy='LOWEST_COST_WITHOUT_CAP',
-            targeting=_json.dumps(targeting),
+            targeting=_json.dumps(
+                apply_advantage_audience(targeting, advantage_audience)),
             start_time=start_time_ts, end_time=end_time_ts,
             status='PAUSED', promoted_object=_json.dumps({'page_id': page_id}),
         )
@@ -1450,6 +1456,33 @@ def search_geo(token, q):
             'country_code': loc.get('country_code', ''),
         })
     return out
+
+
+def apply_advantage_audience(targeting: dict, advantage_audience: bool = False) -> dict:
+    """Stamp the mandatory targeting_automation.advantage_audience flag.
+
+    Meta rejects every ad set create whose targeting spec omits this flag:
+        "Advantage audience flag required - To create your ad set, you need to
+         enable or disable the Advantage audience feature."
+
+    advantage_audience=False (0) tells Meta to treat the user's age/gender/
+    interest/geo selections as hard constraints. True (1) lets Meta expand
+    beyond them when it predicts better results. We default to 0 because the
+    TargetingBuilder UI has the user pick those values explicitly -- silently
+    expanding past them would spend their budget on an audience they did not
+    choose. Some Advantage+ objectives require 1, hence the per-call override.
+
+    An explicit flag already present in the spec is respected (never clobbered),
+    so callers that hand-build a full Meta spec keep control.
+
+    Returns a NEW dict; the caller's targeting is never mutated.
+    """
+    spec = dict(targeting) if isinstance(targeting, dict) else {}
+    automation = dict(spec.get('targeting_automation') or {})
+    if 'advantage_audience' not in automation:
+        automation['advantage_audience'] = 1 if advantage_audience else 0
+    spec['targeting_automation'] = automation
+    return spec
 
 
 def build_targeting_spec(friendly: dict) -> dict:

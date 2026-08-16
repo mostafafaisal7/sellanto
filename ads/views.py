@@ -2333,6 +2333,8 @@ class BoostPostView(APIView):
                 targeting=targeting_spec,
                 campaign_name=f'Boost: {post.caption[:40] if post.caption else post.id}',
                 page_access_token=sa.facebook_access_token or '',
+                advantage_audience=_parse_bool(
+                    request.data.get('advantage_audience'), default=False),
             )
         except meta_ads.MetaAdsError as e:
             logger.warning(
@@ -2785,6 +2787,8 @@ class BoostFromPostView(APIView):
                 targeting=targeting_spec,
                 campaign_name=f'Boost: {post.caption[:40] if post.caption else post.id}',
                 page_access_token=sa.facebook_access_token or '',
+                advantage_audience=_parse_bool(
+                    request.data.get('advantage_audience'), default=False),
             )
         except meta_ads.MetaAdsError as e:
             logger.warning(
@@ -3065,7 +3069,9 @@ class MetaCreateCampaignView(APIView):
                 start_time_iso=start_time, end_time_iso=end_time,
                 spend_cap_cents=spend_cap_cents,
                 optimization_goal=optimization_goal, billing_event=billing_event,
-                pixel_id=pixel_id, custom_event_type=custom_event_type)
+                pixel_id=pixel_id, custom_event_type=custom_event_type,
+                advantage_audience=_parse_bool(
+                    request.data.get('advantage_audience'), default=False))
         except meta_ads.MetaAdsError as e:
             display = _friendly_meta_error(e, ad_account)
             return Response({'error': display, 'code': e.code, 'subcode': e.subcode},
@@ -3205,7 +3211,9 @@ class MetaCreateCarouselView(APIView):
                 objective=objective, name=name or f'Sellanto {objective.title()} Carousel',
                 daily_budget_cents=daily_budget_cents, duration_days=duration_days,
                 targeting=targeting, cards=cards,
-                page_access_token=sa.facebook_access_token or '', status_active=activate)
+                page_access_token=sa.facebook_access_token or '', status_active=activate,
+                advantage_audience=_parse_bool(
+                    request.data.get('advantage_audience'), default=False))
         except meta_ads.MetaAdsError as e:
             display = _friendly_meta_error(e, ad_account)
             return Response({'error': display, 'code': e.code, 'subcode': e.subcode},
@@ -3499,6 +3507,8 @@ class RunVideoAdView(APIView):
                 daily_budget_minor=daily_budget_minor,
                 duration_days=duration_days,
                 targeting=_normalize_targeting(targeting),
+                advantage_audience=_parse_bool(
+                    request.data.get('advantage_audience'), default=False),
             )
         except VideoAdError as e:
             logger.warning(

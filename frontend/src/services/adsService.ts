@@ -319,6 +319,12 @@ export const adsService = {
     daily_budget_usd: number;
     duration_days: number;
     targeting: Record<string, unknown>;
+    /**
+     * Meta Advantage audience. Meta requires the flag on every ad set create;
+     * the backend defaults it to 0 (targeting used as strict limits) when this
+     * is omitted. Send true to let Meta reach beyond the selected audience.
+     */
+    advantage_audience?: boolean;
     /** Required (true) to proceed on a LIVE (non-sandbox) ad account — real spend. */
     confirm_live?: boolean;
   }): Promise<AdCampaign> {
@@ -393,6 +399,12 @@ export const adsService = {
     pixel_id?: string;
     /** Conversion event to optimize for, e.g. PURCHASE | LEAD | ADD_TO_CART | COMPLETE_REGISTRATION. Defaults to PURCHASE server-side. */
     custom_event_type?: string;
+    /**
+     * Meta Advantage audience. Meta requires the flag on every ad set create;
+     * the backend defaults it to 0 (targeting used as strict limits) when this
+     * is omitted. Send true to let Meta reach beyond the selected audience.
+     */
+    advantage_audience?: boolean;
     /** Required (true) to proceed on a LIVE (non-sandbox) ad account — real spend. */
     confirm_live?: boolean;
   }): Promise<AdCampaign> {
@@ -427,6 +439,12 @@ export const adsService = {
       cta?: string;
     }>;
     activate?: boolean;
+    /**
+     * Meta Advantage audience. Meta requires the flag on every ad set create;
+     * the backend defaults it to 0 (targeting used as strict limits) when this
+     * is omitted. Send true to let Meta reach beyond the selected audience.
+     */
+    advantage_audience?: boolean;
     /** Required (true) to proceed on a LIVE (non-sandbox) ad account — real spend. */
     confirm_live?: boolean;
   }): Promise<AdCampaign> {
@@ -481,6 +499,12 @@ export const adsService = {
     daily_budget_usd: number;
     duration_days: number;
     targeting: Record<string, unknown>;
+    /**
+     * Meta Advantage audience. Meta requires the flag on every ad set create;
+     * the backend defaults it to 0 (targeting used as strict limits) when this
+     * is omitted. Send true to let Meta reach beyond the selected audience.
+     */
+    advantage_audience?: boolean;
     /** Required (true) to proceed on a LIVE (non-sandbox) ad account — real spend. */
     confirm_live?: boolean;
     onUploadProgress?: (percent: number) => void;
@@ -500,6 +524,9 @@ export const adsService = {
     fd.append('daily_budget_usd', String(params.daily_budget_usd));
     fd.append('duration_days', String(params.duration_days));
     fd.append('targeting', JSON.stringify(params.targeting));
+    // Multipart: booleans must be appended explicitly as strings — _parse_bool
+    // on the server reads 'true'/'false'.
+    fd.append('advantage_audience', params.advantage_audience ? 'true' : 'false');
     if (params.confirm_live) fd.append('confirm_live', 'true');
 
     const res = await api.post('/ads/run-video-ad/', fd, {
@@ -700,6 +727,12 @@ export const adsService = {
     daily_budget_usd: number;
     duration_days: number;
     targeting: Record<string, unknown>;
+    /**
+     * Meta Advantage audience. Meta requires the flag on every ad set create;
+     * the backend defaults it to 0 (targeting used as strict limits) when this
+     * is omitted. Send true to let Meta reach beyond the selected audience.
+     */
+    advantage_audience?: boolean;
     /** Required (true) to proceed on a LIVE (non-sandbox) ad account — real spend. */
     confirm_live?: boolean;
     /** For a scheduled post: boost automatically once it publishes. */

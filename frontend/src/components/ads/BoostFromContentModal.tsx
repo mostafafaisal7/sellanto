@@ -95,6 +95,7 @@ export function BoostFromContentModal({ isOpen, onClose, onSuccess }: Props) {
         daily_budget_usd: parseFloat(dailyBudgetUsd),
         duration_days: parseInt(durationDays, 10),
         targeting: targeting as unknown as Record<string, unknown>,
+        advantage_audience: !!targeting.advantage_audience,
         confirm_live: confirmLive,
         // Only meaningful for a scheduled post: boost once it publishes.
         ...(isScheduled && scheduleAfterPublish ? { schedule_after_publish: true } : {}),
