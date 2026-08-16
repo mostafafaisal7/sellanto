@@ -3193,6 +3193,12 @@ class MetaCreateCarouselView(APIView):
         if not targeting:
             targeting = {'geo_locations': {'countries': ['US']}, 'age_min': 18, 'age_max': 65}
 
+        # Convert the frontend's friendly targeting dict (flat interests/
+        # behaviors ids, placement tokens, custom_audiences, geo) into the
+        # Meta targeting spec the API expects. Already-shaped specs pass
+        # through unchanged (backward-compatible).
+        targeting_spec = _normalize_targeting(targeting)
+
         daily_budget_cents = _usd_to_account_cents(usd, ad_account.currency_code)
 
         try:
@@ -3210,7 +3216,7 @@ class MetaCreateCarouselView(APIView):
                 ad_account=ad_account, page_id=sa.facebook_page_id,
                 objective=objective, name=name or f'Sellanto {objective.title()} Carousel',
                 daily_budget_cents=daily_budget_cents, duration_days=duration_days,
-                targeting=targeting, cards=cards,
+                targeting=targeting_spec, cards=cards,
                 page_access_token=sa.facebook_access_token or '', status_active=activate,
                 advantage_audience=_parse_bool(
                     request.data.get('advantage_audience'), default=False))
