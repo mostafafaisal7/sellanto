@@ -445,6 +445,13 @@ export const adsService = {
      * is omitted. Send true to let Meta reach beyond the selected audience.
      */
     advantage_audience?: boolean;
+    /**
+     * Conversion tracking for sales/leads. Without a pixel the backend
+     * downgrades the optimization goal to LINK_CLICKS, since Meta rejects a
+     * conversion goal that has no conversion source.
+     */
+    pixel_id?: string;
+    custom_event_type?: string;
     /** Required (true) to proceed on a LIVE (non-sandbox) ad account — real spend. */
     confirm_live?: boolean;
   }): Promise<AdCampaign> {

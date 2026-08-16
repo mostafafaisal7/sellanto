@@ -3126,6 +3126,11 @@ class MetaCreateCarouselView(APIView):
         daily_budget_usd = request.data.get('daily_budget_usd')
         duration_days = int(request.data.get('duration_days', 7) or 7)
         cards = request.data.get('cards') or []
+        # Conversion tracking (sales/leads), same contract as the link-campaign
+        # endpoint. Without a pixel the service downgrades the optimization goal
+        # instead of letting Meta reject the ad set.
+        pixel_id = (request.data.get('pixel_id') or '').strip()
+        custom_event_type = (request.data.get('custom_event_type') or '').strip().upper()
         targeting = request.data.get('targeting') or {}
         # SAFETY: default to PAUSED. Use _parse_bool so the string "false"
         # cannot accidentally activate a campaign and start real spend.
@@ -3219,7 +3224,8 @@ class MetaCreateCarouselView(APIView):
                 targeting=targeting_spec, cards=cards,
                 page_access_token=sa.facebook_access_token or '', status_active=activate,
                 advantage_audience=_parse_bool(
-                    request.data.get('advantage_audience'), default=False))
+                    request.data.get('advantage_audience'), default=False),
+                pixel_id=pixel_id, custom_event_type=custom_event_type)
         except meta_ads.MetaAdsError as e:
             display = _friendly_meta_error(e, ad_account)
             return Response({'error': display, 'code': e.code, 'subcode': e.subcode},

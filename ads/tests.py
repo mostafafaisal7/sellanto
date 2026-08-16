@@ -462,6 +462,76 @@ class ValidationTests(MetaAdsTestBase):
         self.assertIn(res.status_code, (401, 403))
 
 
+# ───────────────── 6b. Optimization goal / objective compatibility ───────────
+
+class OptimizationGoalTests(MetaAdsTestBase):
+    """Meta rejects a conversion goal that has no conversion source:
+    "Performance goal isn't available - You can't use the selected performance
+    goal with your campaign objective."
+    """
+
+    def _create(self, objective, **extra):
+        body = {'ad_account_id': self.sandbox.id, 'objective': objective,
+                'daily_budget_usd': 5.0, 'link_url': 'https://example.com'}
+        body.update(extra)
+        res = self.client.post('/api/v1/ads/meta/campaigns/create/', body,
+                               format='json')
+        self.assertIn(res.status_code, (200, 201), res.data)
+        return self.graph.adset_payload()
+
+    def test_safe_objectives_keep_their_goal(self):
+        for objective, goal in (('awareness', 'REACH'),
+                                ('traffic', 'LINK_CLICKS'),
+                                ('engagement', 'POST_ENGAGEMENT')):
+            self.graph.posts.clear()
+            self.assertEqual(self._create(objective)['optimization_goal'], goal,
+                             f'{objective} goal changed unexpectedly')
+
+    def test_sales_without_pixel_downgrades(self):
+        p = self._create('sales')
+        self.assertEqual(p['optimization_goal'], 'LINK_CLICKS')
+
+    def test_leads_without_pixel_downgrades(self):
+        p = self._create('leads')
+        self.assertEqual(p['optimization_goal'], 'LINK_CLICKS')
+
+    def test_sales_with_pixel_keeps_conversions(self):
+        p = self._create('sales', pixel_id='PIXEL1',
+                         custom_event_type='PURCHASE')
+        self.assertEqual(p['optimization_goal'], 'OFFSITE_CONVERSIONS')
+        promoted = json.loads(p['promoted_object'])
+        self.assertEqual(promoted['pixel_id'], 'PIXEL1')
+        self.assertEqual(promoted['custom_event_type'], 'PURCHASE')
+
+    def test_leads_with_pixel_keeps_lead_generation(self):
+        p = self._create('leads', pixel_id='PIXEL1')
+        self.assertEqual(p['optimization_goal'], 'LEAD_GENERATION')
+
+    def test_downgrade_pairs_a_valid_billing_event(self):
+        self.assertEqual(self._create('sales')['billing_event'], 'IMPRESSIONS')
+
+    def test_carousel_sales_without_pixel_downgrades(self):
+        res = self.client.post('/api/v1/ads/meta/carousel/', {
+            'ad_account_id': self.sandbox.id, 'objective': 'sales',
+            'daily_budget_usd': 5.0, 'cards': self._cards(),
+        }, format='json')
+        self.assertIn(res.status_code, (200, 201), res.data)
+        self.assertEqual(
+            self.graph.adset_payload()['optimization_goal'], 'LINK_CLICKS')
+
+    def test_carousel_accepts_a_pixel(self):
+        """Regression: the carousel path had no pixel support at all."""
+        res = self.client.post('/api/v1/ads/meta/carousel/', {
+            'ad_account_id': self.sandbox.id, 'objective': 'sales',
+            'daily_budget_usd': 5.0, 'cards': self._cards(),
+            'pixel_id': 'PIXEL1', 'custom_event_type': 'PURCHASE',
+        }, format='json')
+        self.assertIn(res.status_code, (200, 201), res.data)
+        p = self.graph.adset_payload()
+        self.assertEqual(p['optimization_goal'], 'OFFSITE_CONVERSIONS')
+        self.assertEqual(json.loads(p['promoted_object'])['pixel_id'], 'PIXEL1')
+
+
 # ─────────────────────── 7. Read paths: insights & lookups ───────────────────
 
 class ReadPathTests(MetaAdsTestBase):

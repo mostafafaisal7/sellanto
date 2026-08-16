@@ -747,7 +747,7 @@ export function CreateCampaignModal({ isOpen, onClose, onSuccess }: Props) {
                       <label className="block text-xs font-semibold text-text-secondary mb-1.5">Meta Pixel</label>
                       <select value={pixelId} onChange={(e) => setPixelId(e.target.value)}
                         className="w-full bg-dark-900/60 border border-white/10 rounded-xl px-3 py-2.5 text-text-primary text-sm outline-none">
-                        <option value="">— None (optimize for Page) —</option>
+                        <option value="">— None (optimize for link clicks) —</option>
                         {pixels.map((p) => <option key={p.id} value={p.id}>{p.name || p.id}</option>)}
                       </select>
                     </div>
@@ -758,6 +758,13 @@ export function CreateCampaignModal({ isOpen, onClose, onSuccess }: Props) {
                         {CONVERSION_EVENTS.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
                       </select>
                     </div>
+                    {/* Meta rejects a conversion goal with no pixel to track it,
+                        so without one we optimize for link clicks instead. */}
+                    <p className="col-span-2 text-[11px] text-text-muted -mt-1">
+                      {pixelId
+                        ? `Meta will optimize for ${objective === 'sales' ? 'purchases' : 'leads'} tracked by this pixel.`
+                        : 'No pixel selected — this campaign will optimize for link clicks. Pick a pixel to optimize for real conversions.'}
+                    </p>
                   </div>
                 )}
 

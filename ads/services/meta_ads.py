@@ -476,6 +476,46 @@ _META_OBJECTIVE_MAP = {
     'sales':      ('OUTCOME_SALES',     'OFFSITE_CONVERSIONS'),
 }
 
+# Goals that only work when the ad set promotes a real conversion source.
+# OFFSITE_CONVERSIONS needs a pixel + event; LEAD_GENERATION needs an instant
+# lead form on the Page. Without one, Meta rejects the ad set with
+# "Performance goal isn't available - You can't use the selected performance
+# goal with your campaign objective."
+_GOALS_NEEDING_CONVERSION_SOURCE = {
+    'OFFSITE_CONVERSIONS': 'a Meta Pixel + conversion event',
+    'LEAD_GENERATION': 'an instant lead form',
+}
+# What we fall back to so the campaign still creates and delivers. LINK_CLICKS
+# is valid under every objective we expose.
+_GOAL_FALLBACK = 'LINK_CLICKS'
+
+
+def resolve_optimization_goal(objective: str, opt_goal: str,
+                              has_pixel: bool = False,
+                              has_lead_form: bool = False) -> tuple:
+    """Downgrade a conversion goal when nothing can track the conversion.
+
+    Selecting Sales (or Leads) without a pixel/lead form is the common case:
+    the objective is valid, but the ad set has no conversion source, so Meta
+    rejects the goal outright. Rather than failing the whole create, fall back
+    to LINK_CLICKS -- the campaign runs and drives traffic, it just optimizes
+    for clicks instead of purchases.
+
+    Returns (goal, downgraded_from) where downgraded_from is '' when the goal
+    was kept as-is, so callers can tell the user what happened.
+    """
+    goal = (opt_goal or '').strip().upper()
+    if goal not in _GOALS_NEEDING_CONVERSION_SOURCE:
+        return goal, ''
+    if goal == 'OFFSITE_CONVERSIONS' and has_pixel:
+        return goal, ''
+    if goal == 'LEAD_GENERATION' and (has_lead_form or has_pixel):
+        return goal, ''
+    logger.info(
+        '[optimization_goal] %s needs %s — falling back to %s for objective=%s',
+        goal, _GOALS_NEEDING_CONVERSION_SOURCE[goal], _GOAL_FALLBACK, objective)
+    return _GOAL_FALLBACK, goal
+
 # Ad-set bid strategies Sellanto exposes. The *_WITH_*CAP / COST_CAP / MIN_ROAS
 # strategies require a bid_amount; LOWEST_COST_WITHOUT_CAP does not (default).
 _META_BID_STRATEGIES = {
@@ -694,11 +734,22 @@ def create_link_campaign(
     # Conversion tracking: for sales/leads with a pixel, promote the pixel +
     # conversion event INSTEAD of just the page. Defaults to PURCHASE when no
     # explicit event is given. No pixel => page_id-only default (unchanged).
-    if pixel_id and objective in ('sales', 'leads'):
+    has_pixel = bool(pixel_id) and objective in ('sales', 'leads')
+    if has_pixel:
         adset_params['promoted_object'] = _json.dumps({
             'pixel_id': str(pixel_id),
             'custom_event_type': (custom_event_type or 'PURCHASE').strip().upper(),
         })
+
+    # A conversion goal with nothing to convert against is rejected by Meta
+    # ("Performance goal isn't available"). Run this AFTER the pixel decision
+    # above, since that is what decides whether the goal is supportable.
+    resolved_goal, downgraded_from = resolve_optimization_goal(
+        objective, adset_params['optimization_goal'], has_pixel=has_pixel)
+    adset_params['optimization_goal'] = resolved_goal
+    if downgraded_from:
+        # LINK_CLICKS delivery is billed on impressions; keep the pair valid.
+        adset_params['billing_event'] = 'IMPRESSIONS'
 
     try:
         adset = _post(f'{act_id}/adsets', token, **adset_params)
@@ -851,6 +902,8 @@ def create_carousel_campaign(
     page_access_token: str = '',
     status_active: bool = False,
     advantage_audience: bool = False,
+    pixel_id: str = '',
+    custom_event_type: str = '',
 ) -> dict:
     """Create a from-scratch Meta carousel campaign end-to-end.
 
@@ -928,16 +981,28 @@ def create_carousel_campaign(
     # 2. Ad Set
     start_time_ts = int(time.time()) + 300
     end_time_ts = start_time_ts + (max(1, duration_days) * 86400)
+
+    # Conversion tracking, same contract as create_link_campaign: a pixel makes
+    # a sales/leads goal supportable; without one the goal is downgraded to
+    # LINK_CLICKS so Meta doesn't reject the ad set outright.
+    has_pixel = bool(pixel_id) and objective in ('sales', 'leads')
+    promoted = ({'pixel_id': str(pixel_id),
+                 'custom_event_type': (custom_event_type or 'PURCHASE').strip().upper()}
+                if has_pixel else {'page_id': page_id})
+    resolved_goal, _downgraded = resolve_optimization_goal(
+        objective, opt_goal, has_pixel=has_pixel)
+
     try:
         adset = _post(
             f'{act_id}/adsets', token,
             name=f'{name} - Ad Set', campaign_id=campaign_id,
             daily_budget=daily_budget_cents, billing_event='IMPRESSIONS',
-            optimization_goal=opt_goal, bid_strategy='LOWEST_COST_WITHOUT_CAP',
+            optimization_goal=resolved_goal,
+            bid_strategy='LOWEST_COST_WITHOUT_CAP',
             targeting=_json.dumps(
                 apply_advantage_audience(targeting, advantage_audience)),
             start_time=start_time_ts, end_time=end_time_ts,
-            status='PAUSED', promoted_object=_json.dumps({'page_id': page_id}),
+            status='PAUSED', promoted_object=_json.dumps(promoted),
         )
         adset_id = adset['id']
     except MetaAdsError as e:
