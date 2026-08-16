@@ -488,16 +488,33 @@ class OptimizationGoalTests(MetaAdsTestBase):
                              f'{objective} goal changed unexpectedly')
 
     def test_sales_without_pixel_downgrades(self):
+        # NOT LINK_CLICKS: Meta rejects that under OUTCOME_SALES (subcode
+        # 2490408). The fallback has to stay in the conversion family.
         p = self._create('sales')
-        self.assertEqual(p['optimization_goal'], 'LINK_CLICKS')
+        self.assertEqual(p['optimization_goal'], 'LANDING_PAGE_VIEWS')
 
     def test_leads_without_pixel_downgrades(self):
         p = self._create('leads')
-        self.assertEqual(p['optimization_goal'], 'LINK_CLICKS')
+        self.assertEqual(p['optimization_goal'], 'LANDING_PAGE_VIEWS')
+
+    def test_conversion_objectives_send_no_page_promoted_object(self):
+        """The actual root cause: promoted_object={'page_id'} under
+        OUTCOME_SALES/OUTCOME_LEADS makes Meta reject EVERY goal."""
+        for objective in ('sales', 'leads'):
+            self.graph.posts.clear()
+            p = self._create(objective)
+            self.assertNotIn('promoted_object', p,
+                             f'page_id promoted_object breaks {objective}')
+
+    def test_engagement_pairs_page_with_a_destination_type(self):
+        """OUTCOME_ENGAGEMENT accepts page_id only with destination_type."""
+        p = self._create('engagement')
+        self.assertEqual(json.loads(p['promoted_object'])['page_id'], 'PAGE123')
+        self.assertEqual(p['destination_type'], 'ON_POST')
 
     def test_sales_with_pixel_keeps_conversions(self):
         p = self._create('sales', pixel_id='PIXEL1',
-                         custom_event_type='PURCHASE')
+                         custom_event_type='PURCHASE')  # pixel => promoted
         self.assertEqual(p['optimization_goal'], 'OFFSITE_CONVERSIONS')
         promoted = json.loads(p['promoted_object'])
         self.assertEqual(promoted['pixel_id'], 'PIXEL1')
@@ -517,7 +534,7 @@ class OptimizationGoalTests(MetaAdsTestBase):
         }, format='json')
         self.assertIn(res.status_code, (200, 201), res.data)
         self.assertEqual(
-            self.graph.adset_payload()['optimization_goal'], 'LINK_CLICKS')
+            self.graph.adset_payload()['optimization_goal'], 'LANDING_PAGE_VIEWS')
 
     def test_carousel_accepts_a_pixel(self):
         """Regression: the carousel path had no pixel support at all."""
