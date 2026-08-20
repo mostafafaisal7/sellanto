@@ -301,6 +301,30 @@ class SocialAccountSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'status', 'is_validated', 'validation_error', 'last_validated_at']
 
 
+def _platform_result_state(obj, post_id, error):
+    """
+    Classify one platform's publishing outcome.
+
+    `success` alone is ambiguous: a post that has not been attempted yet has no
+    post_id and no error, so `bool(post_id) and not error` is False and the UI
+    reported it as "Failed to publish" even though nothing had gone wrong. This
+    separates the three states the UI actually needs to distinguish.
+    """
+    if post_id and not error:
+        return 'published'
+    if error:
+        return 'failed'
+    # No id and no error: depends on where the post is in its lifecycle.
+    status = getattr(obj, 'status', None)
+    if status in ('scheduled', 'pending', 'draft', 'approved'):
+        return 'pending'
+    if status == 'posting':
+        return 'publishing'
+    if status == 'failed':
+        return 'failed'
+    return 'pending'
+
+
 class PostSerializer(serializers.ModelSerializer):
     """Serializer for Post model"""
     platforms = serializers.SerializerMethodField()
@@ -387,6 +411,7 @@ class PostSerializer(serializers.ModelSerializer):
             results.append({
                 'platform': platform,
                 'success': bool(post_id) and not error,
+                'state': _platform_result_state(obj, post_id, error),
                 'post_id': post_id,
                 'error': error,
             })
@@ -1206,6 +1231,7 @@ class PostDetailSerializer(serializers.ModelSerializer):
             results.append({
                 'platform': platform,
                 'success': bool(post_id) and not error,
+                'state': _platform_result_state(obj, post_id, error),
                 'post_id': post_id,
                 'error': error,
             })

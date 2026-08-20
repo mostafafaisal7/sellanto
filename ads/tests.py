@@ -703,3 +703,221 @@ class CallChainTests(MetaAdsTestBase):
             'daily_budget_usd': 5.0, 'link_url': 'https://example.com',
         }, format='json')
         self.assertEqual(self.graph.adset_payload()['daily_budget'], 500)
+
+
+class AdAccountDiscoveryTests(TestCase):
+    """`business` needs business_management, which we don't request.
+
+    Meta only enforces that for Business-Manager-owned accounts, so the field
+    silently works for some users and hard-fails (#100) for others -- taking
+    the whole /me/adaccounts request down and discovering zero accounts. These
+    pin the retry-without-`business` fallback.
+    """
+
+    def _accounts(self, **extra):
+        acct = {'id': 'act_123', 'account_id': '123', 'name': 'Acct',
+                'currency': 'USD', 'timezone_name': 'Asia/Dhaka',
+                'account_status': 1}
+        acct.update(extra)
+        return {'data': [acct]}
+
+    def test_bm_owned_account_recovered_without_business_field(self):
+        seen = []
+
+        def fake_get(path, token, **params):
+            seen.append(params.get('fields', ''))
+            if 'business' in params.get('fields', ''):
+                raise meta_ads.MetaAdsError(
+                    '(#100) Requires business_management permission to '
+                    'access the field.', code=100)
+            return self._accounts()
+
+        with patch.object(meta_ads, '_get', fake_get):
+            out = meta_ads.list_user_ad_accounts('tok')
+
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out[0]['account_id'], '123')
+        self.assertEqual(out[0]['business_id'], '')
+        self.assertEqual(len(seen), 2, 'should retry exactly once')
+        self.assertNotIn('business', seen[1])
+
+    def test_personal_account_keeps_business_id_and_does_not_retry(self):
+        seen = []
+
+        def fake_get(path, token, **params):
+            seen.append(params.get('fields', ''))
+            return self._accounts(business={'id': 'biz_77'},
+                                  account_status=101)
+
+        with patch.object(meta_ads, '_get', fake_get):
+            out = meta_ads.list_user_ad_accounts('tok')
+
+        self.assertEqual(len(seen), 1, 'must not retry when first call works')
+        self.assertEqual(out[0]['business_id'], 'biz_77')
+        self.assertTrue(out[0]['is_sandbox'], 'account_status 101 = sandbox')
+
+    def test_non_permission_errors_still_propagate(self):
+        def fake_get(path, token, **params):
+            raise meta_ads.MetaAdsError('token expired', code=190)
+
+        with patch.object(meta_ads, '_get', fake_get):
+            with self.assertRaises(meta_ads.MetaAdsError) as ctx:
+                meta_ads.list_user_ad_accounts('tok')
+        self.assertEqual(ctx.exception.code, 190)
+
+
+class CampaignImportTests(MetaAdsTestBase):
+    """Campaigns that already exist on Meta must appear in the campaigns list.
+
+    Rows were only ever written by the flows that launch a campaign from here,
+    so campaigns created in Ads Manager -- or ones whose local row was lost --
+    showed as "No campaigns yet" while the dashboard counted them from the same
+    Graph edge. These pin the backfill.
+    """
+
+    META_CAMPAIGNS = {'data': [
+        {'id': '1201', 'name': 'Awareness One', 'status': 'ACTIVE',
+         'effective_status': 'ACTIVE', 'objective': 'OUTCOME_AWARENESS',
+         'created_time': '2026-08-01T10:00:00+0000', 'daily_budget': '500'},
+        {'id': '1202', 'name': 'Boosted Post', 'status': 'PAUSED',
+         'effective_status': 'PAUSED', 'objective': 'OUTCOME_ENGAGEMENT',
+         'created_time': '2026-08-02T10:00:00+0000', 'daily_budget': '400'},
+    ]}
+
+    def _serve_campaigns(self):
+        """Return campaigns for the sandbox account, nothing for the others."""
+        def fake_get(path, token, **params):
+            if path == f'act_{self.sandbox.external_id}/campaigns':
+                return self.META_CAMPAIGNS
+            return {'data': []}
+        return patch.object(meta_ads, '_get', fake_get)
+
+    def test_existing_meta_campaigns_appear_in_the_list(self):
+        self.assertEqual(AdCampaign.objects.count(), 0)
+        with self._serve_campaigns():
+            res = self.client.get('/api/v1/ads/campaigns/')
+        self.assertEqual(res.status_code, 200)
+        names = sorted(c['name'] for c in res.json()['campaigns'])
+        self.assertEqual(names, ['Awareness One', 'Boosted Post'])
+
+    def test_status_and_objective_are_mapped_to_local_vocabulary(self):
+        with self._serve_campaigns():
+            self.client.get('/api/v1/ads/campaigns/')
+        one = AdCampaign.objects.get(external_campaign_id='1201')
+        two = AdCampaign.objects.get(external_campaign_id='1202')
+        self.assertEqual((one.status, one.objective), ('active', 'awareness'))
+        self.assertEqual((two.status, two.objective), ('paused', 'engagement'))
+        self.assertEqual(two.daily_budget_minor, 400)
+
+    def test_import_is_idempotent(self):
+        with self._serve_campaigns():
+            self.client.get('/api/v1/ads/campaigns/')
+            self.assertEqual(AdCampaign.objects.count(), 2)
+            # ?sync=1 re-runs even though rows now exist.
+            self.client.get('/api/v1/ads/campaigns/?sync=1')
+        self.assertEqual(AdCampaign.objects.count(), 2, 'must not duplicate')
+
+    def test_locally_created_rows_keep_their_boosted_post_link(self):
+        """A re-sync must update the row, not replace what the app knows."""
+        post = None
+        existing = AdCampaign.objects.create(
+            user=self.user, brand=self.brand, ad_account=self.sandbox,
+            boosted_post=post, name='Old Name', objective='boost_post',
+            status='pending_review', external_campaign_id='1202',
+            daily_budget_minor=400, start_date=timezone.now(),
+        )
+        with self._serve_campaigns():
+            self.client.get('/api/v1/ads/campaigns/?sync=1')
+        existing.refresh_from_db()
+        self.assertEqual(existing.name, 'Boosted Post', 'name should refresh')
+        self.assertEqual(existing.brand_id, self.brand.id, 'brand must survive')
+        self.assertEqual(AdCampaign.objects.filter(
+            external_campaign_id='1202').count(), 1)
+
+    def test_google_provider_filter_does_not_trigger_a_meta_import(self):
+        called = []
+
+        def fake_get(path, token, **params):
+            called.append(path)
+            return {'data': []}
+
+        with patch.object(meta_ads, '_get', fake_get):
+            res = self.client.get('/api/v1/ads/campaigns/?provider=google')
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json()['campaigns'], [])
+        self.assertEqual(called, [], 'Google page must not call Meta')
+
+    def test_meta_failure_still_returns_the_local_list(self):
+        """A Graph outage must not take the campaigns page down."""
+        AdCampaign.objects.create(
+            user=self.user, brand=self.brand, ad_account=self.sandbox,
+            name='Local Only', objective='traffic', status='active',
+            external_campaign_id='999', daily_budget_minor=100,
+            start_date=timezone.now(),
+        )
+
+        def boom(path, token, **params):
+            raise meta_ads.MetaAdsError('Graph is down', code=1)
+
+        with patch.object(meta_ads, '_get', boom):
+            res = self.client.get('/api/v1/ads/campaigns/?sync=1')
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual([c['name'] for c in res.json()['campaigns']],
+                         ['Local Only'])
+
+
+class CampaignImportBudgetTests(MetaAdsTestBase):
+    """Budgets live on the ad set unless the campaign uses CBO.
+
+    Reading only the campaign's own `daily_budget` made every non-CBO campaign
+    render as "$0.00/day" on the campaigns list.
+    """
+
+    def _import(self, campaign):
+        def fake_get(path, token, **params):
+            if path == f'act_{self.sandbox.external_id}/campaigns':
+                return {'data': [campaign]}
+            return {'data': []}
+        with patch.object(meta_ads, '_get', fake_get):
+            self.client.get('/api/v1/ads/campaigns/?sync=1')
+        return AdCampaign.objects.get(external_campaign_id=campaign['id'])
+
+    def _campaign(self, **extra):
+        base = {'id': '2001', 'name': 'C', 'status': 'ACTIVE',
+                'effective_status': 'ACTIVE', 'objective': 'OUTCOME_TRAFFIC',
+                'created_time': '2026-08-01T10:00:00+0000'}
+        base.update(extra)
+        return base
+
+    def test_campaign_level_budget_is_used_when_present(self):
+        c = self._import(self._campaign(
+            daily_budget='750',
+            adsets={'data': [{'daily_budget': '100', 'status': 'ACTIVE'}]},
+        ))
+        self.assertEqual(c.daily_budget_minor, 750, 'CBO budget wins')
+
+    def test_adset_budget_is_used_when_the_campaign_has_none(self):
+        c = self._import(self._campaign(
+            adsets={'data': [{'daily_budget': '200', 'status': 'ACTIVE'}]},
+        ))
+        self.assertEqual(c.daily_budget_minor, 200)
+
+    def test_multiple_adset_budgets_are_summed(self):
+        c = self._import(self._campaign(adsets={'data': [
+            {'daily_budget': '200', 'status': 'ACTIVE'},
+            {'daily_budget': '300', 'status': 'PAUSED'},
+        ]}))
+        self.assertEqual(c.daily_budget_minor, 500)
+
+    def test_deleted_adsets_do_not_inflate_the_budget(self):
+        c = self._import(self._campaign(adsets={'data': [
+            {'daily_budget': '200', 'status': 'ACTIVE'},
+            {'daily_budget': '900', 'status': 'DELETED'},
+            {'daily_budget': '800', 'status': 'ARCHIVED'},
+        ]}))
+        self.assertEqual(c.daily_budget_minor, 200)
+
+    def test_campaign_with_no_adsets_stays_zero(self):
+        """Nothing is configured to spend — 0 is the honest number."""
+        c = self._import(self._campaign(adsets={'data': []}))
+        self.assertEqual(c.daily_budget_minor, 0)

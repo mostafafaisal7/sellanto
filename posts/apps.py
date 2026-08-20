@@ -23,9 +23,15 @@ class PostsConfig(AppConfig):
         if any(cmd in sys.argv for cmd in skip_commands):
             return
 
-        # runserver: only start in the main process (not the reloader subprocess)
+        # runserver: only start in the main process (not the reloader subprocess).
+        # With the auto-reloader on, Django runs ready() twice and sets RUN_MAIN=true
+        # in the child that actually serves — that is the one we want. With
+        # --noreload there is no child and RUN_MAIN is never set, so keying only on
+        # RUN_MAIN meant the scheduler silently never started and scheduled posts sat
+        # at 'scheduled' forever.
         if 'runserver' in sys.argv:
-            if os.environ.get('RUN_MAIN') != 'true':
+            uses_reloader = '--noreload' not in sys.argv
+            if uses_reloader and os.environ.get('RUN_MAIN') != 'true':
                 return
             if PostsConfig.scheduler_started:
                 return

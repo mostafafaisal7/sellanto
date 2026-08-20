@@ -2,9 +2,11 @@
  * InstagramContentPage — /instagram-content
  * ==========================================
  * Manage published Instagram content retrieved via the Instagram Graph API.
- * Demonstrates: instagram_manage_contents permission.
+ * Demonstrates: instagram_basic (account profile + media read) and
+ * instagram_manage_contents (delete).
  *
  * Features:
+ *  - Show the connected account's profile: username, ID, picture, follower/post counts
  *  - View all published Instagram media (images, videos, carousels)
  *  - See per-post engagement: likes, comments, reach, impressions
  *  - Archive / hide media (using IG manage_contents permission)
@@ -54,12 +56,22 @@ interface InstagramMedia {
   is_archived: boolean;
 }
 
+/** instagram_basic — profile metadata for the connected IG Business account. */
+interface InstagramProfile {
+  id: string | null;
+  username: string | null;
+  profile_picture_url: string | null;
+  followers_count: number | null;
+  media_count: number | null;
+}
+
 // ── Service ───────────────────────────────────────────────────────────────────
 
 const igContentService = {
   async getMedia(params?: { after?: string; media_type?: string }): Promise<{
     media: InstagramMedia[];
     next_cursor: string | null;
+    profile: InstagramProfile | null;
   }> {
     const res = await api.get('/instagram/content/', { params });
     return res.data;
@@ -233,6 +245,8 @@ export function InstagramContentPage() {
   const [archivingId, setArchivingId] = useState<string | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [profile, setProfile] = useState<InstagramProfile | null>(null);
+  const [avatarFailed, setAvatarFailed] = useState(false);
 
   const fetchMedia = useCallback(async (cursor?: string) => {
     if (!cursor) { setLoading(true); setMedia([]); }
@@ -242,6 +256,8 @@ export function InstagramContentPage() {
       const res = await igContentService.getMedia({ after: cursor });
       setMedia((prev) => cursor ? [...prev, ...(res.media || [])] : (res.media || []));
       setNextCursor(res.next_cursor);
+      // Profile only comes back on the first page; keep it across "Load more".
+      if (res.profile) { setProfile(res.profile); setAvatarFailed(false); }
     } catch {
       setError('Could not load Instagram content. Make sure your Instagram Business account is connected.');
     } finally {
@@ -305,13 +321,68 @@ export function InstagramContentPage() {
         </div>
       </div>
 
+      {/* Connected account profile — instagram_basic (username, ID, picture, counts) */}
+      {profile && (profile.username || profile.profile_picture_url) && (
+        <div
+          className="flex items-center gap-4 bg-[#1A1A2E] border border-white/10 rounded-xl p-4"
+          title="The Instagram Business account these posts belong to"
+        >
+          {profile.profile_picture_url && !avatarFailed ? (
+            <img
+              src={profile.profile_picture_url}
+              alt={`${profile.username ?? 'Instagram'} profile picture`}
+              title="Instagram profile picture"
+              referrerPolicy="no-referrer"
+              onError={() => setAvatarFailed(true)}
+              width={96}
+              height={96}
+              decoding="async"
+              className="w-24 h-24 rounded-full object-cover border-2 border-coral/40 bg-[#12121F] shrink-0"
+            />
+          ) : (
+            <div className="w-24 h-24 rounded-full bg-[#12121F] border-2 border-coral/40 flex items-center justify-center shrink-0">
+              <PhotoIcon className="w-10 h-10 text-coral" />
+            </div>
+          )}
+
+          <div className="min-w-0">
+            <p className="text-lg font-semibold text-text-primary truncate">
+              {profile.username ? `@${profile.username}` : 'Instagram Business account'}
+            </p>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1 text-sm text-text-secondary">
+              {profile.followers_count != null && (
+                <span title="Followers of this Instagram Business account">
+                  <strong className="text-text-primary">
+                    {profile.followers_count.toLocaleString()}
+                  </strong>{' '}
+                  followers
+                </span>
+              )}
+              {profile.media_count != null && (
+                <span title="Total posts published by this account">
+                  <strong className="text-text-primary">
+                    {profile.media_count.toLocaleString()}
+                  </strong>{' '}
+                  posts
+                </span>
+              )}
+              {profile.id && (
+                <span className="text-text-muted" title="Instagram Business account ID">
+                  ID: {profile.id}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Permission banner */}
       <div className="flex items-start gap-3 bg-pink-500/10 border border-pink-500/20 rounded-xl p-4">
         <PhotoIcon className="w-5 h-5 text-pink-400 shrink-0 mt-0.5" />
         <div>
-          <p className="text-sm font-medium text-pink-300">instagram_manage_contents active</p>
+          <p className="text-sm font-medium text-pink-300">instagram_basic · instagram_manage_contents active</p>
           <p className="text-xs text-pink-400/80 mt-0.5">
-            SellAnto retrieves your published Instagram media, lets you view performance metrics per post, and can archive content that no longer aligns with your strategy.
+            SellAnto reads your Instagram Business account's published media — captions, thumbnails, publish dates and engagement counts — so you can review everything you have posted in one place, and remove content that no longer aligns with your strategy.
           </p>
         </div>
       </div>

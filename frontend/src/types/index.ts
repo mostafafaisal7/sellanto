@@ -253,6 +253,12 @@ export type PostStatus = 'draft' | 'pending_approval' | 'changes_requested' | 'a
 export interface PlatformResult {
   platform: PlatformType;
   success: boolean;
+  /**
+   * Publishing state for this platform. `success` alone cannot distinguish
+   * "not attempted yet" from "failed" — both have no post_id — so a scheduled
+   * post used to render as "Failed to publish".
+   */
+  state?: 'published' | 'failed' | 'pending' | 'publishing';
   post_id?: string;
   error?: string;
 }

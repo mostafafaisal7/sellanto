@@ -538,6 +538,26 @@ def post_tiktok(post, account, caption, media_files=None):
         return False, err
 
 
+def _record_platform_error(post, platform, message):
+    """
+    Persist a failure reason on the post so the UI can show *why* publishing
+    failed instead of a bare "Failed to publish".
+
+    The per-platform handlers set `<platform>_error` themselves, but the
+    exception paths in publish_post() previously counted a failure and moved on,
+    leaving the field NULL — which is what produced the unexplained failures.
+    """
+    field = f'{platform}_error'
+    if not hasattr(post, field):
+        print(f"      (no {field} field on Post; error not persisted: {message})")
+        return
+    try:
+        setattr(post, field, message)
+        post.save(update_fields=[field])
+    except Exception as e:
+        print(f"      (failed to persist {field}: {e})")
+
+
 def publish_post(post):
     """Publish single post with detailed error logging"""
     
@@ -545,10 +565,14 @@ def publish_post(post):
     print(f"   Scheduled: {post.scheduled_time.strftime('%Y-%m-%d %H:%M')}")
     print(f"   Platforms: {', '.join(post.platforms_list)}")
     
-    # Mark as posting
+    # Mark as posting. Clear errors from any previous attempt first, so a retry
+    # that succeeds doesn't leave a stale failure message on the post.
     post.status = 'posting'
-    post.save()
-    
+    stale = [f'{p}_error' for p in post.platforms_list if hasattr(post, f'{p}_error')]
+    for f in stale:
+        setattr(post, f, None)
+    post.save(update_fields=['status'] + stale)
+
     platforms = post.platforms_list
     caption = post.caption
     media_files = post.media_files_list
@@ -593,9 +617,24 @@ def publish_post(post):
         except SocialAccount.DoesNotExist:
             print("[FAIL] NO ACCOUNT")
             failed += 1
+            _record_platform_error(
+                post, platform,
+                f'No active {platform.title()} account is connected. '
+                f'Connect it on the Connect Accounts page, then retry this post.'
+            )
+        except SocialAccount.MultipleObjectsReturned:
+            print("[FAIL] MULTIPLE ACCOUNTS")
+            failed += 1
+            _record_platform_error(
+                post, platform,
+                f'More than one active {platform.title()} account is connected, so '
+                f'SellAnto cannot tell which one to publish to. Disconnect the '
+                f'duplicate on the Connect Accounts page, then retry this post.'
+            )
         except Exception as e:
             print(f"[ERROR] {str(e)[:60]}")
             failed += 1
+            _record_platform_error(post, platform, f'Unexpected error: {e}')
     
     # Update status
     if success > 0:

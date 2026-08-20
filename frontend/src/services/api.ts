@@ -171,29 +171,71 @@ api.interceptors.response.use(
  * A fetch() wrapper that automatically adds Authorization and
  * X-Impersonate-User headers. Use this instead of native fetch()
  * for authenticated API calls.
+ *
+ * On a 401 it refreshes the access token and retries once, mirroring the axios
+ * interceptor above. Without this, an expired access token (they last 60
+ * minutes) simply returned a failed Response that callers read as "no data" —
+ * e.g. the Connect Accounts page kept rendering the pre-connect state after a
+ * successful OAuth, and only a full page reload fixed it, because the reload
+ * minted a fresh token. It shares refreshAccessToken()'s single-flight promise,
+ * so concurrent 401s cannot each burn the (rotating, blacklist-on-use) refresh
+ * token.
  */
-export function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
-  const token = getAccessToken();
+export async function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
   const impersonateId = localStorage.getItem('impersonate_user_id');
 
-  const headers: Record<string, string> = {};
+  const buildHeaders = (
+    token: string | null,
+    source: HeadersInit | undefined = options.headers,
+  ): Record<string, string> => {
+    const headers: Record<string, string> = {};
 
-  // Copy existing headers
+    // Copy existing headers
+    if (source) {
+      Object.assign(headers, source as Record<string, string>);
+    }
+
+    // Add auth header if not already set
+    if (token && !headers['Authorization']) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    // Add impersonation header
+    if (impersonateId) {
+      headers['X-Impersonate-User'] = impersonateId;
+    }
+
+    return headers;
+  };
+
+  const staleToken = getAccessToken();
+  const response = await fetch(url, { ...options, headers: buildHeaders(staleToken) });
+
+  if (response.status !== 401 || isAuthEndpoint(url) || !getRefreshToken()) {
+    return response;
+  }
+
+  // Callers commonly pass an explicit Authorization header built from the same
+  // stored token (ConnectAccountsPage does), so a caller-supplied header is NOT
+  // a reason to skip the retry — it is the very token that just expired. Drop it
+  // so buildHeaders re-applies the refreshed one.
+  const retryOptions: RequestInit = { ...options };
   if (options.headers) {
-    Object.assign(headers, options.headers as Record<string, string>);
+    const { Authorization: _drop, ...rest } = options.headers as Record<string, string>;
+    retryOptions.headers = rest;
   }
 
-  // Add auth header if not already set
-  if (token && !headers['Authorization']) {
-    headers['Authorization'] = `Bearer ${token}`;
+  try {
+    const newAccess = await refreshAccessToken();
+    return await fetch(url, {
+      ...retryOptions,
+      headers: buildHeaders(newAccess, retryOptions.headers),
+    });
+  } catch {
+    // Refresh failed — hand back the original 401 and let the axios layer's
+    // redirect handle the logout, rather than racing it from here.
+    return response;
   }
-
-  // Add impersonation header
-  if (impersonateId) {
-    headers['X-Impersonate-User'] = impersonateId;
-  }
-
-  return fetch(url, { ...options, headers });
 }
 
 export { getAccessToken, getRefreshToken, setTokens, clearTokens };

@@ -23,6 +23,7 @@ import {
   ExclamationTriangleIcon,
   ArrowPathIcon,
   XCircleIcon,
+  TrashIcon,
 } from '@heroicons/react/24/outline';
 import { facebookOAuthService } from '../../services/facebookOAuthService';
 import { MessengerPagePicker } from './MessengerPagePicker';
@@ -51,6 +52,8 @@ interface OAuthError {
 
 interface Props {
   onConnected?: (pages: FacebookOAuthPage[]) => void;
+  /** Called after a successful disconnect, so parents can refetch their own lists. */
+  onDisconnected?: () => void;
   buttonLabel?: string;
   compact?: boolean;
 }
@@ -73,31 +76,95 @@ const STATUS_TEXT: Record<string, string> = {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export function FacebookConnect({ onConnected, buttonLabel = 'Connect Facebook Page', compact = false }: Props) {
+export function FacebookConnect({ onConnected, onDisconnected, buttonLabel = 'Connect Facebook, Instagram & Messenger', compact = false }: Props) {
   const [step, setStep]           = useState<Step>('idle');
   const [oauthError, setOAuthError] = useState<OAuthError | null>(null);
   const [warning, setWarning]     = useState<string>('');
   const [pages, setPages]         = useState<FacebookOAuthPage[]>([]);
   const [status, setStatus]       = useState<FacebookConnectionStatus | null>(null);
   const [statusLoading, setStatusLoading] = useState(true);
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
+  /** Set when a post-OAuth status read disagrees with the OAuth we just completed. */
+  const [needsManualRefresh, setNeedsManualRefresh] = useState(false);
 
   const popupRef    = useRef<Window | null>(null);
   const pollRef     = useRef<ReturnType<typeof setInterval> | null>(null);
+  /** Second interval: the browser-channel backstop, cleared alongside pollRef. */
+  const localPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const handledRef  = useRef(false); // prevent double-processing from both channels
 
   // ── Fetch live status ──────────────────────────────────────────────────────
+
+  /**
+   * Mirror of `status` for the OAuth callbacks. They are memoised on [cleanup]
+   * so the state they close over is frozen at first render (null); reading the
+   * ref gives them the current value without making them unstable — the
+   * listeners registered in handleConnect must keep one identity to be
+   * removable.
+   */
+  const statusRef = useRef<FacebookConnectionStatus | null>(null);
+
+  /**
+   * Same reason as statusRef: the OAuth callbacks are memoised on [cleanup], so
+   * they would otherwise keep calling the FIRST render's onConnected. The parent
+   * rebuilds that closure on every render, so after one connect the component
+   * held a stale callback and the parent's card stopped updating — the "still
+   * needs a reload" report, which only reproduced on a second connect within the
+   * same page session.
+   */
+  const onConnectedRef = useRef(onConnected);
+  const onDisconnectedRef = useRef(onDisconnected);
+  useEffect(() => {
+    onConnectedRef.current = onConnected;
+    onDisconnectedRef.current = onDisconnected;
+  });
+
+  /** Set just below; settleAfterConnect is declared first and calls it via this ref. */
+  const refreshStatusRef = useRef<(force?: boolean) => Promise<FacebookConnectionStatus | null>>(
+    async () => null,
+  );
+
+  /**
+   * Settle the UI after a successful connect.
+   *
+   * Re-reads status (forced — the backend serves a 6h-stale view otherwise) and
+   * notifies the parent. If the fresh read still disagrees with the OAuth that
+   * just succeeded, surfaces a visible "refresh to see it" prompt rather than
+   * leaving the user guessing. The normal path updates in place.
+   */
+  const settleAfterConnect = useCallback(async (connectedPages: FacebookOAuthPage[]) => {
+    const fresh = await refreshStatusRef.current(true);
+    setStep('done');
+    onConnectedRef.current?.(connectedPages);
+
+    // If the freshly-read status still says "not connected" right after a
+    // successful OAuth, the page and the server have genuinely diverged. Ask
+    // rather than reloading underneath the user — an unannounced reload during
+    // a flow they just completed reads as the app losing their work.
+    setNeedsManualRefresh(!fresh || fresh.overall_status === 'not_connected');
+  }, []);
 
   const refreshStatus = useCallback(async (forceRefresh = false) => {
     setStatusLoading(true);
     try {
       const data = await facebookOAuthService.getStatus(forceRefresh);
       setStatus(data);
+      statusRef.current = data;
+      return data;
     } catch {
-      // silently fail — status card just won't show
+      // Keep the last known status rather than falling back to null: null renders
+      // as 'not_connected', so a transient failure (expired token, dropped
+      // request) made a connected account look disconnected. Returning null still
+      // signals the failure to settleAfterConnect, which surfaces the refresh
+      // prompt instead of silently showing the wrong state.
+      return null;
     } finally {
       setStatusLoading(false);
     }
   }, []);
+
+  refreshStatusRef.current = refreshStatus;
 
   useEffect(() => {
     refreshStatus();
@@ -105,10 +172,41 @@ export function FacebookConnect({ onConnected, buttonLabel = 'Connect Facebook P
 
   // ── Cleanup ────────────────────────────────────────────────────────────────
 
+  /**
+   * Listeners are registered through refs rather than the `handleMessage` /
+   * `handleStorage` bindings directly.
+   *
+   * `cleanup` is declared before those two callbacks, so the identities it
+   * captured were not the ones `handleConnect` later passed to
+   * addEventListener — removeEventListener silently did nothing and every
+   * reconnect attempt stacked another live listener on window. Holding the
+   * exact registered function in a ref guarantees add/remove use one identity.
+   */
+  const msgListenerRef  = useRef<((e: MessageEvent) => void) | null>(null);
+  const strListenerRef  = useRef<((e: StorageEvent) => void) | null>(null);
+  const channelRef      = useRef<BroadcastChannel | null>(null);
+
   const cleanup = useCallback(() => {
-    if (pollRef.current) clearInterval(pollRef.current);
-    window.removeEventListener('message', handleMessage);
-    window.removeEventListener('storage', handleStorage);
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+    if (localPollRef.current) {
+      clearInterval(localPollRef.current);
+      localPollRef.current = null;
+    }
+    if (msgListenerRef.current) {
+      window.removeEventListener('message', msgListenerRef.current);
+      msgListenerRef.current = null;
+    }
+    if (strListenerRef.current) {
+      window.removeEventListener('storage', strListenerRef.current);
+      strListenerRef.current = null;
+    }
+    if (channelRef.current) {
+      try { channelRef.current.close(); } catch { /* already closed */ }
+      channelRef.current = null;
+    }
   }, []);
 
   useEffect(() => () => cleanup(), [cleanup]);
@@ -142,13 +240,17 @@ export function FacebookConnect({ onConnected, buttonLabel = 'Connect Facebook P
         return;
       }
 
-      // Skip messenger setup if feature is disabled
-      if (status?.messenger_enabled === false) {
+      // Skip messenger setup if feature is disabled.
+      // Read through the ref: this callback is memoised on [cleanup], so the
+      // `status` captured in its closure is the first-render value (null) and
+      // this branch could never be taken.
+      if (statusRef.current?.messenger_enabled === false) {
         setStep('refreshing');
-        refreshStatus().then(() => {
-          setStep('done');
-          onConnected?.(receivedPages);
-        });
+        // force=true — the OAuth we just completed changed the connection, but
+        // the backend only re-validates tokens older than 6h unless forced, so
+        // an unforced read returns the pre-connect state and the card keeps
+        // saying "Reconnect" until a manual page reload.
+        settleAfterConnect(receivedPages);
       } else if (activePages.length === 1) {
         doSetupMessenger(activePages[0], receivedPages);
       } else {
@@ -164,7 +266,13 @@ export function FacebookConnect({ onConnected, buttonLabel = 'Connect Facebook P
     }
   }, [cleanup]);
 
-  // ── Step 2a — localStorage channel (immune to Facebook's COOP headers) ────
+  // ── Step 2a — localStorage channel ────────────────────────────────────────
+  //
+  // NOTE: the 'storage' event only fires in OTHER tabs of the origin, never in
+  // the tab that wrote the value. So when the popup is same-origin with the app
+  // (single-port deployment, or through the ngrok tunnel) this never fires and
+  // the connect flow appeared to hang until a manual reload. It still covers
+  // the cross-origin-tab case; BroadcastChannel below covers the same-origin one.
 
   const handleStorage = useCallback((event: StorageEvent) => {
     if (event.key !== 'fb_oauth_result' || !event.newValue) return;
@@ -190,6 +298,7 @@ export function FacebookConnect({ onConnected, buttonLabel = 'Connect Facebook P
     setOAuthError(null);
     setWarning('');
     setStep('opening');
+    setNeedsManualRefresh(false);
     handledRef.current = false;
 
     // Clear any stale result from a previous OAuth flow
@@ -218,12 +327,101 @@ export function FacebookConnect({ onConnected, buttonLabel = 'Connect Facebook P
       }
 
       setStep('waiting');
-      // Listen on both channels — whichever fires first wins
+      // Listen on both channels — whichever fires first wins.
+      // Stash the exact functions we register so cleanup() can remove these
+      // very instances (see the note on msgListenerRef).
+      cleanup();
+      msgListenerRef.current = handleMessage;
+      strListenerRef.current = handleStorage;
       window.addEventListener('message', handleMessage);
       window.addEventListener('storage', handleStorage);
 
-      // Detect popup closed without completing
+      // Same-origin channel. Unlike 'storage', BroadcastChannel delivers to the
+      // opener when the popup shares this origin — the single-port case, which
+      // is exactly when the other two channels go silent.
+      try {
+        if (typeof BroadcastChannel !== 'undefined') {
+          const bc = new BroadcastChannel('fb_oauth');
+          bc.onmessage = (ev) => {
+            if (ev.data?.type?.startsWith('FB_OAUTH_')) processOAuthResult(ev.data);
+          };
+          channelRef.current = bc;
+        }
+      } catch { /* unsupported — the other channels still apply */ }
+
+      // Backstop: poll the SERVER, not just the browser channels.
+      //
+      // Every other channel (postMessage, BroadcastChannel, localStorage) needs
+      // the popup's own JS to run and reach us. In practice that kept failing —
+      // the callback returned 200 and then nothing arrived — so the flow stalled
+      // even though the account was already saved server-side. Asking the API
+      // whether we are connected yet depends on none of that: if the connection
+      // exists, we see it, whatever the popup did.
+      const wasConnected = statusRef.current?.overall_status !== 'not_connected';
+      const baselinePages = statusRef.current?.facebook?.pages ?? [];
+      const baselinePageIds = baselinePages.map((p) => p.page_id).sort().join(',');
+      // Newest connected_at we have seen so far; the callback rewrites it.
+      const baselineConnectedAt = baselinePages.reduce((max, p) => {
+        const t = p.connected_at ? new Date(p.connected_at).getTime() : 0;
+        return t > max ? t : max;
+      }, 0);
+
       pollRef.current = setInterval(() => {
+        void (async () => {
+          if (handledRef.current) return;
+
+          const fresh = await facebookOAuthService.getStatus(true).catch(() => null);
+          if (!fresh || handledRef.current) return;
+
+          const nowConnected = fresh.overall_status !== 'not_connected';
+          const pages = fresh.facebook?.pages ?? [];
+
+          // Reconnects start already-connected, so "is connected" alone proves
+          // nothing new happened. Compare the set of page IDs instead of
+          // timestamps: `?refresh=1` re-validates on every call, so
+          // last_validated_at advances purely because we polled, which would
+          // fire on the very first tick regardless of the popup.
+          const ids = pages.map((p) => p.page_id).sort().join(',');
+          const gainedPages = ids !== baselinePageIds;
+
+          // A reconnect ends with the same pages it started with, so neither
+          // signal above fires. `connected_at` is rewritten by the OAuth
+          // callback (and by nothing else), which makes it the one field that
+          // proves a new grant landed.
+          const reconnected = pages.some((p) => {
+            if (!p.connected_at) return false;
+            return new Date(p.connected_at).getTime() > baselineConnectedAt;
+          });
+
+          if (nowConnected && (!wasConnected || gainedPages || reconnected)) {
+            handledRef.current = true;
+            cleanup();
+            setStatus(fresh);
+            statusRef.current = fresh;
+            setPages([]);
+            setStep('done');
+            setNeedsManualRefresh(false);
+            onConnectedRef.current?.([]);
+            try { localStorage.removeItem('fb_oauth_result'); } catch { /* ignore */ }
+          }
+        })();
+      }, 2000);
+
+      // Secondary: the original browser-channel backstop, kept because it reacts
+      // faster than the server poll when the popup does manage to talk to us.
+      localPollRef.current = setInterval(() => {
+        const stored = localStorage.getItem('fb_oauth_result');
+        if (stored) {
+          try {
+            const data = JSON.parse(stored);
+            localStorage.removeItem('fb_oauth_result');
+            if (data?.type?.startsWith('FB_OAUTH_')) {
+              processOAuthResult(data);
+              return;
+            }
+          } catch { /* fall through to the closed-popup check */ }
+        }
+
         if (popupRef.current?.closed) {
           // Give localStorage channel a brief moment to fire before giving up
           setTimeout(() => {
@@ -259,19 +457,45 @@ export function FacebookConnect({ onConnected, buttonLabel = 'Connect Facebook P
       const msg = err?.response?.data?.detail || err?.response?.data?.error || 'Messenger setup failed.';
       setWarning(`Pages connected. Messenger setup failed: ${msg} You can retry in Messenger Settings.`);
     } finally {
+      // force=true — see refreshStatus(true) in processOAuthResult: an unforced
+      // read is served from the backend's 6h validation window and would still
+      // describe the connection as it was before this OAuth run.
       setStep('refreshing');
-      await refreshStatus();
-      setStep('done');
-      onConnected?.(allPages);
+      await settleAfterConnect(allPages);
     }
   };
 
   const handlePickerSelect = (page: FacebookOAuthPage) => doSetupMessenger(page, pages);
   const handlePickerSkip   = async () => {
     setStep('refreshing');
-    await refreshStatus();
-    setStep('done');
-    onConnected?.(pages);
+    await settleAfterConnect(pages);
+  };
+
+  // ── Disconnect ────────────────────────────────────────────────────────────
+
+  /**
+   * Revokes Facebook, Instagram and Messenger together — they are granted on a
+   * single consent screen, so unlinking one alone leaves a half-connected state.
+   */
+  const handleDisconnect = async () => {
+    setDisconnecting(true);
+    try {
+      await facebookOAuthService.disconnect();
+      setConfirmDisconnect(false);
+      setPages([]);
+      setWarning('');
+      setOAuthError(null);
+      setStep('idle');
+      await refreshStatus(true);
+      onDisconnectedRef.current?.();
+    } catch (err) {
+      setOAuthError({
+        title: 'Could not disconnect',
+        detail: err instanceof Error ? err.message : 'Please try again.',
+      });
+    } finally {
+      setDisconnecting(false);
+    }
   };
 
   // ── Derived ───────────────────────────────────────────────────────────────
@@ -299,7 +523,7 @@ export function FacebookConnect({ onConnected, buttonLabel = 'Connect Facebook P
       <div className="flex flex-col gap-3">
         <button
           onClick={handleConnect}
-          disabled={isLoading}
+          disabled={isLoading || disconnecting}
           className={`inline-flex items-center gap-2.5 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all
             bg-[#1877F2] hover:bg-[#1565C0] text-white shadow-lg shadow-blue-900/30
             disabled:opacity-60 disabled:cursor-not-allowed`}
@@ -315,6 +539,123 @@ export function FacebookConnect({ onConnected, buttonLabel = 'Connect Facebook P
            overall !== 'not_connected' ? 'Reconnect Facebook' :
            buttonLabel}
         </button>
+
+        {/* Explicit success confirmation.
+            Once connected the button reads "Reconnect Facebook" and a Disconnect
+            button appears — which is the correct connected state, but it looks
+            almost identical to the pre-click state, so a successful connect gave
+            no visible acknowledgement and read as "nothing happened". This says
+            plainly that it worked, and what was linked. */}
+        {/* Divergence fallback — the connect succeeded but this page still reads
+            as disconnected. Offer the reload explicitly instead of doing it
+            silently, so the user knows why the page is about to jump. */}
+        {needsManualRefresh && (
+          <div className="flex items-start gap-2.5 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20">
+            <ExclamationTriangleIcon className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-amber-300">Connected — refresh to see it</p>
+              <p className="text-[11px] text-amber-300/80 mt-0.5 leading-relaxed">
+                Your Facebook account was connected, but this page is still showing the
+                old status. Refresh to bring it up to date.
+              </p>
+              <button
+                onClick={() => window.location.reload()}
+                className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold
+                  bg-amber-500/20 text-amber-200 border border-amber-500/30 hover:bg-amber-500/30 transition-colors"
+              >
+                <ArrowPathIcon className="w-3.5 h-3.5" />
+                Refresh page
+              </button>
+            </div>
+          </div>
+        )}
+
+        {step === 'done' && !oauthError && !needsManualRefresh && (
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex items-start gap-2.5 p-3 rounded-xl bg-green-500/10 border border-green-500/20"
+          >
+            <CheckCircleIcon className="w-4 h-4 text-green-400 flex-shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-green-400">Connected successfully</p>
+              <p className="text-[11px] text-green-300/80 mt-0.5 leading-relaxed">
+                {status?.facebook?.active_pages
+                  ? `${status.facebook.active_pages} Facebook Page${status.facebook.active_pages > 1 ? 's' : ''} linked`
+                  : 'Your Facebook account is linked'}
+                {status?.instagram?.total ? ` · Instagram linked` : ''}
+                {status?.messenger?.connected ? ` · Messenger linked` : ''}
+                . The status below is live — no need to refresh the page.
+              </p>
+            </div>
+          </motion.div>
+        )}
+
+        {/* Says out loud what one consent screen actually grants, so users don't
+            go looking for separate Instagram / Messenger connect buttons. */}
+        {overall === 'not_connected' && (
+          <p className="text-[11px] text-slate-400 leading-relaxed">
+            One Facebook login connects your Facebook Pages, your Instagram Business
+            account and your Messenger bot. They are granted together on Facebook's
+            consent screen — there is nothing to connect separately.
+          </p>
+        )}
+
+        {/* Disconnect — only meaningful once something is linked. Revokes
+            Facebook, Instagram and Messenger together, matching how they were
+            granted. Two-step so a stray click can't unlink everything. */}
+        {overall !== 'not_connected' && !confirmDisconnect && (
+          <button
+            onClick={() => setConfirmDisconnect(true)}
+            disabled={isLoading || disconnecting}
+            title="Disconnect Facebook, Instagram and Messenger from SellAnto"
+            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all
+              bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/20
+              disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            <TrashIcon className="w-4 h-4" />
+            Disconnect
+          </button>
+        )}
+
+        <AnimatePresence>
+          {confirmDisconnect && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="rounded-xl bg-red-500/10 border border-red-500/20 p-3"
+            >
+              <p className="text-xs font-semibold text-red-300">
+                Disconnect Facebook, Instagram and Messenger?
+              </p>
+              <p className="text-[11px] text-red-300/80 mt-1 leading-relaxed">
+                SellAnto will revoke the access tokens it stored for your Facebook Pages,
+                Instagram Business account and Messenger bot, and will stop publishing to
+                them. Scheduled posts for these accounts will not be published. Nothing
+                already posted is deleted, and you can reconnect at any time.
+              </p>
+              <div className="flex items-center gap-2 mt-3">
+                <button
+                  onClick={handleDisconnect}
+                  disabled={disconnecting}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-500 text-white
+                    hover:bg-red-600 transition-colors disabled:opacity-60"
+                >
+                  {disconnecting ? 'Disconnecting…' : 'Yes, disconnect'}
+                </button>
+                <button
+                  onClick={() => setConfirmDisconnect(false)}
+                  disabled={disconnecting}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-300
+                    border border-white/10 hover:border-white/20 transition-colors disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Warning notice */}
         <AnimatePresence>
@@ -394,8 +735,57 @@ export function FacebookConnect({ onConnected, buttonLabel = 'Connect Facebook P
                   <EmptyRow text="No accounts linked" />
                 ) : (
                   status.instagram.accounts.map((ig) => (
-                    <div key={ig.ig_account_id} className="flex items-center justify-between py-1">
-                      <span className="text-xs text-slate-300 truncate">{ig.account_name}</span>
+                    <div key={ig.ig_account_id} className="flex items-center justify-between gap-2 py-1.5">
+                      <div className="flex items-center gap-2 min-w-0">
+                        {/* IG CDN URLs are signed and expire, so fall back to the
+                            placeholder if the image fails to load. The source is
+                            1080x1080, so we hand the browser a 2x intrinsic size and let
+                            it downscale once — keeps a wordmark avatar legible at 40px. */}
+                        {ig.profile_picture_url ? (
+                          <img
+                            src={ig.profile_picture_url}
+                            alt={`${ig.username ?? ig.account_name} profile picture`}
+                            title="Instagram profile picture"
+                            referrerPolicy="no-referrer"
+                            width={80}
+                            height={80}
+                            decoding="async"
+                            className="w-10 h-10 rounded-full object-cover border border-slate-600 shrink-0 bg-slate-700 [image-rendering:auto]"
+                            onError={(e) => {
+                              const img = e.currentTarget;
+                              img.style.display = 'none';
+                              img.nextElementSibling?.classList.remove('hidden');
+                            }}
+                          />
+                        ) : null}
+                        <div
+                          className={`w-10 h-10 rounded-full bg-slate-700 border border-slate-600 flex items-center justify-center text-[10px] text-slate-400 shrink-0 ${
+                            ig.profile_picture_url ? 'hidden' : ''
+                          }`}
+                        >
+                          IG
+                        </div>
+                        <div className="min-w-0">
+                          <div
+                            className="text-xs text-slate-200 truncate"
+                            title="Connected Instagram Business account"
+                          >
+                            {ig.username ? `@${ig.username}` : ig.account_name}
+                          </div>
+                          {(ig.followers_count != null || ig.media_count != null) && (
+                            <div
+                              className="text-[10px] text-slate-400 truncate"
+                              title="Follower and post counts for this Instagram Business account"
+                            >
+                              {ig.followers_count != null &&
+                                `${ig.followers_count.toLocaleString()} followers`}
+                              {ig.followers_count != null && ig.media_count != null && ' · '}
+                              {ig.media_count != null &&
+                                `${ig.media_count.toLocaleString()} posts`}
+                            </div>
+                          )}
+                        </div>
+                      </div>
                       <StatusBadge status={ig.status} label={ig.status_display} />
                     </div>
                   ))

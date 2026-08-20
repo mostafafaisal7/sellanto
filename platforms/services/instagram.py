@@ -459,22 +459,79 @@ class InstagramService:
 
     @staticmethod
     def validate_credentials(access_token, business_account_id):
-        """Validate Instagram credentials"""
+        """
+        Validate Instagram credentials.
+
+        Returns (True, '@username') or (False, error_message). Callers assign the
+        success value directly to SocialAccount.account_name, so it must always be a
+        short string — never a dict.
+        """
+        try:
+            ok, profile = InstagramService.get_profile(access_token, business_account_id)
+            if not ok:
+                # profile is an error string here
+                return False, profile
+
+            username = profile.get('username') or 'instagram'
+            return True, f"@{username}"
+
+        except Exception as e:
+            return False, str(e)
+
+    @staticmethod
+    def get_profile(access_token, business_account_id):
+        """
+        Read basic profile metadata for an Instagram Business account.
+
+        This is the `instagram_basic` read: username, ID, profile picture and the
+        follower/media counts we surface on the connections screen so the user can
+        confirm which account they linked.
+
+        Returns (True, {id, username, profile_picture_url, followers_count,
+        media_count}) or (False, error_message). Never raises.
+        """
+        if not access_token or not business_account_id:
+            return False, 'Missing Instagram access token or business account ID'
+
         try:
             url = f"https://graph.facebook.com/v21.0/{business_account_id}"
             params = {
-                'fields': 'username,profile_picture_url',
-                'access_token': access_token
+                'fields': 'id,username,followers_count,media_count,profile_picture_url',
+                'access_token': access_token,
             }
-            
-            response = requests.get(url, params=params)
-            result = response.json()
-            
+
+            response = requests.get(url, params=params, timeout=15)
+
+            try:
+                result = response.json()
+            except ValueError:
+                # Graph returned HTML/empty (gateway error, rate-limit page, etc.)
+                return False, f'Instagram API returned a non-JSON response (HTTP {response.status_code})'
+
+            if not isinstance(result, dict):
+                return False, 'Unexpected Instagram API response format'
+
             if 'error' in result:
-                return False, result['error']['message']
-            
-            username = f"@{result.get('username', 'instagram')}"
-            return True, username
-            
+                err = result['error'] or {}
+                if isinstance(err, dict):
+                    return False, err.get('message', 'Instagram profile read failed')
+                return False, str(err)
+
+            # A 4xx/5xx without an `error` object still means we have no usable profile.
+            if not response.ok:
+                return False, f'Instagram profile read failed (HTTP {response.status_code})'
+
+            return True, {
+                'id':                  result.get('id'),
+                'username':            result.get('username'),
+                'profile_picture_url': result.get('profile_picture_url'),
+                'followers_count':     result.get('followers_count'),
+                'media_count':         result.get('media_count'),
+            }
+
+        except requests.exceptions.Timeout:
+            return False, 'Instagram API request timed out'
+        except requests.exceptions.RequestException as e:
+            return False, f'Instagram API request failed: {e}'
         except Exception as e:
             return False, str(e)

@@ -104,16 +104,34 @@ interface InsightPoint {
   cpa?: number;
 }
 
-function CampaignInsightsPanel({ campaignId }: { campaignId: number }) {
+function CampaignInsightsPanel({
+  campaignId,
+  campaignStatus,
+}: {
+  campaignId: number;
+  /** Lets the empty state say *why* there is nothing to show. */
+  campaignStatus?: string;
+}) {
   const [data, setData] = useState<InsightPoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<'last_7d' | 'last_14d' | 'last_30d'>('last_7d');
 
+  // A failed request used to be swallowed into the same empty state as "no
+  // data", so an outage read as "this campaign never delivered".
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   useEffect(() => {
     setLoading(true);
+    setLoadError(null);
     adsService.getCampaignInsights(campaignId, period)
       .then((res) => setData(res.insights || []))
-      .catch(() => setData([]))
+      .catch((err) => {
+        setData([]);
+        setLoadError(
+          err?.response?.data?.error ||
+          'Could not load insights. Please try again.'
+        );
+      })
       .finally(() => setLoading(false));
   }, [campaignId, period]);
 
@@ -126,10 +144,23 @@ function CampaignInsightsPanel({ campaignId }: { campaignId: number }) {
   }
 
   if (!data.length) {
+    // Meta returns no rows until a campaign has actually delivered an
+    // impression, so "no data" usually means "hasn't run", not "broken".
+    // Saying which one saves the user hunting for a bug that isn't there.
+    const reason = loadError
+      ? loadError
+      : campaignStatus === 'draft'
+        ? 'This campaign has not been launched yet, so it has no delivery data.'
+        : campaignStatus === 'paused'
+          ? 'This campaign is paused. Insights appear once it has delivered impressions.'
+          : 'This campaign has not delivered any impressions yet. Meta reports data once it starts spending — this can take a few hours after launch.';
+
     return (
       <div className="py-10 text-center">
-        <ChartBarIcon className="w-10 h-10 text-text-muted mx-auto mb-2" />
-        <p className="text-sm text-text-muted">No insights data for this period.</p>
+        <ChartBarIcon className={`w-10 h-10 mx-auto mb-2 ${loadError ? 'text-danger' : 'text-text-muted'}`} />
+        <p className={`text-sm ${loadError ? 'text-danger' : 'text-text-muted'} max-w-md mx-auto`}>
+          {reason}
+        </p>
       </div>
     );
   }
@@ -629,7 +660,10 @@ export function AdsPage() {
                         ✕
                       </button>
                     </div>
-                    <CampaignInsightsPanel campaignId={selectedCampaign.id} />
+                    <CampaignInsightsPanel
+                      campaignId={selectedCampaign.id}
+                      campaignStatus={selectedCampaign.status}
+                    />
                   </Card>
                   <div className="mt-4">
                     <InsightBreakdownPanel campaignId={selectedCampaign.id} />

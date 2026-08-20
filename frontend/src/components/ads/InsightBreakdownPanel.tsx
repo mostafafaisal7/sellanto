@@ -90,7 +90,11 @@ export function InsightBreakdownPanel({ campaignId }: { campaignId: number }) {
       {loading ? (
         <p className="text-xs text-text-muted">Loading…</p>
       ) : rows.length === 0 ? (
-        <p className="text-xs text-text-muted">No breakdown data for this period.</p>
+        /* Breakdowns are derived from delivery, so this is empty for exactly
+           the same reason the insights panel above is: no impressions yet. */
+        <p className="text-xs text-text-muted">
+          No breakdown data yet — this campaign has not delivered impressions in this period.
+        </p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-xs">

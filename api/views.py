@@ -4918,9 +4918,23 @@ class InstagramContentView(APIView):
             params=params,
             timeout=30,
         )
-        data = resp.json()
+        try:
+            data = resp.json()
+        except ValueError:
+            return Response(
+                {'error': f'Instagram API returned a non-JSON response (HTTP {resp.status_code})'},
+                status=502,
+            )
+        if not isinstance(data, dict):
+            return Response({'error': 'Unexpected Instagram API response format'}, status=502)
         if 'error' in data:
-            return Response({'error': data['error'].get('message', 'Graph API error')}, status=400)
+            err = data['error'] if isinstance(data['error'], dict) else {}
+            return Response({'error': err.get('message', 'Graph API error')}, status=400)
+        if not resp.ok:
+            return Response(
+                {'error': f'Instagram media read failed (HTTP {resp.status_code})'},
+                status=400,
+            )
         media = [{
             'id': m['id'],
             'media_type': m.get('media_type', 'IMAGE'),
@@ -4932,9 +4946,27 @@ class InstagramContentView(APIView):
             'like_count': m.get('like_count', 0),
             'comments_count': m.get('comments_count', 0),
             'is_archived': False,
-        } for m in data.get('data', [])]
+        } for m in data.get('data', []) if isinstance(m, dict) and m.get('id')]
         cursor = data.get('paging', {}).get('cursors', {}).get('after')
-        return Response({'media': media, 'next_cursor': cursor})
+
+        # instagram_basic: the account's own profile metadata (username, ID, picture,
+        # follower/media counts), shown in this page's header so the user can see which
+        # Instagram Business account the media below belongs to. Best-effort — the media
+        # list must still render if this read fails.
+        profile = None
+        try:
+            from platforms.services.instagram import InstagramService
+            ok, prof = InstagramService.get_profile(
+                ig.instagram_access_token, ig.instagram_business_account_id
+            )
+            if ok:
+                profile = prof
+            else:
+                logger.warning(f'[IG Content] Profile read failed: {prof}')
+        except Exception as e:
+            logger.warning(f'[IG Content] Profile read errored: {e}')
+
+        return Response({'media': media, 'next_cursor': cursor, 'profile': profile})
 
 
 class InstagramContentArchiveView(APIView):

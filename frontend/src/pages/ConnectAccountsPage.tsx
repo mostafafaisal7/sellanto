@@ -56,7 +56,7 @@ const platformFeatures: Record<string, string[]> = {
 const platformDescriptions: Record<string, string> = {
   facebook: 'Post to your Facebook Pages automatically with scheduled content and media.',
   twitter: 'Schedule tweets with images and videos to your X/Twitter account.',
-  instagram: 'Post photos and videos to your Instagram Business account automatically.',
+  instagram: 'Read your Instagram Business account profile and published media, and post photos and videos automatically. Included with your Meta connection.',
   linkedin: 'Share professional content to your LinkedIn profile or company page.',
   tiktok: 'Schedule and publish engaging short-form videos to TikTok for Business.',
   pinterest: 'Pin your creative content and reach millions of users looking for inspiration.',
@@ -136,17 +136,39 @@ export default function ConnectAccountsPage() {
   const [pageMetaList, setPageMetaList] = useState<Array<{ id: string; name: string; category: string; about: string; website: string; phone: string; loading?: boolean }>>([]);
   const [pageMetaExpanded, setPageMetaExpanded] = useState<string | null>(null);
   const [pageMetaEdit, setPageMetaEdit] = useState<Record<string, Record<string, string>>>({});
+  // instagram_basic — profile of the connected IG Business account, shown on the
+  // Instagram platform card so the user can see which account is linked.
+  const [igProfile, setIgProfile] = useState<{
+    account_name: string;
+    username: string | null;
+    profile_picture_url: string | null;
+    followers_count: number | null;
+    media_count: number | null;
+    ig_account_id: string;
+    status_display: string;
+  } | null>(null);
+  const [igAvatarFailed, setIgAvatarFailed] = useState(false);
 
-  const fetchData = async () => {
+  /**
+   * @param forceFbRefresh re-validate the Meta connection live instead of
+   *   accepting the backend's cached view. The status endpoint only re-checks
+   *   tokens it has not validated in the last 6 hours, so right after an OAuth
+   *   run an unforced read still describes the *previous* state — which is what
+   *   left the card showing "Reconnect" until the user reloaded by hand. Only
+   *   the post-connect/disconnect calls pay for this; the initial page load
+   *   stays on the cached path.
+   */
+  const fetchData = async (forceFbRefresh = false) => {
     setIsLoading(true);
     const token = localStorage.getItem('access_token');
     const headers = { Authorization: `Bearer ${token}` };
+    const fbStatusUrl = `/api/v1/platforms/facebook/status/${forceFbRefresh ? '?refresh=1' : ''}`;
 
     try {
       const [accountsRes, statsRes, fbStatusRes] = await Promise.all([
         authFetch('/api/v1/platforms/', { headers }),
         authFetch('/api/v1/dashboard/stats/', { headers }),
-        authFetch('/api/v1/platforms/facebook/status/', { headers }).catch(() => null),
+        authFetch(fbStatusUrl, { headers }).catch(() => null),
       ]);
 
       if (fbStatusRes?.ok) {
@@ -154,6 +176,10 @@ export default function ConnectAccountsPage() {
         if (typeof fbData.messenger_enabled === 'boolean') {
           setMessengerEnabled(fbData.messenger_enabled);
         }
+        // instagram_basic profile for the Instagram card
+        const ig = fbData?.instagram?.accounts?.[0] ?? null;
+        setIgProfile(ig);
+        setIgAvatarFailed(false);
       }
 
       if (accountsRes.ok) {
@@ -234,11 +260,18 @@ export default function ConnectAccountsPage() {
       });
       if (resp.ok) {
         setDisconnectAccount(null);
-        await fetchData();
-        showToast.success('Platform disconnected.');
+        // Drop the cached IG profile too, otherwise the Instagram card keeps
+        // showing the avatar/username of the account we just unlinked.
+        setIgProfile(null);
+        setIgAvatarFailed(false);
+        await fetchData(true);
+        showToast.success('Account disconnected.');
+      } else {
+        showToast.error('Could not disconnect the account. Please try again.');
       }
     } catch (error) {
       console.error('Disconnect failed:', error);
+      showToast.error('Could not disconnect the account. Please try again.');
     } finally {
       setIsDisconnecting(false);
     }
@@ -336,7 +369,7 @@ export default function ConnectAccountsPage() {
             const isConnected = connectedPlatforms.includes(p);
 
             // ── OAuth Platforms: one-click connect with dedicated components ──
-            const oauthPlatformConfig: Record<string, { subtitle: string; Component: React.FC<{ onConnected?: () => void }> }> = {
+            const oauthPlatformConfig: Record<string, { subtitle: string; Component: React.FC<{ onConnected?: () => void; onDisconnected?: () => void }> }> = {
               facebook:  { subtitle: `Pages · Instagram${messengerEnabled ? ' · Messenger' : ''}`, Component: FacebookConnect },
               linkedin:  { subtitle: 'Personal Profile · Company Pages', Component: LinkedInConnect },
               pinterest: { subtitle: 'Pins · Boards · Video Pins',       Component: PinterestConnect },
@@ -369,7 +402,12 @@ export default function ConnectAccountsPage() {
                     </div>
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
-                        <h3 className="text-lg font-bold text-text-primary">{platformNames[p]}</h3>
+                        {/* Facebook OAuth grants Pages + Instagram + Messenger in one
+                            consent screen, so this card is titled for the provider
+                            (Meta) rather than a single one of its services. */}
+                        <h3 className="text-lg font-bold text-text-primary">
+                          {p === 'facebook' ? 'Meta' : platformNames[p]}
+                        </h3>
                         {activeCount > 0 && (
                           <span className="px-1.5 py-0.5 rounded-full bg-success/20 text-success text-[9px] font-bold">
                             {activeCount} active
@@ -388,10 +426,34 @@ export default function ConnectAccountsPage() {
                       </div>
                       <p className="text-[10px] text-text-muted">{subtitle}</p>
                     </div>
+                    {/* Manual credential entry stays available as an OAuth fallback,
+                        but only behind the help icon — the primary path is the
+                        OAuth button rendered by <Component> below. */}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleConnect(p); }}
+                      className="w-7 h-7 rounded-full bg-white/5 hover:bg-primary/20 flex items-center justify-center transition-colors flex-shrink-0 self-start"
+                      title="Connection help / enter credentials manually"
+                    >
+                      <QuestionMarkCircleIcon className="w-4 h-4 text-text-muted hover:text-primary" />
+                    </button>
                   </div>
 
                   {/* OAuth component handles connect button + status card */}
-                  <Component onConnected={fetchData} />
+                  <Component
+                    // Force a live re-validation: the connection just changed,
+                    // so the backend's cached view is exactly the stale one.
+                    // Wrapped rather than passed bare — onConnected supplies the
+                    // pages array as its first argument, which would otherwise
+                    // land in the forceFbRefresh parameter by accident.
+                    onConnected={() => { fetchData(true); }}
+                    onDisconnected={() => {
+                      // Clear the cached IG profile so the Instagram card stops
+                      // showing an account that is no longer linked.
+                      setIgProfile(null);
+                      setIgAvatarFailed(false);
+                      fetchData(true);
+                    }}
+                  />
 
                   {/* Show validation errors from existing accounts */}
                   {platformAccounts
@@ -441,24 +503,107 @@ export default function ConnectAccountsPage() {
 
                 <p className="text-[11px] text-text-secondary leading-relaxed mb-3 line-clamp-2">{platformDescriptions[p]}</p>
 
-                <div className="flex flex-wrap gap-1.5 mb-3">
-                  {platformFeatures[p]?.slice(0, 2).map(f => (
-                    <span key={f} className="px-2 py-1 bg-dark-900/60 rounded-lg text-[9px] font-semibold text-text-muted border border-white/5">{f}</span>
-                  ))}
-                </div>
+                {/* instagram_basic — connected IG Business account profile: picture,
+                    username, ID and follower/post counts. Fills the Instagram card so
+                    the user can confirm exactly which account is linked. */}
+                {p === 'instagram' && isConnected && igProfile ? (
+                  <div className="flex flex-col items-center text-center gap-2 mb-3 py-3 px-2 bg-dark-900/40 border border-white/5 rounded-xl">
+                    {igProfile.profile_picture_url && !igAvatarFailed ? (
+                      <img
+                        src={igProfile.profile_picture_url}
+                        alt={`${igProfile.username ?? igProfile.account_name} profile picture`}
+                        title="Instagram profile picture"
+                        referrerPolicy="no-referrer"
+                        width={224}
+                        height={224}
+                        decoding="async"
+                        onError={() => setIgAvatarFailed(true)}
+                        className="w-28 h-28 rounded-full object-cover border-2 border-pink-500/50 bg-dark-900"
+                      />
+                    ) : (
+                      <div className="w-28 h-28 rounded-full bg-dark-900 border-2 border-pink-500/50 flex items-center justify-center">
+                        <PlatformIcon platform="instagram" className="text-white" size="md" />
+                      </div>
+                    )}
+                    <div className="w-full min-w-0">
+                      <p
+                        className="text-sm font-bold text-text-primary truncate"
+                        title="Connected Instagram Business account"
+                      >
+                        {igProfile.username ? `@${igProfile.username}` : igProfile.account_name}
+                      </p>
+                      {(igProfile.followers_count != null || igProfile.media_count != null) && (
+                        <p
+                          className="text-[11px] text-text-secondary mt-0.5"
+                          title="Follower and post counts for this Instagram Business account"
+                        >
+                          {igProfile.followers_count != null &&
+                            `${igProfile.followers_count.toLocaleString()} followers`}
+                          {igProfile.followers_count != null && igProfile.media_count != null && ' · '}
+                          {igProfile.media_count != null &&
+                            `${igProfile.media_count.toLocaleString()} posts`}
+                        </p>
+                      )}
+                      {igProfile.ig_account_id && (
+                        <p
+                          className="text-[10px] text-text-muted truncate mt-0.5 font-mono"
+                          title="Instagram Business account ID"
+                        >
+                          ID: {igProfile.ig_account_id}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-1.5 mb-3">
+                    {platformFeatures[p]?.slice(0, 2).map(f => (
+                      <span key={f} className="px-2 py-1 bg-dark-900/60 rounded-lg text-[9px] font-semibold text-text-muted border border-white/5">{f}</span>
+                    ))}
+                  </div>
+                )}
 
-                <button
-                  onClick={() => handleConnect(p)}
-                  className={clsx(
-                    "mt-auto w-full py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2",
-                    isConnected
-                      ? "bg-success/10 text-success border border-success/20 hover:bg-success/20"
-                      : "bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20"
+                {/* Instagram has no connect/disconnect of its own: it is granted and
+                    revoked by the Meta card's single OAuth flow. Showing buttons here
+                    would imply a separate connection that does not exist. */}
+                {p === 'instagram' ? (
+                  <div className="mt-auto flex items-center gap-2 px-3 py-2.5 rounded-xl bg-dark-900/40 border border-white/5">
+                    <PlatformIcon platform="facebook" className="text-[#1877F2] flex-shrink-0" size="sm" />
+                    <p className="text-[10px] text-text-secondary leading-snug">
+                      {isConnected
+                        ? 'Connected through Meta. Manage or disconnect from the Meta card.'
+                        : 'Connects automatically with Meta — use the Meta card above.'}
+                    </p>
+                  </div>
+                ) : (
+                <div className="mt-auto flex items-center gap-2">
+                  <button
+                    onClick={() => handleConnect(p)}
+                    className={clsx(
+                      "flex-1 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2",
+                      isConnected
+                        ? "bg-success/10 text-success border border-success/20 hover:bg-success/20"
+                        : "bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20"
+                    )}
+                  >
+                    {isConnected ? <CheckCircleIcon className="w-4 h-4" /> : <LinkIcon className="w-4 h-4" />}
+                    {isConnected ? 'Manage' : 'Connect'}
+                  </button>
+                  {isConnected && (
+                    <button
+                      onClick={() => {
+                        const acct = accounts.find(a => a.platform === p && a.is_active)
+                          ?? accounts.find(a => a.platform === p);
+                        if (acct) setDisconnectAccount(acct);
+                      }}
+                      title={`Disconnect ${platformNames[p]} — revokes the stored access token`}
+                      className="py-2.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 bg-danger/10 text-danger border border-danger/20 hover:bg-danger/20"
+                    >
+                      <TrashIcon className="w-4 h-4" />
+                      Disconnect
+                    </button>
                   )}
-                >
-                  {isConnected ? <CheckCircleIcon className="w-4 h-4" /> : <LinkIcon className="w-4 h-4" />}
-                  {isConnected ? 'Manage' : 'Connect'}
-                </button>
+                </div>
+                )}
               </motion.div>
             );
           })}
@@ -627,7 +772,7 @@ export default function ConnectAccountsPage() {
                       <p className="text-[10px] text-text-muted">Pins · Boards · Video</p>
                     </div>
                   </div>
-                  <PinterestConnect onConnected={fetchData} compact />
+                  <PinterestConnect onConnected={() => { fetchData(); }} compact />
                 </motion.div>
               );
             }
@@ -656,7 +801,7 @@ export default function ConnectAccountsPage() {
                       <p className="text-[10px] text-text-muted">Videos · Shorts · Channel</p>
                     </div>
                   </div>
-                  <YouTubeConnect onConnected={fetchData} compact />
+                  <YouTubeConnect onConnected={() => { fetchData(); }} compact />
                 </motion.div>
               );
             }
@@ -685,7 +830,7 @@ export default function ConnectAccountsPage() {
                       <p className="text-[10px] text-text-muted">Posts · Links · Media</p>
                     </div>
                   </div>
-                  <RedditConnect onConnected={fetchData} compact />
+                  <RedditConnect onConnected={() => { fetchData(); }} compact />
                 </motion.div>
               );
             }
@@ -714,7 +859,7 @@ export default function ConnectAccountsPage() {
                       <p className="text-[10px] text-text-muted">Videos · Photos · Duets</p>
                     </div>
                   </div>
-                  <TikTokConnect onConnected={fetchData} compact />
+                  <TikTokConnect onConnected={() => { fetchData(); }} compact />
                 </motion.div>
               );
             }
@@ -743,7 +888,7 @@ export default function ConnectAccountsPage() {
                       <p className="text-[10px] text-text-muted">Google Posts · Locations</p>
                     </div>
                   </div>
-                  <GoogleBusinessConnect onConnected={fetchData} compact />
+                  <GoogleBusinessConnect onConnected={() => { fetchData(); }} compact />
                 </motion.div>
               );
             }
@@ -812,11 +957,16 @@ export default function ConnectAccountsPage() {
           {chatbotPlatforms.map(bot => bot.id === 'messenger' && !messengerEnabled ? { ...bot, status: 'Soon', canConnect: false } : bot).map(bot => (
             <motion.div
               key={bot.id}
-              whileHover={bot.canConnect ? { y: -6 } : {}}
-              onClick={() => bot.canConnect && handleConnect(bot.id as any)}
+              whileHover={bot.canConnect && bot.id !== 'messenger' ? { y: -6 } : {}}
+              // Messenger is granted by the Meta OAuth flow, not by its own form.
+              onClick={() => bot.canConnect && bot.id !== 'messenger' && handleConnect(bot.id as any)}
               className={clsx(
                 "group relative p-4 rounded-xl bg-dark-800 border overflow-hidden transition-all",
-                bot.canConnect ? "border-white/10 hover:border-warning/50 cursor-pointer" : "border-white/5 opacity-50"
+                bot.canConnect
+                  ? bot.id === 'messenger'
+                    ? "border-white/10"
+                    : "border-white/10 hover:border-warning/50 cursor-pointer"
+                  : "border-white/5 opacity-50"
               )}
             >
               <div className="absolute top-2 right-2">
@@ -837,11 +987,22 @@ export default function ConnectAccountsPage() {
                 </div>
               </div>
               <p className="text-[10px] text-text-secondary leading-relaxed mb-3 line-clamp-2">{bot.desc}</p>
-              <div className="flex flex-wrap gap-1">
-                {bot.features.slice(0, 2).map(f => (
-                  <span key={f} className="text-[8px] font-semibold text-text-muted px-2 py-0.5 rounded bg-white/5">{f}</span>
-                ))}
-              </div>
+              {bot.id === 'messenger' && bot.canConnect ? (
+                <div className="flex items-center gap-2 px-2.5 py-2 rounded-lg bg-dark-900/40 border border-white/5">
+                  <PlatformIcon platform="facebook" className="text-[#1877F2] flex-shrink-0" size="sm" />
+                  <p className="text-[9px] text-text-secondary leading-snug">
+                    {connectedPlatforms.includes('facebook')
+                      ? 'Connected through Meta. Manage from the Meta card.'
+                      : 'Connects automatically with Meta — use the Meta card above.'}
+                  </p>
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-1">
+                  {bot.features.slice(0, 2).map(f => (
+                    <span key={f} className="text-[8px] font-semibold text-text-muted px-2 py-0.5 rounded bg-white/5">{f}</span>
+                  ))}
+                </div>
+              )}
             </motion.div>
           ))}
         </div>
@@ -1143,14 +1304,16 @@ export default function ConnectAccountsPage() {
         </form>
       </Modal>
 
-      {/* CONNECTION SEVERANCE AUTHENTICATION */}
+      {/* Disconnect confirmation. Plain English on purpose: this dialog appears in the
+          Meta App Review screencast, and the review guidelines require UI copy whose
+          meaning is self-evident. */}
       <ConfirmModal
         isOpen={!!disconnectAccount}
         onClose={() => setDisconnectAccount(null)}
         onConfirm={handleDisconnect}
-        title="Sever Operational Link?"
-        message={`Are you absolutely certain you wish to terminate the API bridge for ${disconnectAccount ? (platformNames[disconnectAccount.platform] || disconnectAccount.platform) : 'this node'}? All automated directives assigned to this endpoint will be aborted permanently.`}
-        confirmText="Confirm Severance"
+        title={`Disconnect ${disconnectAccount ? (platformNames[disconnectAccount.platform] || disconnectAccount.platform) : 'account'}?`}
+        message={`SellAnto will revoke its stored access token for ${disconnectAccount ? (platformNames[disconnectAccount.platform] || disconnectAccount.platform) : 'this account'} and stop publishing to it. Scheduled posts for this account will not be published. You can reconnect at any time. Your existing posts on the platform are not deleted.`}
+        confirmText="Disconnect"
         variant="danger"
         isLoading={isDisconnecting}
       />

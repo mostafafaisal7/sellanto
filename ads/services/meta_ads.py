@@ -8,8 +8,11 @@ Pinned to API version v21.0. Bump in METAADS_API_VERSION when migrating.
 """
 import logging
 import time
+from datetime import datetime
 
 import requests
+
+from django.utils import timezone
 
 from ads.models import AdAccount, AdCampaign
 from ads.services.token_encryption import decrypt_token
@@ -111,9 +114,32 @@ def list_user_ad_accounts(user_access_token):
 
     Returns list of dicts: {id, account_id, name, currency, timezone_name, business_id}
     `id` is the full 'act_<digits>' form; `account_id` is bare digits.
+
+    `business` is the only field here that needs `business_management`, which we
+    deliberately don't request (see FB_SCOPES in platforms/oauth_views.py). Meta
+    only enforces that when an account is actually owned by a Business Manager —
+    personally-owned accounts return a null `business` and the call succeeds. So
+    the field works for some users and hard-fails (#100) for others, taking the
+    whole request down with it and yielding zero accounts.
+
+    We therefore ask for `business` optimistically and retry without it on that
+    error: BM-owned accounts are still discovered, just with an empty
+    business_id. Nothing downstream depends on business_id (`is_sandbox` comes
+    from account_status), so losing it only costs the BM linkage.
     """
-    fields = 'id,account_id,name,currency,timezone_name,account_status,business'
-    body = _get('me/adaccounts', user_access_token, fields=fields, limit=100)
+    base_fields = 'id,account_id,name,currency,timezone_name,account_status'
+    try:
+        body = _get('me/adaccounts', user_access_token,
+                    fields=base_fields + ',business', limit=100)
+    except MetaAdsError as e:
+        if e.code != 100:
+            raise
+        logger.info(
+            '[meta_ads] adaccounts: dropping `business` field and retrying '
+            f'(#{e.code}: {e})'
+        )
+        body = _get('me/adaccounts', user_access_token,
+                    fields=base_fields, limit=100)
     out = []
     for a in body.get('data', []):
         status = a.get('account_status')
@@ -1910,3 +1936,167 @@ def get_creative_preview(
     if isinstance(data, list) and data and isinstance(data[0], dict):
         return data[0].get('body', '') or ''
     return ''
+
+
+# ── Importing campaigns that already exist on Meta ──────────────────────────
+
+# Meta objective (ODAX and the older names) -> our OBJECTIVE_CHOICES key.
+# "REVERSE" because _META_OBJECTIVE_MAP above maps the other way (ours -> Meta's)
+# for campaign creation; naming this one the same shadowed it and broke every
+# create path with "Unsupported objective 'traffic'".
+_META_OBJECTIVE_REVERSE_MAP = {
+    'OUTCOME_TRAFFIC':     'traffic',
+    'OUTCOME_ENGAGEMENT':  'engagement',
+    'OUTCOME_LEADS':       'leads',
+    'OUTCOME_SALES':       'sales',
+    'OUTCOME_AWARENESS':   'awareness',
+    'OUTCOME_APP_PROMOTION': 'traffic',
+    # Pre-ODAX objectives still returned for older campaigns.
+    'LINK_CLICKS':         'traffic',
+    'POST_ENGAGEMENT':     'engagement',
+    'PAGE_LIKES':          'engagement',
+    'LEAD_GENERATION':     'leads',
+    'CONVERSIONS':         'sales',
+    'BRAND_AWARENESS':     'awareness',
+    'REACH':               'awareness',
+    'VIDEO_VIEWS':         'engagement',
+    'MESSAGES':            'engagement',
+}
+
+# Meta effective_status -> our CAMPAIGN_STATUS_CHOICES key.
+_META_STATUS_REVERSE_MAP = {
+    'ACTIVE':               'active',
+    'PAUSED':               'paused',
+    'CAMPAIGN_PAUSED':      'paused',
+    'ADSET_PAUSED':         'paused',
+    'IN_PROCESS':           'pending_review',
+    'PENDING_REVIEW':       'pending_review',
+    'PENDING_BILLING_INFO': 'pending_review',
+    'DISAPPROVED':          'disapproved',
+    'WITH_ISSUES':          'disapproved',
+    'ARCHIVED':             'archived',
+    'DELETED':              'archived',
+    'COMPLETED':            'completed',
+}
+
+
+def _to_int(value, default=0):
+    """Graph returns money as decimal *strings* ('200'), and omits empty fields."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _parse_meta_time(value):
+    """Meta timestamps are ISO-8601 with an offset ('2026-08-19T10:11:12+0000')."""
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+    except (TypeError, ValueError):
+        return None
+
+
+def import_account_campaigns(ad_account: AdAccount, user) -> dict:
+    """Mirror the campaigns that already exist on Meta into local AdCampaign rows.
+
+    The app only ever created AdCampaign rows for campaigns it launched itself,
+    so campaigns made in Ads Manager -- or ones whose local row was lost -- were
+    invisible in Sellanto even though the dashboard counted them via
+    act_<id>/campaigns. This backfills them.
+
+    Matching is by `external_campaign_id`, so it is idempotent: re-running
+    updates name/status/budget instead of duplicating. Rows the app created are
+    updated in place, never replaced, so their boosted_post link survives.
+
+    Returns {'imported': int, 'updated': int, 'total': int}. When the user has
+    no Brand, `skipped_no_brand` is returned instead: AdCampaign.brand is a
+    required FK, so there is nothing valid to write until a brand exists.
+    """
+    token = decrypt_token(ad_account.encrypted_token)
+    if not token:
+        raise MetaAdsError('No token on AdAccount -- re-authenticate.')
+
+    # AdCampaign.brand is non-nullable. Prefer the brand already on the ad
+    # account, else the user's first — matching _first_brand() in ads/views.py.
+    from brands.models import Brand
+    brand = ad_account.brand or Brand.objects.filter(user=user).order_by('id').first()
+    if brand is None:
+        logger.info(
+            '[meta_ads] import skipped for act_%s: user %s has no Brand',
+            ad_account.external_id, getattr(user, 'id', None),
+        )
+        return {'imported': 0, 'updated': 0, 'total': 0, 'skipped_no_brand': True}
+
+    act_id = f'act_{ad_account.external_id}'
+    body = _get(
+        f'{act_id}/campaigns', token,
+        fields=(
+            'id,name,status,effective_status,objective,created_time,'
+            'start_time,stop_time,daily_budget,lifetime_budget,'
+            # Budgets live on the ad set unless the campaign uses CBO, and most
+            # do not — so the campaign's own daily_budget is commonly absent.
+            # Pulling the ad sets inline (one request, not one per campaign)
+            # lets us fall back to their budgets instead of displaying $0.00.
+            'adsets.limit(50){daily_budget,lifetime_budget,status}'
+        ),
+        limit=200,
+    )
+
+    imported = updated = 0
+    for c in body.get('data', []):
+        if not isinstance(c, dict) or not c.get('id'):
+            continue
+
+        eff = c.get('effective_status') or c.get('status') or ''
+
+        # Campaign-level budget (CBO). When absent the budget is set per ad set,
+        # so sum the ad sets -- that total is what the campaign actually spends
+        # per day, and is the number Ads Manager shows. Without this the card
+        # rendered "$0.00/day" for every non-CBO campaign.
+        daily = _to_int(c.get('daily_budget'))
+        lifetime = _to_int(c.get('lifetime_budget'))
+        if not daily and not lifetime:
+            adsets = (c.get('adsets') or {}).get('data') or []
+            # Deleted/archived ad sets keep their budget field but no longer
+            # spend, so they must not inflate the figure.
+            live = [s for s in adsets
+                    if isinstance(s, dict)
+                    and s.get('status') not in ('DELETED', 'ARCHIVED')]
+            daily = sum(_to_int(s.get('daily_budget')) for s in live)
+            lifetime = sum(_to_int(s.get('lifetime_budget')) for s in live)
+
+        start = _parse_meta_time(c.get('start_time')) or \
+            _parse_meta_time(c.get('created_time')) or timezone.now()
+
+        defaults = {
+            'user':        user,
+            'name':        (c.get('name') or 'Untitled campaign')[:255],
+            'objective':   _META_OBJECTIVE_REVERSE_MAP.get(c.get('objective'), 'traffic'),
+            'status':      _META_STATUS_REVERSE_MAP.get(eff, 'paused'),
+            'daily_budget_minor':    daily,
+            'lifetime_budget_minor': lifetime or None,
+            'start_date':  start,
+            'end_date':    _parse_meta_time(c.get('stop_time')),
+            'last_synced_at': timezone.now(),
+        }
+
+        obj, created = AdCampaign.objects.update_or_create(
+            ad_account=ad_account,
+            external_campaign_id=str(c['id']),
+            # `brand` only on create: rows the app made already carry the right
+            # brand, and re-assigning it on every sync would clobber that.
+            defaults=defaults,
+            create_defaults={**defaults, 'brand': brand},
+        )
+        if created:
+            imported += 1
+        else:
+            updated += 1
+
+    logger.info(
+        '[meta_ads] import_account_campaigns %s: %s imported, %s updated',
+        act_id, imported, updated,
+    )
+    return {'imported': imported, 'updated': updated, 'total': imported + updated}

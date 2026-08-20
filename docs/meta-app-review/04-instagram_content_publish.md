@@ -54,3 +54,62 @@
 ## Notes
 - Meta counts the container-create / publish calls under this permission. A single
   successful IG publish satisfies the requirement.
+
+---
+
+## 🔴 REJECTION — 2026-08-04, 4:16 AM
+
+> **Screencast Not Aligned with Use Case Details**
+> **Developer Policy 1.6 - Build a Trustworthy Product**
+> We have determined that your apps' use case is allowed, however, the submitted
+> screencast fails to demonstrate the end-to-end experience of the use case described in
+> the submission notes, hence the requested permission/feature is rejected.
+> Please resolve this issue by sharing a new screencast that contains the end-to-end
+> experience of the use case when you re-submit for App Review, including:
+> The complete Meta login flow; A user granting app access to the permission/feature;
+> The end-to-end experience of the use case for the requested permission/feature;
+> Follow the best practices shared in the Screen Recording Guide, including: use English
+> as the app UI language, provide captions and tool-tips, and explain the meaning of
+> buttons and other UI elements; and If your app is a server-to-server app OR your app is
+> using system user token to access Meta API, please indicate it in your next submission
+> so that we're aware that frontend Meta login authentication flow is not visible.
+
+### Justification submitted (ACCEPTED — do not rewrite)
+> SellAnto allows users to publish photos, videos, and reels to their connected Instagram
+> Business account. The app creates a media container via POST /{ig_user_id}/media with
+> the media URL and caption, then publishes it via POST /{ig_user_id}/media_publish. Users
+> can also schedule Instagram posts for a future time.
+
+### Analysis — no code defect (verified 2026-08-17)
+Unlike `instagram_basic` (whose notes described an unbuilt screen), **every claim above is
+backed by shipped code**:
+
+| Claim | Code |
+|---|---|
+| media container | `platforms/services/instagram.py:299` |
+| media_publish | `platforms/services/instagram.py:382` |
+| videos / reels | `instagram.py:308` (`media_type=REELS`) |
+| scheduling | `CreatePostPage.tsx` + `posts/scheduler.py:386` |
+
+So **only the video failed.** The likeliest gap: the recording showed the post being
+scheduled or the app's success toast, but never showed the post **live on the real
+Instagram account**. That verification shot is mandatory in the re-record.
+
+**Two constraints that break naive recordings:**
+1. IG publishing requires the **Facebook Page** too — `posts/scheduler.py:396-419` reads
+   `facebook_page_id` + `facebook_access_token` and stages the media on the Page as
+   unpublished before creating the IG container.
+2. **No synchronous publish exists.** APScheduler's `check_and_post` runs every 60s
+   (`posts/scheduler.py:35-38`); "Publish Now" sets `scheduled_time` to now + 1 minute
+   (`CreatePostPage.tsx:215-221`). Expect ~90s for a photo, far longer for a reel
+   (`instagram.py:330` sleeps 60s plus FB video polling) — **record a photo**.
+
+➡️ Full scene-by-scene script:
+[04a-instagram_content_publish-screencast-script.md](04a-instagram_content_publish-screencast-script.md)
+
+### Pre-flight (2026-08-17) — PUBLISH READY ✅
+```
+IG customoobd (17841477940902567) · FB Customoo (877455748776936)
+tokens present · content_publishing_limit 0/100 per 86400s
+instagram_content_publish present in token
+```

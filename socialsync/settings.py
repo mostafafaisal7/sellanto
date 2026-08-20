@@ -109,6 +109,19 @@ CSRF_TRUSTED_ORIGINS = [
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 USE_X_FORWARDED_HOST = True
 
+# ─── Cross-Origin-Opener-Policy ───────────────────────────────────────
+# Django defaults this to 'same-origin', which severs window.opener between a
+# popup and the page that opened it. Every OAuth flow here (Facebook, LinkedIn,
+# Pinterest, TikTok, YouTube, Reddit, Google Business) opens a popup that must
+# report its result back to the opener — under the default, postMessage never
+# arrives and popup.closed reads as false forever, so the connect flow appears
+# to hang until the user reloads by hand.
+#
+# 'same-origin-allow-popups' keeps this document isolated from anything that
+# opens IT (the actual protection against cross-origin attackers), while still
+# letting popups WE open talk back to us.
+SECURE_CROSS_ORIGIN_OPENER_POLICY = 'same-origin-allow-popups'
+
 # Application definition
 
 INSTALLED_APPS = [

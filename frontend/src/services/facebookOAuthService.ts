@@ -35,6 +35,11 @@ export interface FacebookStatusIGAccount {
   is_active: boolean;
   error_message: string | null;
   connected_at: string;
+  /** instagram_basic profile metadata — null when the live profile read failed */
+  username: string | null;
+  profile_picture_url: string | null;
+  followers_count: number | null;
+  media_count: number | null;
 }
 
 export interface MessengerStatusData {
@@ -153,6 +158,20 @@ export const facebookOAuthService = {
     const res = await api.get('/platforms/facebook/status/', {
       params: forceRefresh ? { refresh: '1' } : undefined,
     });
+    return res.data;
+  },
+
+  /**
+   * Disconnect every Meta surface at once — Facebook Pages, Instagram Business
+   * accounts and the Messenger bot. They are granted together on one consent
+   * screen, so they are revoked together.
+   */
+  async disconnect(): Promise<{
+    success: boolean;
+    removed: { facebook: number; instagram: number; messenger: number; ad_accounts: number };
+    message: string;
+  }> {
+    const res = await api.post('/platforms/facebook/disconnect/');
     return res.data;
   },
 

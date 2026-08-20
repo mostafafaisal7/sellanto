@@ -21,6 +21,7 @@ from datetime import timedelta
 from urllib.parse import urlencode
 
 from django.conf import settings
+from django.core.cache import cache
 from django.http import HttpResponse
 from django.utils import timezone
 
@@ -31,6 +32,7 @@ from rest_framework import status
 
 from platforms.models import SocialAccount, OAuthState
 from platforms.services.facebook import FacebookService
+from platforms.services.instagram import InstagramService
 from messenger_bot.models import MessengerConnection
 from accounts.models import SiteConfiguration
 from accounts.utils import is_messenger_enabled
@@ -42,6 +44,11 @@ logger = logging.getLogger(__name__)
 FB_GRAPH     = 'https://graph.facebook.com/v21.0'
 FB_AUTH_URL  = 'https://www.facebook.com/v21.0/dialog/oauth'
 FB_TOKEN_URL = f'{FB_GRAPH}/oauth/access_token'
+
+# How long to cache the instagram_basic profile read (username, picture, follower /
+# media counts) used by the connection-status card. Keeps an ordinary page load from
+# firing a blocking Graph call per Instagram account; ?refresh=1 bypasses it.
+IG_PROFILE_CACHE_TTL = 15 * 60  # seconds
 
 # Permissions for posting + Messenger + Instagram + Ads
 # Ads scopes (ads_management, ads_read, pages_manage_ads) work in dev tier
@@ -57,6 +64,12 @@ FB_SCOPES = ','.join([
     'pages_manage_metadata',
     'pages_manage_posts',
     'pages_read_engagement',
+    # Messenger — required by the messenger_bot app: POST /me/messages
+    # (messenger_bot/views.py, services/message_handler.py, api/views.py) and
+    # GET /{page_id}/conversations. Removed by mistake in 5e942c2f as "unused";
+    # the feature is live and gated by the SiteConfiguration kill switch, not by
+    # this scope. Needs Advanced Access from App Review to work for non-admin users.
+    'pages_messaging',
     'instagram_basic',
     'instagram_content_publish',
     'instagram_manage_comments',
@@ -459,6 +472,13 @@ def facebook_oauth_callback(request):
                         )
                     ig_account.mark_as_active()
 
+                    # The row is reused across reconnects (same id, new token),
+                    # so the 15-minute profile cache from the previous
+                    # connection would otherwise outlive the credentials it was
+                    # read with — and describe the old account if the user
+                    # linked a different one.
+                    cache.delete(f'ig_profile:{ig_account.id}')
+
                     page_info['has_instagram']  = True
                     page_info['instagram_name'] = ig_name
                     logger.info(f'[FB OAuth] Instagram saved: {ig_name} for page {page_name}')
@@ -789,6 +809,38 @@ def facebook_connection_status(request):
 
     ig_list = []
     for acc in ig_accounts:
+        # instagram_basic: read the account's basic profile metadata (username, ID,
+        # picture, follower/media counts) so the UI can show the user exactly which
+        # Instagram Business account is linked.
+        #
+        # Cached for IG_PROFILE_CACHE_TTL so an ordinary page load does not fire a
+        # blocking Graph call per account; ?refresh=1 forces a live read. Best-effort
+        # throughout — a failure must never break the status card, so we degrade to
+        # the stored account name.
+        ig_profile = {}
+        if acc.instagram_business_account_id and acc.instagram_access_token:
+            cache_key = f'ig_profile:{acc.id}'
+            cached = None if force_refresh else cache.get(cache_key)
+
+            if cached is not None:
+                ig_profile = cached
+            else:
+                try:
+                    ok, profile = InstagramService.get_profile(
+                        acc.instagram_access_token, acc.instagram_business_account_id
+                    )
+                    if ok:
+                        ig_profile = profile
+                        cache.set(cache_key, profile, IG_PROFILE_CACHE_TTL)
+                    else:
+                        logger.warning(
+                            f'[FB Status] IG profile read failed for {acc.account_name}: {profile}'
+                        )
+                except Exception as e:
+                    logger.warning(
+                        f'[FB Status] IG profile read errored for {acc.account_name}: {e}'
+                    )
+
         ig_list.append({
             'account_id':    acc.id,
             'account_name':  acc.account_name,
@@ -798,6 +850,11 @@ def facebook_connection_status(request):
             'is_active':     acc.is_active,
             'error_message': acc.validation_error or None,
             'connected_at':  acc.connected_at,
+            # instagram_basic profile metadata (null when the live read failed)
+            'username':            ig_profile.get('username'),
+            'profile_picture_url': ig_profile.get('profile_picture_url'),
+            'followers_count':     ig_profile.get('followers_count'),
+            'media_count':         ig_profile.get('media_count'),
         })
 
     # ── Messenger Bot (gated by kill switch) ─────────────────────────────────
@@ -936,6 +993,60 @@ def facebook_connection_status(request):
         'messenger_enabled': messenger_enabled,
         'missing':  missing,
         'warnings': warnings,
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def facebook_disconnect(request):
+    """
+    Disconnect every Meta surface this user has connected in one call:
+    Facebook Pages, Instagram Business accounts and the Messenger bot.
+
+    They are granted together on a single consent screen (one OAuth flow creates
+    all three), so unlinking them individually would leave the user in a
+    half-connected state the status card reports as broken. The ad accounts
+    discovered from the same token are removed too.
+
+    We deliberately do NOT call Facebook's DELETE /{user-id}/permissions —
+    that revokes the app for the whole Facebook account, which is a heavier,
+    non-obvious side effect. Users who want that are pointed at Facebook's own
+    Business Integrations settings.
+    """
+    user = request.user
+    removed = {}
+
+    accounts = SocialAccount.objects.filter(
+        user=user, platform__in=['facebook', 'instagram']
+    )
+    # Drop the cached instagram_basic profile reads before the rows disappear.
+    for acc in accounts:
+        cache.delete(f'ig_profile:{acc.id}')
+
+    removed['facebook'] = accounts.filter(platform='facebook').count()
+    removed['instagram'] = accounts.filter(platform='instagram').count()
+    accounts.delete()
+
+    removed['messenger'] = MessengerConnection.objects.filter(user=user).count()
+    MessengerConnection.objects.filter(user=user).delete()
+
+    # Ad accounts came from the same token; leaving them behind would strand
+    # rows whose token no longer exists.
+    try:
+        from ads.models import AdAccount
+        qs = AdAccount.objects.filter(user=user)
+        removed['ad_accounts'] = qs.count()
+        qs.delete()
+    except Exception as e:
+        logger.warning(f'[FB Disconnect] Ad account cleanup skipped for {user.username}: {e}')
+        removed['ad_accounts'] = 0
+
+    logger.info(f'[FB Disconnect] {user.username} disconnected Meta: {removed}')
+
+    return Response({
+        'success': True,
+        'removed': removed,
+        'message': 'Facebook, Instagram and Messenger have been disconnected.',
     })
 
 
@@ -1252,20 +1363,50 @@ def _render_popup_html(json_data, success=True, warning=None, title=None, detail
     (function () {{
       var payload = {json_data};
 
-      // Primary channel: localStorage (immune to Facebook's COOP headers that
-      // null out window.opener). The parent window listens for the 'storage' event.
+      var raw = JSON.stringify(payload);
+
+      // Channel 1: localStorage. Note the 'storage' event does NOT fire in the
+      // tab that performed the write, so this alone cannot notify a same-origin
+      // opener -- it is the durable record that handleConnect's poll reads once
+      // the popup closes, and the cross-origin-tab channel.
       try {{
-        localStorage.setItem('fb_oauth_result', JSON.stringify(payload));
+        localStorage.setItem('fb_oauth_result', raw);
       }} catch (e) {{
         console.error('[FB OAuth] localStorage write failed:', e);
       }}
 
-      // Secondary channel: postMessage (works when opener is still available,
-      // i.e. when popup is not disrupted by COOP headers).
+      // Channel 2: BroadcastChannel -- same-origin, and unlike 'storage' it DOES
+      // reach other contexts of the same origin including the opener. This is
+      // the one that fires when app and API share an origin (single-port / the
+      // ngrok tunnel), which is where the old two-channel setup went silent.
       try {{
-        var targetOrigin = '{frontend_url}';
+        if (typeof BroadcastChannel !== 'undefined') {{
+          var bc = new BroadcastChannel('fb_oauth');
+          bc.postMessage(payload);
+          // Closing synchronously can drop a message that has not been
+          // dispatched yet; let the task queue drain first.
+          setTimeout(function () {{ try {{ bc.close(); }} catch (e) {{}} }}, 1000);
+        }}
+      }} catch (e) {{
+        console.error('[FB OAuth] BroadcastChannel failed:', e);
+      }}
+
+      // Channel 3: postMessage to the opener. The configured frontend_url is
+      // often stale (it pointed at http://localhost:8000 while the app was being
+      // used over the ngrok domain), and a targetOrigin mismatch makes the
+      // browser drop the message silently -- so try the configured origin AND
+      // this page's own origin, which is the app's origin whenever they share
+      // one. The parent validates the sender, so the extra attempt is safe.
+      try {{
         if (window.opener && !window.opener.closed) {{
-          window.opener.postMessage(payload, targetOrigin);
+          var origins = ['{frontend_url}', window.location.origin];
+          var sent = {{}};
+          for (var i = 0; i < origins.length; i++) {{
+            var o = origins[i];
+            if (!o || sent[o]) continue;
+            sent[o] = 1;
+            try {{ window.opener.postMessage(payload, o); }} catch (e) {{}}
+          }}
         }}
       }} catch (err) {{
         console.error('[FB OAuth] postMessage failed:', err);

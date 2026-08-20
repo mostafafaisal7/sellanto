@@ -22,6 +22,7 @@ import { BoostPostModal } from '../components/ads/BoostPostModal';
 import { BoostFromContentModal } from '../components/ads/BoostFromContentModal';
 import { format, formatDistanceToNow } from 'date-fns';
 import { Button, Card, StatusBadge, PlatformBadge, Modal, ConfirmModal, LoadingPlaceholder } from '../components/ui';
+import { PublishingResults } from '../components/posts/PublishingResults';
 import { usePostStore } from '../store';
 import type { Post, PostStatus } from '../types';
 
@@ -397,31 +398,10 @@ export function MyPostsPage() {
             </div>
 
             {/* Results */}
-            {selectedPost.platform_results && selectedPost.platform_results.length > 0 && (
-              <div>
-                <h4 className="text-sm font-medium text-text-secondary mb-2">Publishing Results</h4>
-                <div className="space-y-2">
-                  {selectedPost.platform_results.map((result, i) => (
-                    <div
-                      key={i}
-                      className={`flex items-center gap-3 p-3 rounded-xl ${
-                        result.success ? 'bg-success/10 border border-success/20' : 'bg-danger/10 border border-danger/20'
-                      }`}
-                    >
-                      {result.success ? (
-                        <CheckCircleIcon className="w-5 h-5 text-success" />
-                      ) : (
-                        <XCircleIcon className="w-5 h-5 text-danger" />
-                      )}
-                      <span className="text-sm capitalize font-medium">{result.platform}</span>
-                      <span className={`text-sm ${result.success ? 'text-success' : 'text-danger'}`}>
-                        {result.success ? 'Published successfully' : result.error || 'Failed to publish'}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            <PublishingResults
+              results={selectedPost.platform_results ?? []}
+              postStatus={selectedPost.status}
+            />
 
             {/* Actions */}
             <div className="flex gap-3 pt-4 border-t border-white/10">

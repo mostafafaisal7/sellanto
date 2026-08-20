@@ -356,9 +356,42 @@ class CampaignListCreateView(APIView):
         provider = (request.GET.get('provider') or '').strip().lower()
         if provider in ('meta', 'google'):
             campaigns = campaigns.filter(ad_account__provider=provider)
+
+        # Campaigns that already exist on Meta — made in Ads Manager, or whose
+        # local row was lost — never had an AdCampaign row, because rows were
+        # only written by the flows that launch a campaign from here. The
+        # dashboard counted them (get_account_summary reads act_<id>/campaigns)
+        # while this list showed "No campaigns yet", so the two disagreed.
+        #
+        # Backfill on an empty result, and when ?sync=1 asks explicitly. Guarded
+        # to the empty case so the common path stays a single local query and we
+        # don't hit Graph on every poll. Best-effort: a Meta failure must still
+        # return the local list rather than error the page.
+        wants_sync = request.GET.get('sync') == '1'
+        if (wants_sync or not campaigns.exists()) and provider != 'google':
+            self._import_meta_campaigns(request.user)
+            campaigns = AdCampaign.objects.filter(
+                user=request.user
+            ).select_related('ad_account', 'brand')
+            if provider in ('meta', 'google'):
+                campaigns = campaigns.filter(ad_account__provider=provider)
+
         return Response({
             'campaigns': [_serialize_campaign(c) for c in campaigns],
         })
+
+    @staticmethod
+    def _import_meta_campaigns(user):
+        """Mirror Meta-side campaigns into local rows. Never raises."""
+        for account in AdAccount.objects.filter(
+            user=user, provider='meta', is_active=True
+        ):
+            try:
+                meta_ads.import_account_campaigns(account, user)
+            except Exception as e:
+                logger.warning(
+                    '[ads] campaign import failed for account %s: %s', account.id, e
+                )
 
 
 class CampaignDetailView(APIView):

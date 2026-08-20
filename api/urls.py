@@ -7,6 +7,7 @@ from platforms.oauth_views import (
     facebook_oauth_callback,
     facebook_setup_messenger,
     facebook_connection_status,
+    facebook_disconnect,
 )
 from platforms.linkedin_oauth_views import (
     linkedin_oauth_initiate,
@@ -97,6 +98,7 @@ urlpatterns = [
     path('platforms/facebook/callback/',        facebook_oauth_callback,    name='fb-oauth-callback'),
     path('platforms/facebook/setup-messenger/', facebook_setup_messenger,   name='fb-setup-messenger'),
     path('platforms/facebook/status/',          facebook_connection_status, name='fb-conn-status'),
+    path('platforms/facebook/disconnect/',      facebook_disconnect,        name='fb-disconnect'),
 
     # ── LinkedIn OAuth & Connection Status ──────────────────────────────────
     path('platforms/linkedin/initiate/',            linkedin_oauth_initiate,            name='li-oauth-initiate'),
