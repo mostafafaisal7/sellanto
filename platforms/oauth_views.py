@@ -55,17 +55,22 @@ IG_PROFILE_CACHE_TTL = 15 * 60  # seconds
 # immediately for the app admin. For non-admin users they require App Review
 # approval (Advanced Access for ads_management) before Meta will surface them
 # on the consent screen for other accounts.
-# NOTE: business_management IS required. It was previously left out because
-# ad-account discovery uses GET /me/adaccounts and nothing called the Business
-# Manager API. That reasoning held only while every Page sat on the classic
-# user→Page edge. A Page owned by a Business Portfolio is invisible to
-# GET /me/accounts — Meta returns an empty list with HTTP 200 and no error,
-# which surfaced as a false "No Facebook Pages Found" for:
-#   • Pages assigned to the user from someone else's portfolio, and
-#   • Pages moved into a portfolio by linking an Instagram Business account.
-# _fetch_business_pages() walks owned_pages/client_pages to recover them, and
-# that needs this permission. Requires Advanced Access from App Review before
-# it works for non-admin users.
+# NOTE: business_management is REQUIRED — do not remove it. This was established
+# by A/B test, not by reasoning, because the failure mode is silent: when the
+# scope is missing, GET /me/accounts returns {"data": []} with HTTP 200 and NO
+# error key, while GET /me/permissions reports pages_show_list granted and
+# nothing declined. Every signal says "this account has no Pages"; the Pages are
+# simply unreachable over the classic user→Page edge because they live in a
+# Business Portfolio (which is where a Page ends up once an Instagram Business
+# account is linked to it, and where assigned Pages always live).
+#
+#   with business_management    → Pages connect, including assigned ones
+#   without business_management → "No Facebook Pages Found", /me/businesses
+#                                 returns "(#100) Missing Permission"
+#
+# Removing it once already regressed this. Requires Advanced Access from App
+# Review before it works for non-admin users — see
+# docs/meta-app-review/05-business_management.md.
 FB_SCOPES = ','.join([
     'business_management',
     'pages_show_list',
