@@ -55,11 +55,19 @@ IG_PROFILE_CACHE_TTL = 15 * 60  # seconds
 # immediately for the app admin. For non-admin users they require App Review
 # approval (Advanced Access for ads_management) before Meta will surface them
 # on the consent screen for other accounts.
-# NOTE: business_management is intentionally NOT requested — ad-account
-# discovery uses GET /me/adaccounts (authorized by ads_read/ads_management),
-# and the app has no Business Manager API calls. Re-add only if agency /
-# multi-client Business Manager features are built.
+# NOTE: business_management IS required. It was previously left out because
+# ad-account discovery uses GET /me/adaccounts and nothing called the Business
+# Manager API. That reasoning held only while every Page sat on the classic
+# user→Page edge. A Page owned by a Business Portfolio is invisible to
+# GET /me/accounts — Meta returns an empty list with HTTP 200 and no error,
+# which surfaced as a false "No Facebook Pages Found" for:
+#   • Pages assigned to the user from someone else's portfolio, and
+#   • Pages moved into a portfolio by linking an Instagram Business account.
+# _fetch_business_pages() walks owned_pages/client_pages to recover them, and
+# that needs this permission. Requires Advanced Access from App Review before
+# it works for non-admin users.
 FB_SCOPES = ','.join([
+    'business_management',
     'pages_show_list',
     'pages_manage_metadata',
     'pages_manage_posts',
@@ -113,6 +121,129 @@ def _get_fb_config():
 def _config_is_complete(cfg):
     """Returns True only if all required Facebook OAuth fields are set."""
     return bool(cfg['app_id'] and cfg['app_secret'] and cfg['redirect_uri'])
+
+
+def _fetch_business_pages(user_token):
+    """
+    Fetch Pages that live in a Meta Business Portfolio.
+
+    GET /me/accounts only walks the classic user→Page edge. A Page owned by a
+    Business Portfolio is not on that edge, so /me/accounts returns an empty
+    list (HTTP 200, no error) even when pages_show_list was granted. That is the
+    case for Pages assigned from another person's portfolio, and for Pages that
+    were moved into a portfolio — which is what happens when an Instagram
+    Business account is linked to a Page.
+
+    Walks both asset edges of every portfolio the user can see:
+      owned_pages  — Pages the portfolio itself owns
+      client_pages — Pages another portfolio shared with this one (agency case)
+
+    Returns a list shaped like /me/accounts entries so callers can treat both
+    sources identically. Each Page needs its own token, fetched per Page via
+    ?fields=access_token. Pages with no readable token are skipped: without one
+    nothing downstream (publishing, Messenger, insights) can work.
+
+    Requires business_management. Returns [] on any failure — this is a
+    fallback, so it must never raise into the OAuth flow.
+    """
+    pages = []
+    seen  = set()
+
+    try:
+        biz_resp = requests.get(
+            f'{FB_GRAPH}/me/businesses',
+            params={'fields': 'id,name', 'access_token': user_token},
+            timeout=15
+        ).json()
+    except Exception as e:
+        logger.warning(f'[FB OAuth] /me/businesses request failed: {e}')
+        return []
+
+    if 'error' in biz_resp:
+        err = biz_resp['error']
+        # code 100 / 200 here almost always means business_management was not
+        # granted — expected until the permission clears App Review.
+        logger.warning(
+            f'[FB OAuth] /me/businesses error: {err.get("message")} '
+            f'(code {err.get("code")}). business_management may not be granted.'
+        )
+        return []
+
+    businesses = biz_resp.get('data', [])
+    logger.info(f'[FB OAuth] Found {len(businesses)} Business Portfolio(s).')
+
+    for biz in businesses:
+        biz_id   = biz.get('id')
+        biz_name = biz.get('name', biz_id)
+        if not biz_id:
+            continue
+
+        for edge in ('owned_pages', 'client_pages'):
+            try:
+                resp = requests.get(
+                    f'{FB_GRAPH}/{biz_id}/{edge}',
+                    params={
+                        'fields':       'id,name,category',
+                        'access_token': user_token,
+                        'limit':        100,
+                    },
+                    timeout=15
+                ).json()
+            except Exception as e:
+                logger.warning(f'[FB OAuth] {biz_name}/{edge} request failed: {e}')
+                continue
+
+            if 'error' in resp:
+                logger.warning(
+                    f'[FB OAuth] {biz_name}/{edge} error: '
+                    f'{resp["error"].get("message")}'
+                )
+                continue
+
+            for page in resp.get('data', []):
+                page_id = page.get('id')
+                if not page_id or page_id in seen:
+                    continue
+                seen.add(page_id)
+
+                # Business asset edges don't return a Page access token; ask for
+                # it per Page. Without a token the Page is unusable downstream.
+                try:
+                    detail = requests.get(
+                        f'{FB_GRAPH}/{page_id}',
+                        params={
+                            'fields': (
+                                'id,name,access_token,category,'
+                                'instagram_business_account{id,name,username}'
+                            ),
+                            'access_token': user_token,
+                        },
+                        timeout=15
+                    ).json()
+                except Exception as e:
+                    logger.warning(
+                        f'[FB OAuth] Token fetch failed for Page {page_id}: {e}'
+                    )
+                    continue
+
+                if 'error' in detail or not detail.get('access_token'):
+                    logger.warning(
+                        f'[FB OAuth] No Page token for "{page.get("name")}" '
+                        f'({page_id}) via {edge} — skipping. '
+                        f'{detail.get("error", {}).get("message", "")}'
+                    )
+                    continue
+
+                pages.append(detail)
+                logger.info(
+                    f'[FB OAuth] Recovered Page "{detail.get("name")}" '
+                    f'({page_id}) from {biz_name}/{edge}.'
+                )
+
+    logger.info(
+        f'[FB OAuth] Business Portfolio fallback recovered {len(pages)} Page(s).'
+    )
+    return pages
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -356,12 +487,39 @@ def facebook_oauth_callback(request):
 
     pages = pages_data.get('data', [])
 
+    # ── Step 3b: Business Portfolio fallback ─────────────────────────────────
+    # GET /me/accounts only returns Pages reachable over the classic user→Page
+    # edge. A Page that lives in a Business Portfolio is NOT on that edge, so
+    # Meta answers HTTP 200 with an empty data array and no 'error' key even
+    # though pages_show_list was granted. This happens when:
+    #   • the Page was assigned to the user from someone else's portfolio, or
+    #   • the Page was moved into a portfolio — which is what linking an
+    #     Instagram Business account to a Page does.
+    # Both cases look identical to the user: "No Facebook Pages Found".
+    #
+    # Business-owned Pages are reachable via the business asset edges instead:
+    #   /me/businesses → /{id}/owned_pages  (portfolios the user owns)
+    #                  → /{id}/client_pages (portfolios that shared a Page)
+    # These require the business_management permission.
     if not pages:
+        logger.info(
+            '[FB OAuth] /me/accounts returned 0 Pages — trying Business '
+            'Portfolio asset edges.'
+        )
+        pages = _fetch_business_pages(long_lived_token)
+
+    if not pages:
+        logger.error(
+            f'[FB OAuth] No Pages via user edge or business edges. '
+            f'Raw /me/accounts: {pages_data}'
+        )
         return _popup_error(
             'No Facebook Pages Found',
-            'Your account has no Facebook Pages, or you are not an Admin of any Page. '
-            'You must be an Admin of at least one Facebook Page to connect. '
-            'Create or join a Facebook Page, then try again.'
+            'We could not load any Facebook Pages for your account. If your Pages are '
+            'managed in a Meta Business Portfolio, make sure you granted this app access '
+            'to them on the "Choose the Pages you want sellanto to access" screen, and '
+            'that you selected every Page you want to connect. Otherwise, confirm you '
+            'are an Admin of at least one Page, then try again.'
         )
 
     # ── Step 4: save SocialAccounts + live-validate each page ────────────────
