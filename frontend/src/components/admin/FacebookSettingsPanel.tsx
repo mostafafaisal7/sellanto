@@ -250,6 +250,55 @@ export function FacebookSettingsPanel() {
         </button>
       </div>
 
+      {/* Instagram Comment Hiding Toggle */}
+      <div className="flex items-center justify-between p-3 rounded-xl bg-white/[0.02] border border-white/5">
+        <div>
+          <p className="text-sm font-semibold text-white">Hide Instagram Comments</p>
+          <p className="text-xs text-slate-400 mt-0.5">
+            {s.instagram_comment_hide_enabled
+              ? 'Enabled — users can hide comments on their Instagram posts'
+              : 'Disabled — the Hide button is removed. Unhiding still works, so no comment stays stuck hidden'}
+          </p>
+        </div>
+        <button
+          onClick={async () => {
+            setError('');
+            try {
+              const token = localStorage.getItem('access_token');
+              const res = await fetch('/api/v1/admin/facebook-settings/', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                  instagram_comment_hide_enabled: !s.instagram_comment_hide_enabled,
+                }),
+              });
+              if (!res.ok) {
+                throw new Error(`Request failed with status ${res.status}`);
+              }
+              await load();
+            } catch (err) {
+              setError(
+                err instanceof Error
+                  ? `Failed to toggle Instagram comment hiding: ${err.message}`
+                  : 'Failed to toggle Instagram comment hiding.'
+              );
+            }
+          }}
+          className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+            s.instagram_comment_hide_enabled ? 'bg-green-500' : 'bg-slate-600'
+          }`}
+        >
+          <span
+            className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition duration-200 ease-in-out ${
+              s.instagram_comment_hide_enabled ? 'translate-x-5' : 'translate-x-0'
+            }`}
+          />
+        </button>
+      </div>
+
       {/* Current values display */}
       <div className="grid grid-cols-2 gap-2">
         {[

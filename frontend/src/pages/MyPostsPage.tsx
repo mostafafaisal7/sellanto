@@ -17,14 +17,17 @@ import {
   ArrowPathIcon,
   SparklesIcon,
   RocketLaunchIcon,
+  ArrowTopRightOnSquareIcon,
 } from '@heroicons/react/24/outline';
 import { BoostPostModal } from '../components/ads/BoostPostModal';
 import { BoostFromContentModal } from '../components/ads/BoostFromContentModal';
 import { format, formatDistanceToNow } from 'date-fns';
-import { Button, Card, StatusBadge, PlatformBadge, Modal, ConfirmModal, LoadingPlaceholder } from '../components/ui';
+import { Button, Card, StatusBadge, PlatformBadge, Modal, ConfirmModal, LoadingPlaceholder, platformNames } from '../components/ui';
+import { postService } from '../services';
 import { PublishingResults } from '../components/posts/PublishingResults';
+import { PostCommentTabs } from '../components/posts/PostCommentTabs';
 import { usePostStore } from '../store';
-import type { Post, PostStatus } from '../types';
+import type { Post, PostStatus, PlatformLink } from '../types';
 
 const statusFilters: { value: PostStatus | 'all'; label: string; icon: typeof DocumentTextIcon; color: string }[] = [
   { value: 'all', label: 'All', icon: DocumentTextIcon, color: 'text-text-primary' },
@@ -44,6 +47,7 @@ export function MyPostsPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [postLinks, setPostLinks] = useState<Record<number, PlatformLink[]>>({});
   const [_viewMode, _setViewMode] = useState<'list' | 'grid'>('list');
 
   useEffect(() => {
@@ -56,6 +60,36 @@ export function MyPostsPage() {
   useEffect(() => {
     fetchPosts();
   }, [fetchPosts]);
+
+  // Resolve each published post's public URL so the row can link straight to
+  // it. Facebook and Instagram permalinks need a Graph lookup, so this is one
+  // request per post — the backend caches each for a day, and only posts that
+  // actually reached a platform are asked about. A post whose lookup fails is
+  // recorded as an empty list so it is not retried on every render.
+  useEffect(() => {
+    const pending = posts.filter(
+      (p) => p.status === 'posted' && postLinks[p.id] === undefined
+    );
+    if (pending.length === 0) return;
+
+    let cancelled = false;
+    Promise.all(
+      pending.map((p) =>
+        postService
+          .getLinks(p.id)
+          .then((links) => [p.id, links] as const)
+          .catch(() => [p.id, [] as PlatformLink[]] as const)
+      )
+    ).then((entries) => {
+      if (!cancelled) {
+        setPostLinks((prev) => ({ ...prev, ...Object.fromEntries(entries) }));
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [posts, postLinks]);
 
   const handleDelete = async () => {
     if (!deleteModalPost) return;
@@ -295,6 +329,23 @@ export function MyPostsPage() {
                         >
                           View
                         </Button>
+                        {(postLinks[post.id] || []).map((link) => (
+                          <a
+                            key={link.platform}
+                            href={link.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title={`Open this post on ${platformNames[link.platform] || link.platform}`}
+                          >
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              leftIcon={<ArrowTopRightOnSquareIcon className="w-4 h-4" />}
+                            >
+                              {platformNames[link.platform] || link.platform}
+                            </Button>
+                          </a>
+                        ))}
                         {(post.status === 'scheduled' || post.status === 'draft') && (
                           <>
                             <Link to={`/posts/${post.id}/edit`}>
@@ -440,6 +491,9 @@ export function MyPostsPage() {
                 Close
               </Button>
             </div>
+
+            {/* Comment threads, one tab per platform this post reached. */}
+            <PostCommentTabs post={selectedPost} />
           </div>
         )}
       </Modal>

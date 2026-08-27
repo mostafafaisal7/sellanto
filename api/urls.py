@@ -574,6 +574,12 @@ urlpatterns = [
     path('posts/<int:post_id>/comments/', views.PostCommentsView.as_view(), name='post-comments'),
     path('comments/<int:comment_id>/reply/', views.CommentReplyView.as_view(), name='comment-reply'),
     path('comments/<int:comment_id>/ai-reply/', views.CommentAIReplyView.as_view(), name='comment-ai-reply'),
+    # Admin-controlled switches the frontend needs to render itself
+    path('features/', views.FeatureFlagsView.as_view(), name='feature-flags'),
+
+    # Instagram comment moderation (instagram_manage_comments: hide + delete)
+    path('comments/<int:comment_id>/hide/', views.CommentHideView.as_view(), name='comment-hide'),
+    path('comments/<int:comment_id>/delete/', views.CommentDeleteView.as_view(), name='comment-delete'),
 
     # Paid ads automation (Meta + Google Ads) — mounted under /api/v1/ads/
     path('ads/', include('ads.urls')),

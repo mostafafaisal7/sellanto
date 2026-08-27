@@ -1,5 +1,18 @@
 import api from './api';
-import type { Post, CreatePostData, UpdatePostData, PostFilters, PaginatedResponse } from '../types';
+import type { Post, CreatePostData, UpdatePostData, PostFilters, PaginatedResponse, PlatformLink } from '../types';
+
+/** Pull the backend's own message out of an axios error, so the user sees why
+ *  a publish was refused ("already posted") instead of a generic failure. */
+function apiErrorMessage(error: unknown, fallback: string): string {
+  if (error && typeof error === 'object' && 'response' in error) {
+    const data = (error as { response?: { data?: Record<string, unknown> } }).response?.data;
+    for (const key of ['error', 'detail', 'message']) {
+      const value = data?.[key];
+      if (typeof value === 'string' && value) return value;
+    }
+  }
+  return error instanceof Error && error.message ? error.message : fallback;
+}
 
 export const postService = {
   async list(filters?: PostFilters): Promise<PaginatedResponse<Post>> {
@@ -123,6 +136,23 @@ export const postService = {
   async cancel(id: number): Promise<Post> {
     const response = await api.post<Post>(`/posts/${id}/cancel/`);
     return response.data;
+  },
+
+  /** Publish immediately rather than waiting for the scheduler's next tick.
+   *  The backend runs the same publish_post() the scheduler runs. */
+  async publishNow(id: number): Promise<Post> {
+    try {
+      const response = await api.post<Post>(`/posts/${id}/publish/`);
+      return response.data;
+    } catch (error: unknown) {
+      throw new Error(apiErrorMessage(error, 'Could not publish this post.'));
+    }
+  },
+
+  /** Public URLs for the post on each platform it actually reached. */
+  async getLinks(id: number): Promise<PlatformLink[]> {
+    const response = await api.get<{ links: PlatformLink[] }>(`/posts/${id}/links/`);
+    return response.data.links || [];
   },
 
   async uploadMedia(files: File[]): Promise<string[]> {

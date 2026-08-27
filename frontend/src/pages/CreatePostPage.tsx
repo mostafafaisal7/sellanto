@@ -13,6 +13,7 @@ import {
   PlusIcon,
   ArrowLeftIcon,
   PaperAirplaneIcon,
+  BoltIcon,
   DocumentDuplicateIcon,
   HashtagIcon,
   UserIcon,
@@ -64,6 +65,11 @@ export function CreatePostPage() {
   const [connectedAccounts, setConnectedAccounts] = useState<SocialAccount[]>([]);
   const [disconnectedPlatforms, setDisconnectedPlatforms] = useState<string[]>([]);
   const [publishNow, setPublishNow] = useState(false);
+  // Which button submitted the form. A ref, not state, because onSubmit runs
+  // inside the same tick as the click and would read a stale state value;
+  // isPostingNow exists only to drive the button's spinner.
+  const postNowRef = useRef(false);
+  const [isPostingNow, setIsPostingNow] = useState(false);
   const [imageReady, setImageReady] = useState(true);
   const pendingPublish = useRef(false);
 
@@ -285,6 +291,8 @@ export function CreatePostPage() {
   };
 
   const onSubmit = async (data: PostFormData) => {
+    const immediate = postNowRef.current;
+    postNowRef.current = false;
     setSubmitError(null);
     setDisconnectedPlatforms([]);
 
@@ -302,7 +310,11 @@ export function CreatePostPage() {
 
     setIsSubmitting(true);
     try {
-      const scheduledTime = new Date(`${data.scheduled_date}T${data.scheduled_time}`);
+      // Posting now stamps the moment it actually goes out, so a live post
+      // doesn't sit in the list with a scheduled time an hour in the future.
+      const scheduledTime = immediate
+        ? new Date()
+        : new Date(`${data.scheduled_date}T${data.scheduled_time}`);
 
       const postData = {
         caption: data.caption,
@@ -312,22 +324,30 @@ export function CreatePostPage() {
         media_files: mediaFilesRef.current,
       };
 
-      if (isEditing && id) {
-        await updatePost(Number(id), postData);
-      } else {
-        await createPost(postData);
+      const saved = isEditing && id
+        ? await updatePost(Number(id), postData)
+        : await createPost(postData);
+
+      if (immediate && saved?.id) {
+        // Goes out through the same publish_post() the scheduler calls — this
+        // only skips the wait for its next 60-second tick.
+        await postService.publishNow(saved.id);
       }
 
       navigate('/posts');
     } catch (error: unknown) {
       console.error('Failed to save post:', error);
+      const fallback = immediate
+        ? 'Failed to publish post. Please try again.'
+        : 'Failed to schedule post. Please try again.';
       if (error instanceof Error) {
-        setSubmitError(error.message || 'Failed to schedule post. Please try again.');
+        setSubmitError(error.message || fallback);
       } else {
-        setSubmitError('Failed to schedule post. Please try again.');
+        setSubmitError(fallback);
       }
     } finally {
       setIsSubmitting(false);
+      setIsPostingNow(false);
     }
   };
 
@@ -832,10 +852,30 @@ export function CreatePostPage() {
                 type="submit"
                 fullWidth
                 size="lg"
-                isLoading={isSubmitting}
+                isLoading={isSubmitting && !isPostingNow}
+                disabled={isPostingNow}
                 leftIcon={<PaperAirplaneIcon className="w-5 h-5" />}
               >
                 {isEditing ? 'Update Post' : 'Schedule Post'}
+              </Button>
+              {/* Publishes straight away instead of queuing for the scheduler.
+                  Kept secondary so the established primary action, and the
+                  habit of clicking it, still schedules. */}
+              <Button
+                type="button"
+                variant="secondary"
+                fullWidth
+                size="lg"
+                isLoading={isPostingNow}
+                disabled={isSubmitting && !isPostingNow}
+                leftIcon={<BoltIcon className="w-5 h-5" />}
+                onClick={() => {
+                  postNowRef.current = true;
+                  setIsPostingNow(true);
+                  handleSubmit(onSubmit)();
+                }}
+              >
+                Post Now
               </Button>
               <Button type="button" variant="secondary" fullWidth onClick={() => navigate(-1)}>
                 Cancel

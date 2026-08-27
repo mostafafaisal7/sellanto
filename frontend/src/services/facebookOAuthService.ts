@@ -131,6 +131,7 @@ export interface FacebookAdminSettings {
   is_configured: boolean;
   missing: string[];
   messenger_feature_enabled: boolean;
+  instagram_comment_hide_enabled: boolean;
   help: {
     where_to_find: string;
     redirect_uri_note: string;

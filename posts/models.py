@@ -243,6 +243,10 @@ class Comment(models.Model):
     reply_body   = models.TextField(blank=True, null=True)
     reply_type   = models.CharField(max_length=20, blank=True, null=True)
     replied_at   = models.DateTimeField(blank=True, null=True)
+    # Mirrors Instagram's own `hidden` flag, refreshed on every sync. Hiding is
+    # reversible on Instagram's side, so this is state we read back rather than
+    # own -- a comment unhidden in the Instagram app shows as visible here too.
+    is_hidden    = models.BooleanField(default=False)
 
     class Meta:
         ordering = ['-created_at']

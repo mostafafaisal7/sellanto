@@ -435,6 +435,55 @@ class InstagramService:
             return False, str(e)
 
     @staticmethod
+    def hide_comment(access_token, comment_id, hide=True):
+        """Hide or unhide a comment on the account's own media.
+
+        POST /{ig-comment-id} with hide=true|false. Hiding takes the comment
+        out of public view on Instagram without destroying it, so it stays
+        reversible -- which is why moderation should reach for this before
+        delete_comment.
+
+        Returns (success: bool, message: str).
+        """
+        try:
+            url = f"https://graph.facebook.com/v21.0/{comment_id}"
+            response = requests.post(
+                url,
+                data={
+                    'hide': 'true' if hide else 'false',
+                    'access_token': access_token,
+                },
+                timeout=30,
+            )
+            data = response.json()
+            if isinstance(data, dict) and 'error' in data:
+                return False, data['error'].get('message', 'Could not update the comment')
+            return True, 'Comment hidden' if hide else 'Comment unhidden'
+        except Exception as e:
+            return False, str(e)
+
+    @staticmethod
+    def delete_comment(access_token, comment_id):
+        """Permanently delete a comment from Instagram.
+
+        DELETE /{ig-comment-id}. Irreversible, and it destroys someone else's
+        words -- callers must confirm with the user first.
+
+        Returns (success: bool, message: str).
+        """
+        try:
+            url = f"https://graph.facebook.com/v21.0/{comment_id}"
+            response = requests.delete(
+                url, params={'access_token': access_token}, timeout=30
+            )
+            data = response.json()
+            if isinstance(data, dict) and 'error' in data:
+                return False, data['error'].get('message', 'Could not delete the comment')
+            return True, 'Comment deleted'
+        except Exception as e:
+            return False, str(e)
+
+    @staticmethod
     def delete_post(access_token, media_id):
         """Delete an Instagram media object from Instagram.
 

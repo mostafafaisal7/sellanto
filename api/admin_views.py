@@ -818,6 +818,7 @@ class FacebookSettingsView(APIView):
                 ),
             },
             'messenger_feature_enabled': SiteConfiguration.get('messenger_feature_enabled', 'true') == 'true',
+            'instagram_comment_hide_enabled': SiteConfiguration.get('instagram_comment_hide_enabled', 'true') == 'true',
             'help': {
                 'where_to_find': 'https://developers.facebook.com → Your App → Settings → Basic',
                 'redirect_uri_note': (
@@ -850,6 +851,17 @@ class FacebookSettingsView(APIView):
                 'Master kill switch for the Messenger Bot feature. Set to false to fully disable.'
             )
             updated.append('messenger_feature_enabled')
+
+        # ── Instagram comment hiding toggle ───────────────────────────────────
+        if 'instagram_comment_hide_enabled' in request.data:
+            enabled = str(request.data['instagram_comment_hide_enabled']).lower() in ('true', '1', 'yes')
+            SiteConfiguration.set(
+                'instagram_comment_hide_enabled',
+                'true' if enabled else 'false',
+                'Lets users hide comments on their Instagram posts. Unhiding stays '
+                'available when off, so already-hidden comments are never stranded.'
+            )
+            updated.append('instagram_comment_hide_enabled')
 
         # ── Optionally regenerate the Messenger verify token ─────────────────
         if request.data.get('regenerate_verify_token'):
@@ -922,6 +934,7 @@ class FacebookSettingsView(APIView):
                 'fields':       'messages, messaging_postbacks, messaging_optins',
             },
             'messenger_feature_enabled': SiteConfiguration.get('messenger_feature_enabled', 'true') == 'true',
+            'instagram_comment_hide_enabled': SiteConfiguration.get('instagram_comment_hide_enabled', 'true') == 'true',
         }
         if errors:
             response['warnings'] = errors

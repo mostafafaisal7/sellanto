@@ -263,6 +263,12 @@ export interface PlatformResult {
   error?: string;
 }
 
+/** A published post's public URL on one platform. */
+export interface PlatformLink {
+  platform: PlatformType;
+  url: string;
+}
+
 export interface CreatePostData {
   caption: string;
   /** Files uploaded directly from the browser. */

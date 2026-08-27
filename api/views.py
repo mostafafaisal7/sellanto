@@ -858,6 +858,112 @@ def _resolve_owned_media_paths(user, raw_paths, video_generation_id=None):
     return resolved
 
 
+# Public URLs for a published post, per platform.
+#
+# Facebook and Instagram ids are not addressable on their own -- a Facebook feed
+# id is either "<page>_<post>" or a bare photo id depending on which endpoint
+# published it, and an Instagram media id has no derivable public URL at all --
+# so both are resolved through Graph and cached. Every other platform has a
+# stable URL shape we can build offline.
+PLATFORM_LINK_CACHE_TTL = 24 * 60 * 60  # a permalink is fixed once published
+
+
+def _derive_platform_url(platform, post_id):
+    """Build a public URL from a stored post id with no network call.
+
+    Returns None when the id alone cannot address the post -- TikTok and
+    Telegram both need a handle we never store.
+    """
+    if not post_id:
+        return None
+    if platform == 'facebook':
+        # /feed returns "<page_id>_<post_id>"; /photos returns a bare media id.
+        if '_' in post_id:
+            page_id, _, story_id = post_id.partition('_')
+            return f'https://www.facebook.com/{page_id}/posts/{story_id}'
+        return f'https://www.facebook.com/{post_id}'
+    if platform == 'twitter':
+        return f'https://twitter.com/i/web/status/{post_id}'
+    if platform == 'linkedin':
+        # LinkedIn share ids come back as URNs ("urn:li:share:123").
+        return f'https://www.linkedin.com/feed/update/{post_id}/'
+    if platform == 'youtube':
+        return f'https://www.youtube.com/watch?v={post_id}'
+    if platform == 'pinterest':
+        return f'https://www.pinterest.com/pin/{post_id}/'
+    return None
+
+
+def _graph_permalink(platform, post_id, user):
+    """Ask Graph for the canonical permalink of a Facebook or Instagram post.
+
+    Cached for a day: a permalink never changes once the post exists, and this
+    would otherwise fire once per published post on every posts-list render.
+    """
+    from django.core.cache import cache
+    import requests
+
+    cache_key = f'post_permalink:{platform}:{post_id}'
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached or None
+
+    if platform == 'facebook':
+        account = SocialAccount.objects.filter(
+            user=user, platform='facebook', is_active=True
+        ).first()
+        token = getattr(account, 'facebook_access_token', '') or ''
+        field = 'permalink_url'
+    else:
+        account = SocialAccount.objects.filter(
+            user=user, platform='instagram', is_active=True
+        ).first()
+        token = getattr(account, 'instagram_access_token', '') or ''
+        field = 'permalink'
+
+    if not token:
+        return None
+
+    try:
+        resp = requests.get(
+            f'https://graph.facebook.com/v21.0/{post_id}',
+            params={'fields': field, 'access_token': token},
+            timeout=10,
+        )
+        url = (resp.json() or {}).get(field) or None
+    except Exception as e:
+        logger.warning(
+            f'[Post links] {platform} permalink lookup failed for {post_id}: {e}'
+        )
+        return None
+
+    # Cache the miss too (empty-string sentinel): a post the token can no longer
+    # read will keep failing, and this runs on every render of the posts list.
+    cache.set(cache_key, url or '', PLATFORM_LINK_CACHE_TTL)
+    return url
+
+
+def _build_platform_links(post, user):
+    """[{platform, url}] for every platform this post actually reached.
+
+    Platforms with no stored post id are skipped -- they either failed or were
+    never attempted, so there is nothing to link to.
+    """
+    links = []
+    for platform in post.platforms_list:
+        post_id = getattr(post, f'{platform}_post_id', None)
+        if not post_id:
+            continue
+        url = None
+        if platform in ('facebook', 'instagram'):
+            url = _graph_permalink(platform, post_id, user)
+        if not url:
+            url = _derive_platform_url(platform, post_id)
+        if url:
+            links.append({'platform': platform, 'url': url})
+    return links
+
+
 class PostViewSet(viewsets.ModelViewSet):
     """ViewSet for Post CRUD operations"""
     serializer_class = PostSerializer
@@ -1160,6 +1266,66 @@ class PostViewSet(viewsets.ModelViewSet):
         post.status = 'cancelled'
         post.save()
         return Response(PostSerializer(post, context={'request': request}).data)
+
+    @action(detail=True, methods=['post'])
+    def publish(self, request, pk=None):
+        """Publish a post immediately instead of waiting for the scheduler.
+
+        The scheduling system is untouched. This calls the same
+        posts.scheduler.publish_post() that the 60-second APScheduler tick
+        calls, so a post sent from here goes out through exactly the code path
+        a scheduled post does -- only the trigger differs.
+
+        Responds with the post including per-platform results, so the caller
+        can show which platforms actually succeeded rather than inferring it
+        from the status code: publish_post marks a post 'failed' only when
+        EVERY platform failed, so a partial failure still lands as 'posted'.
+        """
+        post = self.get_object()
+
+        # publish_post has no idea whether the content is already live, so
+        # re-running it on a posted post would duplicate it on every platform.
+        if post.status in ('posted', 'posting'):
+            return Response(
+                {'error': f'This post is already {post.get_status_display().lower()}.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if post.status == 'cancelled':
+            return Response(
+                {'error': 'This post was cancelled. Reschedule it before publishing.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not post.platforms_list:
+            return Response(
+                {'error': 'Select at least one platform before publishing.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # publish_post formats scheduled_time unconditionally for its log line
+        # and the field is nullable, so a post saved without a time would raise
+        # inside the publish rather than fail a check up here.
+        if post.scheduled_time is None:
+            post.scheduled_time = timezone.now()
+            post.save(update_fields=['scheduled_time'])
+
+        from posts.scheduler import publish_post
+        try:
+            publish_post(post)
+        except Exception as e:
+            logger.exception(f'[Post Now] publish_post raised for post {post.id}')
+            return Response(
+                {'error': f'Publishing failed: {e}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        post.refresh_from_db()
+        return Response(PostSerializer(post, context={'request': request}).data)
+
+    @action(detail=True, methods=['get'])
+    def links(self, request, pk=None):
+        """Public URLs for this post on each platform it was published to."""
+        post = self.get_object()
+        return Response({'links': _build_platform_links(post, request.user)})
 
 
 # ===================== PLATFORMS VIEWS =====================
@@ -5039,83 +5205,155 @@ class FacebookPageMetadataUpdateView(APIView):
         return Response({'success': True})
 
 
+# Platforms whose comments SellAnto can read and reply to. Facebook rides on
+# pages_read_engagement, Instagram on instagram_manage_comments; no other
+# connected platform has any comment code.
+COMMENT_CAPABLE_PLATFORMS = ('facebook', 'instagram')
+
+# The two APIs name the same fields differently: a Facebook comment carries
+# `message` and a `from` object, an Instagram comment `text` and `username`.
+_COMMENT_SYNC_SPEC = {
+    'facebook': {
+        'token_field': 'facebook_access_token',
+        'fields': 'id,from,message,created_time',
+        'body': lambda c: c.get('message', '') or '',
+        'author': lambda c: (c.get('from') or {}).get('name', 'User'),
+        'created': lambda c: c.get('created_time'),
+    },
+    'instagram': {
+        'token_field': 'instagram_access_token',
+        # `hidden` is only requested for Instagram: Facebook's equivalent field
+        # is not needed because SellAnto cannot hide Facebook comments (that
+        # needs pages_manage_engagement, which this app does not request), and
+        # an unreadable field would fail the whole comment read.
+        'fields': 'id,username,text,timestamp,hidden',
+        'body': lambda c: c.get('text', '') or '',
+        'author': lambda c: c.get('username', 'User'),
+        'created': lambda c: c.get('timestamp'),
+        'hidden': lambda c: bool(c.get('hidden')),
+    },
+}
+
+
 class PostCommentsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, post_id):
-        from posts.models import Post as PostModel, Comment
+        """Comments on a post, synced from every platform it published to.
+
+        Pass ?platform=facebook|instagram to scope both the sync and the
+        response to a single platform -- that is what the per-platform tabs on
+        the post detail view request. Without it, every comment-capable
+        platform the post reached is synced and returned together.
+
+        A post published to both Facebook and Instagram previously returned
+        only its Facebook comments: the platform was picked by an if/elif that
+        stopped at the first match, so Instagram was never synced at all.
+        """
+        from posts.models import Post as PostModel
         try:
             post = PostModel.objects.get(id=post_id, user=request.user)
         except PostModel.DoesNotExist:
             return Response({'error': 'Post not found'}, status=404)
 
-        platforms_raw = post.platforms or '[]'
+        wanted = (request.query_params.get('platform') or '').strip().lower()
+        if wanted and wanted not in COMMENT_CAPABLE_PLATFORMS:
+            return Response(
+                {'error': f'SellAnto cannot read comments on "{wanted}".'},
+                status=400,
+            )
+
+        targets = [
+            (platform, getattr(post, f'{platform}_post_id', None))
+            for platform in COMMENT_CAPABLE_PLATFORMS
+            if (not wanted or platform == wanted)
+            and getattr(post, f'{platform}_post_id', None)
+        ]
+
+        errors = {}
+        for platform, ext_post_id in targets:
+            error = self._sync_platform(request.user, post, platform, ext_post_id)
+            if error:
+                errors[platform] = error
+
+        # Only fail the request when nothing could be synced. One platform
+        # being unreachable must not blank out the other platform's tab, but a
+        # total failure returning 200 would read as "no comments yet".
+        if targets and len(errors) == len(targets):
+            return Response({'error': '; '.join(errors.values())}, status=400)
+
+        comments = post.comments.order_by('-created_at')
+        if wanted:
+            comments = comments.filter(platform=wanted)
+
+        # A bare list is the shape the existing comment UI consumes.
+        return Response(list(comments.values(
+            'id', 'platform', 'author_name', 'body', 'sentiment', 'created_at',
+            'reply_body', 'reply_type', 'replied_at', 'is_hidden'
+        )))
+
+    def _sync_platform(self, user, post, platform, ext_post_id):
+        """Pull one platform's comments into the local table.
+
+        Returns an error string, or None on success. Never raises: a failure
+        here must leave the other platform's comments still readable.
+        """
+        from posts.models import Comment
+        spec = _COMMENT_SYNC_SPEC[platform]
+        label = platform.title()
+
+        acc = SocialAccount.objects.filter(
+            user=user, platform=platform, is_active=True
+        ).first()
+        token = getattr(acc, spec['token_field'], '') if acc else ''
+        if not token:
+            return f'{label} is not connected.'
+
         try:
-            platform_list = json.loads(platforms_raw) if isinstance(platforms_raw, str) else platforms_raw
-        except (json.JSONDecodeError, TypeError):
-            platform_list = []
-
-        platforms_str = str(platform_list)
-        if 'facebook' in platforms_str and post.facebook_post_id:
-            platform = 'facebook'
-            ext_post_id = post.facebook_post_id
-        elif 'instagram' in platforms_str and post.instagram_post_id:
-            platform = 'instagram'
-            ext_post_id = post.instagram_post_id
-        else:
-            return Response(list(post.comments.values(
-                'id', 'author_name', 'body', 'sentiment', 'created_at',
-                'reply_body', 'reply_type', 'replied_at'
-            )))
-
-        if platform == 'facebook':
-            acc = SocialAccount.objects.filter(user=request.user, platform='facebook', is_active=True).first()
-            if not acc:
-                return Response({'error': 'Facebook not connected'}, status=400)
             resp = _requests.get(
                 f'https://graph.facebook.com/v21.0/{ext_post_id}/comments',
-                params={'fields': 'id,from,message,created_time', 'access_token': acc.facebook_access_token, 'limit': 50},
+                params={
+                    'fields': spec['fields'],
+                    'access_token': token,
+                    'limit': 50,
+                },
                 timeout=30,
             )
-            for c in resp.json().get('data', []):
-                Comment.objects.update_or_create(
-                    external_id=c['id'],
-                    defaults={
-                        'post': post,
-                        'platform': 'facebook',
-                        'author_name': c.get('from', {}).get('name', 'User'),
-                        'body': c.get('message', ''),
-                        'sentiment': _detect_sentiment(c.get('message', '')),
-                        'created_at': c.get('created_time'),
-                    }
-                )
-        else:
-            acc = SocialAccount.objects.filter(user=request.user, platform='instagram', is_active=True).first()
-            if not acc:
-                return Response({'error': 'Instagram not connected'}, status=400)
-            resp = _requests.get(
-                f'https://graph.facebook.com/v21.0/{ext_post_id}/comments',
-                params={'fields': 'id,username,text,timestamp', 'access_token': acc.instagram_access_token, 'limit': 50},
-                timeout=30,
+            body = resp.json()
+        except Exception as e:
+            logger.warning(
+                f'[Comments] {platform} fetch failed for post {post.id}: {e}'
             )
-            for c in resp.json().get('data', []):
-                Comment.objects.update_or_create(
-                    external_id=c['id'],
-                    defaults={
-                        'post': post,
-                        'platform': 'instagram',
-                        'author_name': c.get('username', 'User'),
-                        'body': c.get('text', ''),
-                        'sentiment': _detect_sentiment(c.get('text', '')),
-                        'created_at': c.get('timestamp'),
-                    }
-                )
+            return f'Could not reach {label}.'
 
-        comments = list(post.comments.order_by('-created_at').values(
-            'id', 'author_name', 'body', 'sentiment', 'created_at',
-            'reply_body', 'reply_type', 'replied_at'
-        ))
-        return Response(comments)
+        if not isinstance(body, dict):
+            return f'{label} returned an unexpected response.'
+        if 'error' in body:
+            message = (body.get('error') or {}).get('message', 'Graph API error')
+            logger.warning(
+                f'[Comments] {platform} error for post {post.id}: {message}'
+            )
+            return message
+
+        for c in body.get('data', []):
+            if not isinstance(c, dict) or not c.get('id'):
+                continue
+            text = spec['body'](c)
+            Comment.objects.update_or_create(
+                external_id=c['id'],
+                defaults={
+                    'post': post,
+                    'platform': platform,
+                    'author_name': spec['author'](c),
+                    'body': text,
+                    'sentiment': _detect_sentiment(text),
+                    'created_at': spec['created'](c),
+                    # Instagram owns this state -- a comment unhidden in the
+                    # Instagram app must stop reading as hidden here.
+                    'is_hidden': spec.get('hidden', lambda _c: False)(c),
+                },
+            )
+        return None
 
 
 class CommentReplyView(APIView):
@@ -5160,6 +5398,121 @@ class CommentReplyView(APIView):
         comment.replied_at = timezone.now()
         comment.save(update_fields=['reply_body', 'reply_type', 'replied_at'])
         return Response({'success': True, 'reply_body': reply_body, 'reply_type': 'human'})
+
+
+def _moderatable_comment(request, comment_id):
+    """Resolve a comment the user may moderate, plus the Instagram token.
+
+    Returns (comment, token, error_response). Moderation is Instagram-only:
+    hiding or deleting a Facebook comment needs pages_manage_engagement, which
+    this app deliberately does not request, so those are refused up front with
+    an explanation rather than a Graph error the user cannot act on.
+    """
+    from posts.models import Comment
+    try:
+        comment = Comment.objects.get(id=comment_id, post__user=request.user)
+    except Comment.DoesNotExist:
+        return None, None, Response({'error': 'Comment not found'}, status=404)
+
+    if comment.platform != 'instagram':
+        return None, None, Response(
+            {'error': 'SellAnto can only hide or delete Instagram comments.'},
+            status=400,
+        )
+
+    acc = SocialAccount.objects.filter(
+        user=request.user, platform='instagram', is_active=True
+    ).first()
+    if not acc or not acc.instagram_access_token:
+        return None, None, Response(
+            {'error': 'Instagram is not connected.'}, status=400
+        )
+    return comment, acc.instagram_access_token, None
+
+
+class CommentHideView(APIView):
+    """Hide or unhide an Instagram comment (instagram_manage_comments).
+
+    POST {"hidden": true|false}. Hiding is reversible on Instagram, so this is
+    the moderation action to prefer over deleting.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, comment_id):
+        comment, token, error = _moderatable_comment(request, comment_id)
+        if error:
+            return error
+
+        hidden = request.data.get('hidden', True)
+        if isinstance(hidden, str):
+            hidden = hidden.lower() not in ('false', '0', '')
+        hidden = bool(hidden)
+
+        # Only hiding is gated. Unhiding must keep working even when the switch
+        # is off, or flipping it would strand already-hidden comments.
+        from accounts.utils import is_instagram_comment_hide_enabled
+        if hidden and not is_instagram_comment_hide_enabled():
+            return Response(
+                {'error': 'Hiding Instagram comments is turned off by the administrator.'},
+                status=403,
+            )
+
+        from platforms.services.instagram import InstagramService
+        success, message = InstagramService.hide_comment(
+            token, comment.external_id, hide=hidden
+        )
+        if not success:
+            # The comment is still in whatever state Instagram has it in, so
+            # the local flag is left alone rather than optimistically flipped.
+            return Response({'error': message}, status=400)
+
+        comment.is_hidden = hidden
+        comment.save(update_fields=['is_hidden'])
+        return Response({'success': True, 'is_hidden': hidden, 'message': message})
+
+
+class CommentDeleteView(APIView):
+    """Permanently delete an Instagram comment (instagram_manage_comments)."""
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, comment_id):
+        comment, token, error = _moderatable_comment(request, comment_id)
+        if error:
+            return error
+
+        from platforms.services.instagram import InstagramService
+        success, message = InstagramService.delete_comment(token, comment.external_id)
+
+        # A comment already gone from Instagram should still be cleared locally
+        # rather than leaving a row that can never be acted on again.
+        already_gone = any(p in (message or '').lower() for p in (
+            'does not exist', 'cannot be loaded', 'unsupported delete request',
+            'not found', 'no longer available',
+        ))
+        if not success and not already_gone:
+            return Response({'error': message}, status=400)
+
+        comment.delete()
+        return Response({'success': True, 'deleted': True})
+
+
+class FeatureFlagsView(APIView):
+    """Admin-controlled switches the app needs in order to render itself.
+
+    Read-only and per-install, not per-user. The UI uses these to leave out
+    controls an operator has turned off, rather than offering an action the
+    backend will refuse.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from accounts.utils import (
+            is_messenger_enabled, is_instagram_comment_hide_enabled,
+        )
+        return Response({
+            'messenger_enabled': is_messenger_enabled(),
+            'instagram_comment_hide_enabled': is_instagram_comment_hide_enabled(),
+        })
 
 
 class CommentAIReplyView(APIView):
