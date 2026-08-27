@@ -9,14 +9,14 @@
  *  - Show the connected account's profile: username, ID, picture, follower/post counts
  *  - View all published Instagram media (images, videos, carousels)
  *  - See per-post engagement: likes, comments, reach, impressions
- *  - Archive / hide media (using IG manage_contents permission)
+ *  - Delete a published post or reel (instagram_manage_contents)
  *  - Filter by media type and date
  *
  * Backend endpoint needed:
  *   GET /api/v1/instagram/content/
  *     returns: { media: InstagramMedia[], cursor: string | null }
- *   POST /api/v1/instagram/content/<media_id>/archive/
- *     archives/hides the media item
+ *   DELETE /api/v1/instagram/content/<media_id>/delete/
+ *     permanently deletes the media item from Instagram
  */
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -28,13 +28,13 @@ import {
   HeartIcon,
   ChatBubbleOvalLeftIcon,
   EyeIcon,
-  ArchiveBoxIcon,
+  TrashIcon,
   ExclamationCircleIcon,
   ViewColumnsIcon,
   Squares2X2Icon,
   ShareIcon,
 } from '@heroicons/react/24/outline';
-import { Button, Card, Spinner } from '../components/ui';
+import { Button, Card, Spinner, ConfirmModal, HelpButton } from '../components/ui';
 import api from '../services/api';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -53,7 +53,6 @@ interface InstagramMedia {
   comments_count: number;
   reach?: number;
   impressions?: number;
-  is_archived: boolean;
 }
 
 /** instagram_basic — profile metadata for the connected IG Business account. */
@@ -76,8 +75,8 @@ const igContentService = {
     const res = await api.get('/instagram/content/', { params });
     return res.data;
   },
-  async archiveMedia(mediaId: string): Promise<void> {
-    await api.post(`/instagram/content/${mediaId}/archive/`);
+  async deleteMedia(mediaId: string): Promise<void> {
+    await api.delete(`/instagram/content/${mediaId}/delete/`);
   },
 };
 
@@ -92,12 +91,12 @@ const MEDIA_TYPE_ICON: Record<MediaType, React.ElementType> = {
 function MediaCard({
   item,
   viewMode,
-  onArchive,
+  onDelete,
   archiving,
 }: {
   item: InstagramMedia;
   viewMode: 'grid' | 'list';
-  onArchive: () => void;
+  onDelete: () => void;
   archiving: boolean;
 }) {
   const Icon = MEDIA_TYPE_ICON[item.media_type];
@@ -108,7 +107,7 @@ function MediaCard({
       <motion.div
         layout
         className={`flex items-center gap-4 p-4 rounded-xl border transition-all ${
-          item.is_archived ? 'opacity-40 bg-[#1A1A2E] border-white/5' : 'bg-[#1A1A2E] border-white/8 hover:border-white/20'
+          'bg-[#1A1A2E] border-white/8 hover:border-white/20'
         }`}
       >
         {/* Thumbnail */}
@@ -163,15 +162,15 @@ function MediaCard({
           >
             <ShareIcon className="w-4 h-4" />
           </a>
-          {!item.is_archived && (
-            <button
-              onClick={onArchive}
-              disabled={archiving}
-              className="p-2 rounded-lg bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500/20 transition-colors disabled:opacity-50"
-            >
-              <ArchiveBoxIcon className="w-4 h-4" />
-            </button>
-          )}
+          <button
+            onClick={onDelete}
+            disabled={archiving}
+            title="Permanently delete this post from Instagram"
+            aria-label="Delete this post from Instagram"
+            className="p-2 rounded-lg bg-danger/10 text-danger hover:bg-danger/20 transition-colors disabled:opacity-50"
+          >
+            <TrashIcon className="w-4 h-4" />
+          </button>
         </div>
       </motion.div>
     );
@@ -182,7 +181,7 @@ function MediaCard({
     <motion.div
       layout
       className={`rounded-xl overflow-hidden border group transition-all ${
-        item.is_archived ? 'opacity-40 border-white/5' : 'border-white/8 hover:border-white/25'
+        'border-white/8 hover:border-white/25'
       }`}
     >
       <div className="relative aspect-square bg-[#0E0E1A]">
@@ -206,15 +205,15 @@ function MediaCard({
             >
               <ShareIcon className="w-4 h-4" />
             </a>
-            {!item.is_archived && (
-              <button
-                onClick={(e) => { e.stopPropagation(); onArchive(); }}
-                disabled={archiving}
-                className="p-2 rounded-lg bg-yellow-500/30 text-yellow-300 hover:bg-yellow-500/50 transition-colors"
-              >
-                <ArchiveBoxIcon className="w-4 h-4" />
-              </button>
-            )}
+            <button
+              onClick={(e) => { e.stopPropagation(); onDelete(); }}
+              disabled={archiving}
+              title="Permanently delete this post from Instagram"
+              aria-label="Delete this post from Instagram"
+              className="p-2 rounded-lg bg-danger/40 text-white hover:bg-danger/60 transition-colors"
+            >
+              <TrashIcon className="w-4 h-4" />
+            </button>
           </div>
         </div>
         {/* Type badge */}
@@ -243,6 +242,10 @@ export function InstagramContentPage() {
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [search, setSearch] = useState('');
   const [archivingId, setArchivingId] = useState<string | null>(null);
+  // Deleting is permanent and hits the real Instagram account, so it is
+  // confirmed before anything is sent.
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [profile, setProfile] = useState<InstagramProfile | null>(null);
@@ -268,11 +271,25 @@ export function InstagramContentPage() {
 
   useEffect(() => { fetchMedia(); }, [fetchMedia]);
 
-  const handleArchive = async (mediaId: string) => {
+  const handleDelete = async (mediaId: string) => {
     setArchivingId(mediaId);
+    setDeleteError(null);
     try {
-      await igContentService.archiveMedia(mediaId);
-      setMedia((prev) => prev.map((m) => m.id === mediaId ? { ...m, is_archived: true } : m));
+      await igContentService.deleteMedia(mediaId);
+      // The post no longer exists on Instagram, so it leaves the grid. It used
+      // to be dimmed and left in place, which read as "archived, recoverable".
+      setMedia((prev) => prev.filter((m) => m.id !== mediaId));
+      setConfirmId(null);
+    } catch (err: unknown) {
+      // Previously the failure path was silent: a rejected delete still marked
+      // the item archived, so a failure looked exactly like a success.
+      let message = 'Could not delete this post from Instagram.';
+      if (err && typeof err === 'object' && 'response' in err) {
+        const data = (err as { response?: { data?: Record<string, unknown> } }).response?.data;
+        const detail = data?.error ?? data?.detail;
+        if (typeof detail === 'string' && detail) message = detail;
+      }
+      setDeleteError(message);
     } finally {
       setArchivingId(null);
     }
@@ -286,7 +303,8 @@ export function InstagramContentPage() {
 
   const totalLikes = media.reduce((s, m) => s + m.like_count, 0);
   const totalComments = media.reduce((s, m) => s + m.comments_count, 0);
-  const totalReach = media.reduce((s, m) => s + (m.reach ?? 0), 0);
+  // No Total Reach tile: the media list endpoint never returns `reach`, so it
+  // only ever rendered "—".
 
   return (
     <div className="space-y-6">
@@ -318,6 +336,11 @@ export function InstagramContentPage() {
             <ArrowPathIcon className="w-4 h-4" />
             Refresh
           </Button>
+          <HelpButton
+            title="Refresh"
+            body={<>Reloads your <strong>latest Instagram posts</strong> and their like
+              and comment counts.</>}
+          />
         </div>
       </div>
 
@@ -394,14 +417,23 @@ export function InstagramContentPage() {
         </div>
       )}
 
+      {deleteError && (
+        <div className="flex items-start gap-3 bg-danger/10 border border-danger/30 rounded-xl p-4">
+          <ExclamationCircleIcon className="w-5 h-5 text-danger shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-danger">Could not delete the post</p>
+            <p className="text-xs text-danger/80 mt-0.5">{deleteError}</p>
+          </div>
+        </div>
+      )}
+
       {/* KPIs */}
       {!loading && media.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="grid grid-cols-3 gap-4">
           {[
             { label: 'Total Posts', value: media.length, icon: PhotoIcon, color: 'text-coral' },
             { label: 'Total Likes', value: totalLikes.toLocaleString(), icon: HeartIcon, color: 'text-pink-400' },
             { label: 'Total Comments', value: totalComments.toLocaleString(), icon: ChatBubbleOvalLeftIcon, color: 'text-blue-400' },
-            { label: 'Total Reach', value: totalReach > 0 ? totalReach.toLocaleString() : '—', icon: EyeIcon, color: 'text-green-400' },
           ].map((kpi) => (
             <Card key={kpi.label} className="p-4">
               <kpi.icon className={`w-5 h-5 ${kpi.color} mb-2`} />
@@ -414,6 +446,17 @@ export function InstagramContentPage() {
 
       {/* Search + type filter */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+        <div className="flex items-center gap-1.5 text-xs text-text-muted">
+          <TrashIcon className="w-4 h-4 text-danger" />
+          Delete
+          <HelpButton
+            title="Delete post"
+            body={<>The bin icon on a post <strong>deletes it from your Instagram
+              account</strong>. SellAnto asks you to confirm first.</>}
+            warning={<><strong>Cannot be undone</strong> — the post is deleted on Instagram,
+              not just hidden here.</>}
+          />
+        </div>
         <div className="relative flex-1">
           <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
           <input
@@ -437,6 +480,16 @@ export function InstagramContentPage() {
           ))}
         </div>
       </div>
+
+      <ConfirmModal
+        isOpen={!!confirmId}
+        onClose={() => setConfirmId(null)}
+        onConfirm={() => confirmId && handleDelete(confirmId)}
+        title="Delete this Instagram post?"
+        message="This permanently deletes the post from your Instagram account. It cannot be undone, and SellAnto cannot restore it."
+        confirmText="Delete from Instagram"
+        isLoading={!!archivingId}
+      />
 
       {/* Media grid/list */}
       {loading ? (
@@ -466,7 +519,7 @@ export function InstagramContentPage() {
                     key={item.id}
                     item={item}
                     viewMode="grid"
-                    onArchive={() => handleArchive(item.id)}
+                    onDelete={() => setConfirmId(item.id)}
                     archiving={archivingId === item.id}
                   />
                 ))}
@@ -483,7 +536,7 @@ export function InstagramContentPage() {
                     key={item.id}
                     item={item}
                     viewMode="list"
-                    onArchive={() => handleArchive(item.id)}
+                    onDelete={() => setConfirmId(item.id)}
                     archiving={archivingId === item.id}
                   />
                 ))}

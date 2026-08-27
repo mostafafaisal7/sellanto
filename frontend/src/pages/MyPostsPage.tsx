@@ -22,8 +22,9 @@ import {
 import { BoostPostModal } from '../components/ads/BoostPostModal';
 import { BoostFromContentModal } from '../components/ads/BoostFromContentModal';
 import { format, formatDistanceToNow } from 'date-fns';
-import { Button, Card, StatusBadge, PlatformBadge, Modal, ConfirmModal, LoadingPlaceholder, platformNames } from '../components/ui';
+import { Button, Card, StatusBadge, PlatformBadge, Modal, ConfirmModal, LoadingPlaceholder, platformNames, HelpButton } from '../components/ui';
 import { postService } from '../services';
+import { describeDestinations } from '../utils/platformDestinations';
 import { PublishingResults } from '../components/posts/PublishingResults';
 import { PostCommentTabs } from '../components/posts/PostCommentTabs';
 import { usePostStore } from '../store';
@@ -90,6 +91,34 @@ export function MyPostsPage() {
       cancelled = true;
     };
   }, [posts, postLinks]);
+
+  // Deleting only reaches Facebook and Instagram: PostViewSet.destroy has
+  // remote-delete code for those two alone. A post published to any other
+  // platform is removed from SellAnto and stays live there, which the help
+  // text has to say rather than implying everything is cleaned up.
+  const REMOTE_DELETE_PLATFORMS = ['facebook', 'instagram'] as const;
+
+  const deleteHelpBody = (post: Post) => {
+    const publishedOn = (p: string) =>
+      !!(post as unknown as Record<string, string | undefined>)[`${p}_post_id`];
+
+    const removed = REMOTE_DELETE_PLATFORMS.filter(publishedOn);
+    const untouched = (post.platforms as string[])
+      .filter((p) => !REMOTE_DELETE_PLATFORMS.includes(p as 'facebook' | 'instagram'))
+      .filter(publishedOn);
+
+    return (
+      <>
+        {removed.length
+          ? <>Deletes this post from SellAnto <strong>and from {describeDestinations(removed)}</strong>.</>
+          : <>Removes this post from SellAnto. It was <strong>never published</strong>.</>}
+        {untouched.length > 0 && (
+          <> It <strong>stays live on {describeDestinations(untouched)}</strong> — SellAnto
+            only deletes Facebook and Instagram posts.</>
+        )}
+      </>
+    );
+  };
 
   const handleDelete = async () => {
     if (!deleteModalPost) return;
@@ -377,6 +406,11 @@ export function MyPostsPage() {
                         >
                           Delete
                         </Button>
+                        <HelpButton
+                          title="Delete"
+                          body={deleteHelpBody(post)}
+                          warning={<><strong>Cannot be undone.</strong></>}
+                        />
                       </div>
                     </div>
                   </div>

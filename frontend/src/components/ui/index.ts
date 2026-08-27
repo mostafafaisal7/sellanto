@@ -8,3 +8,4 @@ export { Avatar, AvatarGroup } from './Avatar';
 export { PlatformIcon, platformColors, platformNames } from './PlatformIcon';
 export type { PlatformType } from './PlatformIcon';
 export { ToastContainer } from './ToastContainer';
+export { HelpButton } from './HelpButton';

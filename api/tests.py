@@ -153,26 +153,41 @@ class MetaAppReviewAPITests(TestCase):
             call_params = m.get.call_args[1]['params']
         self.assertEqual(call_params['after'], 'cursor123')
 
-    # ── Instagram Content Archive: POST /instagram/content/<media_id>/archive/ ─
+    # ── Instagram Content Delete: DELETE /instagram/content/<media_id>/delete/ ─
+    # Was named "archive", which it never was -- it has always issued
+    # DELETE /{ig-media-id} and destroyed the post for good.
 
-    def test_instagram_archive_success(self):
+    def test_instagram_delete_success(self):
         with patch('api.views._requests') as m:
             m.delete.return_value = _mk_resp({'success': True})
-            r = self.client.post(reverse('instagram-content-archive', kwargs={'media_id': 'media999'}))
+            r = self.client.delete(reverse('instagram-content-delete', kwargs={'media_id': 'media999'}))
         self.assertEqual(r.status_code, 200)
-        self.assertTrue(r.data['archived'])
+        self.assertTrue(r.data['deleted'])
+        # It really is a delete against Graph, not a soft state change.
+        self.assertTrue(m.delete.call_args[0][0].endswith('/media999'))
 
-    def test_instagram_archive_no_ig_account(self):
+    def test_instagram_delete_no_ig_account(self):
         self.ig.delete()
-        r = self.client.post(reverse('instagram-content-archive', kwargs={'media_id': 'media999'}))
+        r = self.client.delete(reverse('instagram-content-delete', kwargs={'media_id': 'media999'}))
         self.assertEqual(r.status_code, 400)
 
-    def test_instagram_archive_graph_error(self):
+    def test_instagram_delete_graph_error(self):
         with patch('api.views._requests') as m:
             m.delete.return_value = _mk_resp({'error': {'message': 'Insufficient permissions'}})
-            r = self.client.post(reverse('instagram-content-archive', kwargs={'media_id': 'media999'}))
+            r = self.client.delete(reverse('instagram-content-delete', kwargs={'media_id': 'media999'}))
         self.assertEqual(r.status_code, 400)
         self.assertIn('error', r.data)
+
+    def test_media_list_no_longer_claims_an_archived_state(self):
+        """`is_archived` was hardcoded False and there is no archive concept --
+        the UI used it to dim a post it had actually deleted."""
+        with patch('api.views._requests') as m:
+            m.get.return_value = _mk_resp({'data': [
+                {'id': 'm1', 'media_type': 'IMAGE', 'caption': 'x'},
+            ]})
+            r = self.client.get(reverse('instagram-content'))
+        self.assertEqual(r.status_code, 200)
+        self.assertNotIn('is_archived', r.data['media'][0])
 
     # ── FB Pages Metadata: GET /platforms/facebook/pages/metadata/ ───────────
 

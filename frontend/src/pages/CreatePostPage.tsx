@@ -20,13 +20,14 @@ import {
   CheckIcon,
 } from '@heroicons/react/24/outline';
 import { format } from 'date-fns';
-import { Button, Card, Input, Textarea, PlatformIcon, platformColors, platformNames } from '../components/ui';
+import { Button, Card, Input, Textarea, PlatformIcon, platformColors, platformNames, HelpButton } from '../components/ui';
 import { usePostStore } from '../store';
 import type { PlatformType, SocialAccount } from '../types';
 import api from '../services/api';
 import { postService, platformService } from '../services';
 import calendarService from '../services/calendarService';
 import ConnectAccountModal from '../components/ConnectAccountModal';
+import { describeDestinations } from '../utils/platformDestinations';
 
 const platforms: { id: PlatformType; maxChars: number }[] = [
   { id: 'facebook', maxChars: 63206 },
@@ -46,6 +47,7 @@ const postSchema = z.object({
 });
 
 type PostFormData = z.infer<typeof postSchema>;
+
 
 export function CreatePostPage() {
   const navigate = useNavigate();
@@ -197,6 +199,7 @@ export function CreatePostPage() {
 
   const watchCaption = watch('caption', '');
   const watchPlatforms = watch('platforms', []);
+  const destinations = describeDestinations(watchPlatforms as string[]);
 
   // Auto-fill AI-suggested best time (replaces static 1hr default)
   useEffect(() => {
@@ -848,35 +851,60 @@ export function CreatePostPage() {
                 onClose={() => { setDisconnectedPlatforms([]); setSubmitError(null); }}
               />
 
-              <Button
-                type="submit"
-                fullWidth
-                size="lg"
-                isLoading={isSubmitting && !isPostingNow}
-                disabled={isPostingNow}
-                leftIcon={<PaperAirplaneIcon className="w-5 h-5" />}
-              >
-                {isEditing ? 'Update Post' : 'Schedule Post'}
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="submit"
+                  fullWidth
+                  size="lg"
+                  isLoading={isSubmitting && !isPostingNow}
+                  disabled={isPostingNow}
+                  leftIcon={<PaperAirplaneIcon className="w-5 h-5" />}
+                >
+                  {isEditing ? 'Update Post' : 'Schedule Post'}
+                </Button>
+                <HelpButton
+                  size="md"
+                  title={isEditing ? 'Update Post' : 'Schedule Post'}
+                  body={destinations
+                    ? <>Publishes to <strong>{destinations}</strong> automatically at the{' '}
+                        <strong>date and time set above</strong>.</>
+                    : <>Publishes automatically at the date and time set above.{' '}
+                        <strong>Choose a platform first.</strong></>}
+                />
+              </div>
               {/* Publishes straight away instead of queuing for the scheduler.
                   Kept secondary so the established primary action, and the
                   habit of clicking it, still schedules. */}
-              <Button
-                type="button"
-                variant="secondary"
-                fullWidth
-                size="lg"
-                isLoading={isPostingNow}
-                disabled={isSubmitting && !isPostingNow}
-                leftIcon={<BoltIcon className="w-5 h-5" />}
-                onClick={() => {
-                  postNowRef.current = true;
-                  setIsPostingNow(true);
-                  handleSubmit(onSubmit)();
-                }}
-              >
-                Post Now
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  fullWidth
+                  size="lg"
+                  isLoading={isPostingNow}
+                  disabled={isSubmitting && !isPostingNow}
+                  leftIcon={<BoltIcon className="w-5 h-5" />}
+                  onClick={() => {
+                    postNowRef.current = true;
+                    setIsPostingNow(true);
+                    handleSubmit(onSubmit)();
+                  }}
+                >
+                  Post Now
+                </Button>
+                <HelpButton
+                  size="md"
+                  title="Post Now"
+                  body={destinations
+                    ? <>Publishes to <strong>{destinations}</strong>{' '}
+                        <strong>straight away</strong>, without waiting for the scheduled time.</>
+                    : <>Publishes straight away, without waiting for the scheduled time.{' '}
+                        <strong>Choose a platform first.</strong></>}
+                  warning={destinations
+                    ? <>The post goes <strong>live on {destinations}</strong> immediately.</>
+                    : undefined}
+                />
+              </div>
               <Button type="button" variant="secondary" fullWidth onClick={() => navigate(-1)}>
                 Cancel
               </Button>

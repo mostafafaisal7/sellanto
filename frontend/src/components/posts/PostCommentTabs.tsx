@@ -29,7 +29,7 @@ import {
   TrashIcon,
 } from '@heroicons/react/24/outline';
 import { formatDistanceToNow } from 'date-fns';
-import { Button, PlatformIcon, platformNames } from '../ui';
+import { Button, PlatformIcon, platformNames, HelpButton } from '../ui';
 import api from '../../services/api';
 import type { Post, PlatformType } from '../../types';
 
@@ -358,6 +358,11 @@ export function PostCommentTabs({ post }: { post: Post }) {
                     >
                       Reply
                     </Button>
+                    <HelpButton
+                      title="Reply"
+                      body={<>Posts a <strong>public reply</strong> under this comment as your{' '}
+                        {active ? platformNames[active] || active : ''} account.</>}
+                    />
                     <Button
                       size="sm"
                       variant="ghost"
@@ -367,6 +372,11 @@ export function PostCommentTabs({ post }: { post: Post }) {
                     >
                       Draft with AI
                     </Button>
+                    <HelpButton
+                      title="Draft with AI"
+                      body={<>Suggests a reply in the box below. <strong>Nothing is posted</strong>{' '}
+                        until you press Send reply.</>}
+                    />
                   </>
                 )}
                 {/* Instagram only — see the note at the top of the file. */}
@@ -390,6 +400,15 @@ export function PostCommentTabs({ post }: { post: Post }) {
                         {comment.is_hidden ? 'Unhide' : 'Hide'}
                       </Button>
                     )}
+                    {(canHide || comment.is_hidden) && (
+                      <HelpButton
+                        title={comment.is_hidden ? 'Unhide' : 'Hide'}
+                        body={comment.is_hidden
+                          ? <>Makes this comment <strong>visible on Instagram</strong> again.</>
+                          : <>Hides this comment on Instagram. You can{' '}
+                              <strong>unhide it any time</strong>.</>}
+                      />
+                    )}
                     <Button
                       size="sm"
                       variant="ghost"
@@ -400,6 +419,11 @@ export function PostCommentTabs({ post }: { post: Post }) {
                     >
                       Delete
                     </Button>
+                    <HelpButton
+                      title="Delete"
+                      body={<>Deletes this comment from Instagram, <strong>for everyone</strong>.</>}
+                      warning={<><strong>Cannot be undone.</strong> Hiding keeps it recoverable.</>}
+                    />
                   </>
                 )}
               </div>

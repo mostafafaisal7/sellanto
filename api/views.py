@@ -5111,7 +5111,6 @@ class InstagramContentView(APIView):
             'timestamp': m.get('timestamp', ''),
             'like_count': m.get('like_count', 0),
             'comments_count': m.get('comments_count', 0),
-            'is_archived': False,
         } for m in data.get('data', []) if isinstance(m, dict) and m.get('id')]
         cursor = data.get('paging', {}).get('cursors', {}).get('after')
 
@@ -5135,10 +5134,16 @@ class InstagramContentView(APIView):
         return Response({'media': media, 'next_cursor': cursor, 'profile': profile})
 
 
-class InstagramContentArchiveView(APIView):
+class InstagramContentDeleteView(APIView):
+    """Permanently delete one media object from Instagram.
+
+    Was called "archive", which it never was: this issues DELETE /{ig-media-id}
+    and the post is gone for good. Instagram has no archive-via-API concept,
+    so there is nothing to hide behind a softer word.
+    """
     permission_classes = [IsAuthenticated]
 
-    def post(self, request, media_id):
+    def delete(self, request, media_id):
         ig = SocialAccount.objects.filter(user=request.user, platform='instagram', is_active=True).first()
         if not ig:
             return Response({'error': 'Instagram account not connected'}, status=400)
@@ -5149,8 +5154,8 @@ class InstagramContentArchiveView(APIView):
         )
         data = resp.json()
         if 'error' in data:
-            return Response({'error': data['error'].get('message', 'Could not archive media')}, status=400)
-        return Response({'archived': True})
+            return Response({'error': data['error'].get('message', 'Could not delete this post')}, status=400)
+        return Response({'deleted': True})
 
 
 class FacebookPagesMetadataView(APIView):

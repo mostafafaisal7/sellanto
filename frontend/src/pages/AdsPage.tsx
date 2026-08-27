@@ -39,7 +39,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import { Button, Card, Spinner } from '../components/ui';
+import { Button, Card, Spinner, HelpButton } from '../components/ui';
 import { adsService, type AdCampaign, type AdAccount } from '../services/adsService';
 import { BoostPostModal } from '../components/ads/BoostPostModal';
 import { RunVideoAdModal } from '../components/ads/RunVideoAdModal';
@@ -185,7 +185,14 @@ function CampaignInsightsPanel({
     <div className="space-y-4">
       {/* Period selector */}
       <div className="flex items-center justify-between">
-        <p className="text-sm font-medium text-text-primary">Performance</p>
+        <p className="text-sm font-medium text-text-primary flex items-center gap-1.5">
+          Performance
+          <HelpButton
+            title="Performance"
+            body={<><strong>Impressions, clicks and spend</strong> for this campaign,
+              read from Meta. Use 7d / 14d / 30d to change the period.</>}
+          />
+        </p>
         <div className="flex items-center gap-1 bg-[#1A1A2E] border border-white/10 rounded-lg p-1">
           {(['last_7d', 'last_14d', 'last_30d'] as const).map((p) => (
             <button
@@ -386,6 +393,15 @@ export function AdsPage() {
   const [carouselOpen, setCarouselOpen] = useState(false);
   const [leadFormOpen, setLeadFormOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  // Which ad account this page is showing. Everything below — insights, the
+  // campaign list and the totals — is scoped to it, so it must be visible even
+  // when there is only one account: "$0.05 spent" means nothing if you cannot
+  // tell whose account it is. Remembered so a reload does not silently switch
+  // the account the numbers belong to.
+  const [selectedAccountId, setSelectedAccountId] = useState<number | null>(() => {
+    const saved = Number(localStorage.getItem('ads:selectedAccountId'));
+    return Number.isFinite(saved) && saved > 0 ? saved : null;
+  });
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -397,8 +413,15 @@ export function AdsPage() {
       ]);
       // This is the Meta Ads page — only show Meta accounts/campaigns.
       // (Google Ads has its own page at /google-ads.)
-      setAccounts((accData.accounts || []).filter((a) => a.provider === 'meta'));
+      const metaAccounts = (accData.accounts || []).filter((a) => a.provider === 'meta');
+      setAccounts(metaAccounts);
       setCampaigns(campData.campaigns || []);
+      // Fall back to the first account when nothing is stored, or when the
+      // stored one has since been disconnected.
+      setSelectedAccountId((current) => {
+        if (current && metaAccounts.some((a) => a.id === current)) return current;
+        return metaAccounts[0]?.id ?? null;
+      });
     } catch {
       setError('Could not load ads data. Make sure your Meta Ad Account is connected.');
     } finally {
@@ -480,12 +503,32 @@ export function AdsPage() {
     }
   };
 
-  const filtered = statusFilter === 'all'
-    ? campaigns
-    : campaigns.filter((c) => c.status === statusFilter);
+  const selectedAccount = accounts.find((a) => a.id === selectedAccountId) ?? null;
 
-  const totalSpend = campaigns.reduce((s, c) => s + c.spend_to_date_minor, 0) / 100;
-  const activeCampaigns = campaigns.filter((c) => c.status === 'active').length;
+  // Everything below the picker belongs to the selected account only. Mixing
+  // two accounts' campaigns into one spend figure would be worse than useless.
+  const accountCampaigns = selectedAccountId
+    ? campaigns.filter((c) => c.ad_account_id === selectedAccountId)
+    : campaigns;
+
+  const filtered = statusFilter === 'all'
+    ? accountCampaigns
+    : accountCampaigns.filter((c) => c.status === statusFilter);
+
+  const totalSpend = accountCampaigns.reduce((s, c) => s + c.spend_to_date_minor, 0) / 100;
+  const activeCampaigns = accountCampaigns.filter((c) => c.status === 'active').length;
+
+  // Every account-scoped panel reads this one value. selectedAccountId is null
+  // only in the first render before accounts arrive, and each panel is behind
+  // an accounts.length > 0 guard, so the fallback never actually resolves to a
+  // different account than the picker shows.
+  const activeAccountId = selectedAccountId ?? accounts[0]?.id ?? 0;
+
+  const chooseAccount = (id: number) => {
+    setSelectedAccountId(id);
+    localStorage.setItem('ads:selectedAccountId', String(id));
+    setStatusFilter('all');
+  };
 
   return (
     <div className="space-y-6">
@@ -521,6 +564,12 @@ export function AdsPage() {
             <MegaphoneIcon className="w-4 h-4" />
             Create Campaign
           </Button>
+          <HelpButton
+            title="Create Campaign"
+            body={<>Creates a new <strong>Meta ad campaign</strong> in your connected
+              ad account.</>}
+            warning={<>Campaigns spend <strong>real money</strong> once you set them live.</>}
+          />
           <Button variant="secondary" size="sm" onClick={() => setCarouselOpen(true)} className="flex items-center gap-2">
             <ChartBarIcon className="w-4 h-4" />
             Carousel
@@ -536,13 +585,14 @@ export function AdsPage() {
         </div>
       </div>
 
-      {/* Permission info */}
+      {/* What this page does. */}
       <div className="flex items-start gap-3 bg-blue-500/10 border border-blue-500/20 rounded-xl p-4">
         <MegaphoneIcon className="w-5 h-5 text-blue-400 shrink-0 mt-0.5" />
         <div>
-          <p className="text-sm font-medium text-blue-300">ads_management · ads_read · pages_manage_ads active</p>
+          <p className="text-sm font-medium text-blue-300">Meta Ads</p>
           <p className="text-xs text-blue-400/80 mt-0.5">
-            SellAnto manages your Meta ad campaigns, reads performance insights, and allows boosting organic posts directly from your content schedule.
+            SellAnto creates and manages your Meta ad campaigns, reads their performance,
+            and can boost posts from your content schedule.
           </p>
         </div>
       </div>
@@ -554,11 +604,68 @@ export function AdsPage() {
         </div>
       )}
 
+      {/* Which account everything below belongs to. Shown even for a single
+          account, so the figures are never unattributed. */}
+      {!loading && accounts.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3 bg-[#1A1A2E] border border-white/10 rounded-xl px-4 py-3">
+          <span className="text-xs font-semibold uppercase tracking-wide text-text-muted">
+            Ad account
+          </span>
+          {accounts.length === 1 ? (
+            <span className="text-sm font-semibold text-text-primary">
+              {selectedAccount?.name || `Account ${selectedAccount?.external_id}`}
+            </span>
+          ) : (
+            <div className="flex flex-wrap items-center gap-2">
+              {accounts.map((a) => {
+                const isActive = a.id === selectedAccountId;
+                return (
+                  <button
+                    key={a.id}
+                    type="button"
+                    onClick={() => chooseAccount(a.id)}
+                    title={`Show campaigns and performance for ${a.name || a.external_id} (${a.external_id})`}
+                    className={`px-3.5 py-2 rounded-lg text-sm font-semibold transition-colors border ${
+                      isActive
+                        ? 'bg-coral text-white border-coral shadow-lg shadow-coral/20'
+                        : 'bg-dark-900/60 text-text-secondary border-white/15 hover:text-text-primary hover:border-white/35'
+                    }`}
+                  >
+                    {a.name || `Account ${a.external_id}`}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {selectedAccount && (
+            <span className="text-xs text-text-muted">
+              ID {selectedAccount.external_id}
+              {selectedAccount.currency_code ? ` · ${selectedAccount.currency_code}` : ''}
+            </span>
+          )}
+          {selectedAccount?.is_sandbox && (
+            <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/15 text-amber-400 font-semibold">
+              Test account
+            </span>
+          )}
+          <div className="ml-auto">
+            <HelpButton
+              title="Ad account"
+              body={<>The Meta ad account these figures come from. Everything below —{' '}
+                <strong>performance, campaigns and spend</strong> — is for this account only.
+                {accounts.length > 1 ? ' Select another to switch.' : ''}</>}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Summary KPIs */}
       {!loading && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           {[
             { label: 'Ad Accounts', value: accounts.length, icon: MegaphoneIcon, color: 'text-coral' },
+            // The three below are scoped to the selected account, not all of them.
             { label: 'Total Campaigns', value: campaigns.length, icon: ChartBarIcon, color: 'text-purple-400' },
             { label: 'Active Campaigns', value: activeCampaigns, icon: RocketLaunchIcon, color: 'text-green-400' },
             { label: 'Total Spend', value: `$${totalSpend.toFixed(2)}`, icon: BanknotesIcon, color: 'text-blue-400' },
@@ -574,7 +681,7 @@ export function AdsPage() {
 
       {/* Account-level performance summary + recommendations */}
       {!loading && accounts.length > 0 && (
-        <AccountInsightsPanel adAccountId={accounts[0].id} />
+        <AccountInsightsPanel adAccountId={activeAccountId} />
       )}
 
       {/* Main content */}
@@ -731,7 +838,7 @@ export function AdsPage() {
 
       {/* Saved audiences (scoped to the first connected ad account) */}
       {accounts.length > 0 && (
-        <AudiencesPanel adAccountId={accounts[0].id} />
+        <AudiencesPanel adAccountId={activeAccountId} />
       )}
 
       <BoostPostModal isOpen={boostOpen} onClose={() => setBoostOpen(false)} />

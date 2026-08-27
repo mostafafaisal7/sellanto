@@ -15,7 +15,7 @@ import {
   CheckIcon,
   ChevronDownIcon,
 } from '@heroicons/react/24/outline';
-import { Button, Modal, ConfirmModal, Spinner, PlatformIcon, platformColors, platformNames } from '../components/ui';
+import { Button, Modal, ConfirmModal, Spinner, PlatformIcon, platformColors, platformNames, HelpButton } from '../components/ui';
 import type { SocialAccount, PlatformType } from '../types';
 import { authFetch } from '../services/api';
 import { toast as showToast } from '../store/toastStore';
@@ -508,6 +508,16 @@ export default function ConnectAccountsPage() {
                     the user can confirm exactly which account is linked. */}
                 {p === 'instagram' && isConnected && igProfile ? (
                   <div className="flex flex-col items-center text-center gap-2 mb-3 py-3 px-2 bg-dark-900/40 border border-white/5 rounded-xl">
+                    <div className="self-end -mt-1 -mr-1">
+                      <HelpButton
+                        title="Your Instagram account"
+                        body={<>
+                          The Instagram account you connected. SellAnto reads its{' '}
+                          <strong>username, picture and post counts</strong> so you can
+                          check it is the right one.
+                        </>}
+                      />
+                    </div>
                     {igProfile.profile_picture_url && !igAvatarFailed ? (
                       <img
                         src={igProfile.profile_picture_url}

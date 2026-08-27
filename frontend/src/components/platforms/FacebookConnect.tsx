@@ -26,6 +26,7 @@ import {
   TrashIcon,
 } from '@heroicons/react/24/outline';
 import { facebookOAuthService } from '../../services/facebookOAuthService';
+import { HelpButton } from '../ui';
 import { MessengerPagePicker } from './MessengerPagePicker';
 import type {
   FacebookOAuthPage,
@@ -521,6 +522,9 @@ export function FacebookConnect({ onConnected, onDisconnected, buttonLabel = 'Co
     <div className="space-y-4">
       {/* ── Connect Button ── */}
       <div className="flex flex-col gap-3">
+        {/* The column stacks its children, so the button and its "?" need their
+            own row or the help icon drops onto the next line. */}
+        <div className="flex items-center gap-2">
         <button
           onClick={handleConnect}
           disabled={isLoading || disconnecting}
@@ -539,6 +543,16 @@ export function FacebookConnect({ onConnected, onDisconnected, buttonLabel = 'Co
            overall !== 'not_connected' ? 'Reconnect Facebook' :
            buttonLabel}
         </button>
+        <HelpButton
+          size="md"
+          title={overall !== 'not_connected' ? 'Reconnect Facebook' : 'Connect Facebook'}
+          body={<>
+            Connects your <strong>Facebook Pages</strong> — including ones a business
+            or agency <strong>assigned to you</strong> — plus the{' '}
+            <strong>Instagram account</strong> linked to each Page.
+          </>}
+        />
+        </div>
 
         {/* Explicit success confirmation.
             Once connected the button reads "Reconnect Facebook" and a Disconnect
@@ -605,6 +619,7 @@ export function FacebookConnect({ onConnected, onDisconnected, buttonLabel = 'Co
             Facebook, Instagram and Messenger together, matching how they were
             granted. Two-step so a stray click can't unlink everything. */}
         {overall !== 'not_connected' && !confirmDisconnect && (
+          <div className="flex items-center gap-2">
           <button
             onClick={() => setConfirmDisconnect(true)}
             disabled={isLoading || disconnecting}
@@ -616,6 +631,16 @@ export function FacebookConnect({ onConnected, onDisconnected, buttonLabel = 'Co
             <TrashIcon className="w-4 h-4" />
             Disconnect
           </button>
+          <HelpButton
+            size="md"
+            title="Disconnect"
+            body={<>
+              Removes SellAnto's access to your <strong>Pages, Instagram and
+              Messenger</strong>. Your posts stay on Facebook and Instagram.
+            </>}
+            warning={<>Scheduled posts <strong>stop publishing</strong> until you reconnect.</>}
+          />
+          </div>
         )}
 
         <AnimatePresence>

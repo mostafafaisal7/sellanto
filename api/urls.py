@@ -564,7 +564,7 @@ urlpatterns = [
 
     # Instagram content management (instagram_manage_insights, instagram_content_publish)
     path('instagram/content/', views.InstagramContentView.as_view(), name='instagram-content'),
-    path('instagram/content/<str:media_id>/archive/', views.InstagramContentArchiveView.as_view(), name='instagram-content-archive'),
+    path('instagram/content/<str:media_id>/delete/', views.InstagramContentDeleteView.as_view(), name='instagram-content-delete'),
 
     # Facebook page metadata (pages_manage_metadata)
     path('platforms/facebook/pages/metadata/', views.FacebookPagesMetadataView.as_view(), name='fb-pages-metadata'),

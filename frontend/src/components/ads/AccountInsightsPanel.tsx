@@ -23,6 +23,7 @@ import {
   type AccountRecommendation,
 } from '../../services/adsService';
 import { extractApiError } from '../../utils/extractApiError';
+import { HelpButton } from '../ui';
 
 const SEVERITY: Record<string, { color: string; bg: string; border: string; icon: React.ElementType }> = {
   high:     { color: 'text-red-300',    bg: 'bg-red-500/10',    border: 'border-red-500/30',    icon: ExclamationTriangleIcon },
@@ -99,6 +100,14 @@ export function AccountInsightsPanel({ adAccountId }: { adAccountId?: number }) 
         <ChartBarIcon className="w-4 h-4 text-purple-300" />
         <h4 className="text-sm font-bold text-text-primary">Account overview</h4>
         <span className="text-[10px] text-text-muted">· last 7 days</span>
+        <div className="ml-auto">
+          <HelpButton
+            title="Account overview"
+            body={<>The <strong>last 7 days</strong> of results for this ad account, read
+              from Meta — what you <strong>spent</strong>, how many people saw and clicked
+              your ads, and how many campaigns are running.</>}
+          />
+        </div>
       </div>
 
       {error && (
@@ -123,6 +132,14 @@ export function AccountInsightsPanel({ adAccountId }: { adAccountId?: number }) 
           <div className="mt-4">
             <p className="text-xs font-semibold text-text-secondary mb-2 flex items-center gap-1.5">
               <SparklesIcon className="w-3.5 h-3.5 text-purple-300" /> Recommendations
+              <span className="ml-auto">
+                <HelpButton
+                  title="Recommendations"
+                  body={<>Suggestions based on <strong>how your ads actually performed</strong> —
+                    for example when the same people are seeing an ad too often, or clicks
+                    are falling.</>}
+                />
+              </span>
             </p>
             {recs.length === 0 ? (
               <p className="text-xs text-text-muted">No recommendations right now.</p>

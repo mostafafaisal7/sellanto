@@ -8,6 +8,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ChartPieIcon } from '@heroicons/react/24/outline';
 import { adsService, type BreakdownDimension, type BreakdownRow } from '../../services/adsService';
+import { HelpButton } from '../ui';
 
 const DIMENSIONS: { value: BreakdownDimension; label: string; field: keyof BreakdownRow | (keyof BreakdownRow)[] }[] = [
   { value: 'age', label: 'Age', field: 'age' },
@@ -63,6 +64,12 @@ export function InsightBreakdownPanel({ campaignId }: { campaignId: number }) {
           <ChartPieIcon className="w-4 h-4 text-blue-300" />
           <h4 className="text-sm font-bold text-text-primary">Breakdown</h4>
         </div>
+        <HelpButton
+          title="Breakdown"
+          body={<>Splits this campaign's results by <strong>age, gender, placement,
+            country or device</strong>, so you can see <strong>who your ads reached</strong>{' '}
+            and where they performed best.</>}
+        />
       </div>
 
       {/* Dimension toggles */}
