@@ -92,7 +92,9 @@ const mainNavItems: NavItem[] = [
       { name: 'Instagram Content', href: '/instagram-content', icon: PhotoIcon },
       { name: 'Discover', href: '/discover', icon: HashtagIcon },
       { name: 'Leads', href: '/leads', icon: UserGroupIcon },
-      { name: 'Ads', href: '/ads', icon: MegaphoneIcon },
+      // "Meta Ads", not "Ads": there is a separate 'Google Ads' item above, so
+      // the bare name gave no clue which provider this page manages.
+      { name: 'Meta Ads', href: '/ads', icon: MegaphoneIcon },
     ],
   },
 ];

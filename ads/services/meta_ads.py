@@ -2039,7 +2039,12 @@ def import_account_campaigns(ad_account: AdAccount, user) -> dict:
             # do not — so the campaign's own daily_budget is commonly absent.
             # Pulling the ad sets inline (one request, not one per campaign)
             # lets us fall back to their budgets instead of displaying $0.00.
-            'adsets.limit(50){daily_budget,lifetime_budget,status}'
+            'adsets.limit(50){daily_budget,lifetime_budget,status},'
+            # Lifetime spend. spend_to_date_minor had no writer anywhere in the
+            # codebase — only the model default and the serializer that reads it
+            # — so every campaign card showed "$0.00" spent no matter what it had
+            # actually cost. Requested inline so this stays one round trip.
+            'insights.date_preset(maximum){spend}'
         ),
         limit=200,
     )
@@ -2070,6 +2075,17 @@ def import_account_campaigns(ad_account: AdAccount, user) -> dict:
         start = _parse_meta_time(c.get('start_time')) or \
             _parse_meta_time(c.get('created_time')) or timezone.now()
 
+        # Meta reports spend as a decimal string in the account currency
+        # ('0.05'); we store integer minor units. round() rather than int() so
+        # 0.05 does not truncate to 4 cents through float representation.
+        spend_rows = (c.get('insights') or {}).get('data') or []
+        spend_minor = 0
+        if spend_rows and isinstance(spend_rows[0], dict):
+            try:
+                spend_minor = int(round(float(spend_rows[0].get('spend') or 0) * 100))
+            except (TypeError, ValueError):
+                spend_minor = 0
+
         defaults = {
             'user':        user,
             'name':        (c.get('name') or 'Untitled campaign')[:255],
@@ -2077,6 +2093,7 @@ def import_account_campaigns(ad_account: AdAccount, user) -> dict:
             'status':      _META_STATUS_REVERSE_MAP.get(eff, 'paused'),
             'daily_budget_minor':    daily,
             'lifetime_budget_minor': lifetime or None,
+            'spend_to_date_minor':   spend_minor,
             'start_date':  start,
             'end_date':    _parse_meta_time(c.get('stop_time')),
             'last_synced_at': timezone.now(),

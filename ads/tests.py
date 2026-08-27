@@ -921,3 +921,48 @@ class CampaignImportBudgetTests(MetaAdsTestBase):
         """Nothing is configured to spend — 0 is the honest number."""
         c = self._import(self._campaign(adsets={'data': []}))
         self.assertEqual(c.daily_budget_minor, 0)
+
+
+class CampaignSpendImportTests(MetaAdsTestBase):
+    """spend_to_date_minor had no writer anywhere in the codebase.
+
+    The model declared it, the serializer read it, and nothing ever set it --
+    so every campaign card reported "$0.00" spent regardless of real cost.
+    """
+
+    def _import(self, insights):
+        campaign = {
+            'id': '3001', 'name': 'C', 'status': 'PAUSED',
+            'effective_status': 'PAUSED', 'objective': 'OUTCOME_ENGAGEMENT',
+            'created_time': '2026-08-01T10:00:00+0000',
+            'adsets': {'data': [{'daily_budget': '100', 'status': 'PAUSED'}]},
+        }
+        if insights is not None:
+            campaign['insights'] = insights
+
+        def fake_get(path, token, **params):
+            if path == f'act_{self.sandbox.external_id}/campaigns':
+                return {'data': [campaign]}
+            return {'data': []}
+
+        with patch.object(meta_ads, '_get', fake_get):
+            self.client.get('/api/v1/ads/campaigns/?sync=1')
+        return AdCampaign.objects.get(external_campaign_id='3001')
+
+    def test_spend_is_stored_in_minor_units(self):
+        c = self._import({'data': [{'spend': '0.05'}]})
+        self.assertEqual(c.spend_to_date_minor, 5)
+
+    def test_larger_spend_does_not_lose_precision(self):
+        c = self._import({'data': [{'spend': '12.34'}]})
+        self.assertEqual(c.spend_to_date_minor, 1234)
+
+    def test_campaign_that_never_delivered_reports_zero(self):
+        """Meta omits the insights edge entirely until a campaign spends."""
+        c = self._import(None)
+        self.assertEqual(c.spend_to_date_minor, 0)
+
+    def test_malformed_spend_does_not_break_the_import(self):
+        c = self._import({'data': [{'spend': 'n/a'}]})
+        self.assertEqual(c.spend_to_date_minor, 0)
+        self.assertEqual(c.daily_budget_minor, 100, 'rest of the row still imports')

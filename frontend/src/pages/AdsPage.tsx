@@ -494,7 +494,7 @@ export function AdsPage() {
         <div>
           <h1 className="text-2xl font-bold text-text-primary flex items-center gap-2">
             <MegaphoneIcon className="w-7 h-7 text-coral" />
-            Ads & Campaigns
+            Meta Ads & Campaigns
           </h1>
           <p className="text-text-secondary text-sm mt-1">
             Manage your Meta ad campaigns, track performance, and boost posts.
