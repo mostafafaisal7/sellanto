@@ -962,3 +962,67 @@ class AdminHideSwitchTests(TestCase):
         self.assertEqual(
             SiteConfiguration.get('messenger_feature_enabled'), 'true'
         )
+
+
+class FacebookScopeTests(TestCase):
+    """Pin the scopes SellAnto's features actually depend on.
+
+    Scopes have been dropped from this list twice as "unused", and both times
+    the failure was silent rather than loud: removing pages_messaging left a
+    live Messenger feature without consent, and removing business_management
+    made GET /me/accounts return an empty list with HTTP 200 and no error, so
+    users were told they had no Pages at all.
+
+    Nothing in the code imports a scope by name, so nothing else would catch a
+    deletion. This does.
+    """
+
+    def _scopes(self):
+        from platforms.oauth_views import FB_SCOPES
+        return set(FB_SCOPES.split(','))
+
+    def test_every_feature_scope_is_requested(self):
+        required = {
+            # Pages: discovery, publishing, metadata, webhooks
+            'business_management',   # Pages held in a Business Portfolio
+            'pages_show_list',
+            'pages_manage_metadata',  # subscribed_apps + Page profile edits
+            'pages_manage_posts',
+            'pages_read_engagement',
+            'pages_messaging',        # messenger_bot: POST /me/messages
+            # Comments on Page posts are other people's content, and replying
+            # to or hiding them is a separate grant again.
+            'pages_read_user_content',
+            'pages_manage_engagement',
+            # Instagram
+            'instagram_basic',
+            'instagram_content_publish',
+            'instagram_manage_comments',
+            'instagram_manage_contents',
+            # Lead ads + paid ads
+            'leads_retrieval',
+            'ads_management',
+            'ads_read',
+            'pages_manage_ads',
+        }
+        missing = required - self._scopes()
+        self.assertEqual(missing, set(), f'FB_SCOPES is missing: {sorted(missing)}')
+
+    def test_no_scope_meta_rejects_on_the_consent_screen(self):
+        """These were tried and refused by Meta; re-adding one breaks login
+        for everyone, since the whole consent screen fails."""
+        invalid = {
+            'instagram_business_content_publish',  # not a real permission
+            'instagram_manage_insights',           # not valid for this app
+            'whatsapp_business_messaging',         # no WhatsApp integration
+            'whatsapp_business_management',
+        }
+        present = invalid & self._scopes()
+        self.assertEqual(present, set(), f'FB_SCOPES contains invalid: {sorted(present)}')
+
+    def test_scopes_are_clean_tokens(self):
+        """A stray space or empty entry silently corrupts the consent URL."""
+        from platforms.oauth_views import FB_SCOPES
+        parts = FB_SCOPES.split(',')
+        self.assertTrue(all(p and p == p.strip() for p in parts), FB_SCOPES)
+        self.assertEqual(len(parts), len(set(parts)), 'duplicate scope requested')

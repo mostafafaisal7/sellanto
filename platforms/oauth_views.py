@@ -77,6 +77,23 @@ FB_SCOPES = ','.join([
     'pages_manage_metadata',
     'pages_manage_posts',
     'pages_read_engagement',
+    # Comments on a Page post are content OTHER people wrote, which is a
+    # different scope from the Page's own content:
+    #   pages_read_engagement   -> the Page's own posts and metadata
+    #   pages_read_user_content -> comments, visitor posts, ratings
+    # Without the second, GET /{post-id}/comments fails with
+    #   (#10) This endpoint requires the 'pages_read_user_content' permission
+    #         or the 'Page Public Content Access' feature
+    # so the Facebook tab of the post comment inbox could never load. Reading
+    # alone is not enough to make that inbox useful either -- replying to,
+    # hiding or deleting a comment is pages_manage_engagement. Both are needed
+    # together or the feature is half a feature.
+    #
+    # Both require Advanced Access from App Review before they work for
+    # non-admin users, and existing users must reconnect before their token
+    # carries them.
+    'pages_read_user_content',
+    'pages_manage_engagement',
     # Messenger — required by the messenger_bot app: POST /me/messages
     # (messenger_bot/views.py, services/message_handler.py, api/views.py) and
     # GET /{page_id}/conversations. Removed by mistake in 5e942c2f as "unused";
