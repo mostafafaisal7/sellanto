@@ -36,6 +36,18 @@ import type {
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
+/**
+ * How long to keep polling the server after the popup has closed without any
+ * browser channel reaching us.
+ *
+ * localStorage, BroadcastChannel and postMessage are all same-origin, so on a
+ * deployment where the OAuth callback is served from a different origin than
+ * the app they go silent together and the server poll is the only thing left
+ * that can observe the connection. It runs every 2s, so this allows several
+ * attempts while still giving up long before the user would.
+ */
+const GRACE_AFTER_CLOSE_MS = 15000;
+
 type Step =
   | 'idle'
   | 'opening'
@@ -93,6 +105,12 @@ export function FacebookConnect({ onConnected, onDisconnected, buttonLabel = 'Co
   const pollRef     = useRef<ReturnType<typeof setInterval> | null>(null);
   /** Second interval: the browser-channel backstop, cleared alongside pollRef. */
   const localPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  /**
+   * Grace window opened when the popup closes without having reached us.
+   * Keeps the server poll alive for a few more seconds instead of tearing
+   * everything down the instant the popup is gone. See GRACE_AFTER_CLOSE_MS.
+   */
+  const graceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handledRef  = useRef(false); // prevent double-processing from both channels
 
   // ── Fetch live status ──────────────────────────────────────────────────────
@@ -195,6 +213,10 @@ export function FacebookConnect({ onConnected, onDisconnected, buttonLabel = 'Co
     if (localPollRef.current) {
       clearInterval(localPollRef.current);
       localPollRef.current = null;
+    }
+    if (graceRef.current) {
+      clearTimeout(graceRef.current);
+      graceRef.current = null;
     }
     if (msgListenerRef.current) {
       window.removeEventListener('message', msgListenerRef.current);
@@ -424,19 +446,61 @@ export function FacebookConnect({ onConnected, onDisconnected, buttonLabel = 'Co
         }
 
         if (popupRef.current?.closed) {
-          // Give localStorage channel a brief moment to fire before giving up
+          // Stop this interval before anything else: it fires every 500ms and
+          // the popup stays closed, so without this the branch re-enters and
+          // stacks a fresh timeout (and grace window) on every tick.
+          if (localPollRef.current) {
+            clearInterval(localPollRef.current);
+            localPollRef.current = null;
+          }
+
+          // Give the localStorage channel a brief moment to fire before
+          // falling back to the server poll.
           setTimeout(() => {
+            if (handledRef.current) return;
+
             const stored = localStorage.getItem('fb_oauth_result');
             if (stored) {
               try {
                 const data = JSON.parse(stored);
                 localStorage.removeItem('fb_oauth_result');
-                if (data?.type?.startsWith('FB_OAUTH_')) processOAuthResult(data);
-                return;
-              } catch { /* ignore */ }
+                if (data?.type?.startsWith('FB_OAUTH_')) {
+                  processOAuthResult(data);
+                  return;
+                }
+              } catch { /* fall through to the grace window */ }
             }
-            cleanup();
-            setStep((prev) => (prev === 'waiting' ? 'idle' : prev));
+
+            // The popup is gone and no browser channel reached us. That is the
+            // expected case whenever the OAuth callback is served from a
+            // different origin than the app: localStorage, BroadcastChannel and
+            // postMessage are all same-origin, so all three go silent together
+            // and only the server poll can still see the connection.
+            //
+            // This used to call cleanup() here, which killed that poll ~300ms
+            // after the popup closed -- the account was connected server-side
+            // but the card kept saying "Connect" until a manual reload. Leave
+            // pollRef running and give it a real window to notice.
+            setStep((prev) => (prev === 'waiting' ? 'refreshing' : prev));
+
+            graceRef.current = setTimeout(() => {
+              graceRef.current = null;
+              if (handledRef.current) return;
+              cleanup();
+
+              // The connection may have landed even though we never saw it, so
+              // check once more before giving up. Offering the reload beats
+              // snapping back to 'idle', which reads as "nothing happened".
+              const settle = (fresh: FacebookConnectionStatus | null) => {
+                if (fresh && fresh.overall_status !== 'not_connected') {
+                  setNeedsManualRefresh(true);
+                }
+                setStep((prev) => (prev === 'refreshing' ? 'idle' : prev));
+              };
+              const finalCheck = refreshStatusRef.current?.(true);
+              if (finalCheck) void finalCheck.then(settle);
+              else settle(null);
+            }, GRACE_AFTER_CLOSE_MS);
           }, 300);
         }
       }, 500);

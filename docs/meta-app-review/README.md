@@ -25,7 +25,7 @@ The screenshots the user shared come from the Meta App Dashboard →
 
 | # | Permission | Justification filled | Screencast | Test calls | File |
 |---|-----------|:---:|:---:|:---:|------|
-| 1 | `pages_manage_posts` | ✅ | ✅ uploaded | ⚠️ 0 of 1 required | [01-pages_manage_posts.md](01-pages_manage_posts.md) |
+| 1 | `pages_manage_posts` | ✅ accepted | 🔴 **REJECTED 8/4/26** — re-record | ⚠️ 0 of 1 required | [01](01-pages_manage_posts.md) · [script](01a-pages_manage_posts-screencast-script.md) |
 | 2 | `instagram_manage_comments` | — | — | ⚠️ test not done | [02-instagram_manage_comments.md](02-instagram_manage_comments.md) |
 | 3 | `instagram_manage_contents` | — | — | ⚠️ test not done | [03-instagram_manage_contents.md](03-instagram_manage_contents.md) |
 | 4 | `instagram_content_publish` | ✅ accepted | 🔴 **REJECTED 8/4/26** — re-record | ⚠️ test not done | [04](04-instagram_content_publish.md) · [script](04a-instagram_content_publish-screencast-script.md) |

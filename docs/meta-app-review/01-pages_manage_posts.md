@@ -20,7 +20,44 @@
 > user's behalf.
 
 ## Screencast
-- **Status:** ✅ Uploaded ("View uploaded screencast" shown; drag-to-replace available)
+- **Status:** 🔴 **REJECTED 2026-08-04** — Developer Policy 1.6, "Screencast Not Aligned
+  with Use Case Details". Same template as `instagram_basic` (08) and
+  `instagram_content_publish` (04), same date.
+
+### Rejection text (verbatim, received 2026-08-04 4:16 AM)
+> We have determined that your apps' use case is allowed, however, the submitted
+> screencast fails to demonstrate the end-to-end experience of the use case described in
+> the submission notes, hence the requested permission/feature is rejected.
+
+Meta requires the re-record to contain: the complete Meta login flow; a user granting app
+access to the permission; the end-to-end experience of the use case; English UI with
+captions/tool-tips and buttons explained; and a declaration if the app is
+server-to-server or uses a system user token.
+
+### Diagnosis — the use case was ACCEPTED, only the video failed
+**There is NO code defect here.** This is the `instagram_content_publish` situation (file
+04), not the `instagram_basic` one (file 08): every claim in the submitted justification
+is backed by shipped code (see the cross-check below), so **do not rewrite the
+justification**. The video simply never showed the post **live on the real Facebook Page**.
+
+Full scene-by-scene re-record script:
+[01a-pages_manage_posts-screencast-script.md](01a-pages_manage_posts-screencast-script.md).
+
+**Materially easier now:** "Post Now" (`POST /api/v1/posts/<id>/publish/`,
+`api/views.py:1271`) shipped on `feat/post-now` *after* this rejection, so publishing is
+synchronous — the ~90s scheduler wait that complicates the Instagram scripts does not
+apply to this recording.
+
+### Optional strengthening of the notes (add, do not replace)
+The submitted justification describes only **create**. Meta's own allowed usage in this
+same feedback is "to create **and delete** content on a Page", and SellAnto has delete
+fully built and wired (below). Adding two sentences covers the whole allowed usage and
+matches what Scenes 6–7 of the script put on screen:
+
+> Users can also delete a published Page post from SellAnto. Deleting it in SellAnto calls
+> `DELETE /{post-id}`, removing the post from the Facebook Page itself rather than only
+> from SellAnto's records, so a user retracting content does not have to go to Facebook
+> separately. This is why SellAnto needs create *and* delete under `pages_manage_posts`.
 
 ## Required API test calls
 - **Status:** ⚠️ **`0 of 1 API call(s) required`** — NOT satisfied yet.
