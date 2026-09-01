@@ -91,9 +91,21 @@ class MessageHandler:
 
         logger.info(f"[MH] Initializing MessageHandler for: {connection.page_name}")
 
-        # Try to get AI config
+        # Try to get AI config.
+        #
+        # Resolve it ONCE here and keep it on self. ai_config is a reverse
+        # OneToOne, so `self.connection.ai_config` RAISES
+        # RelatedObjectDoesNotExist when no row exists -- it does not return
+        # None. That made `getattr(self.connection.ai_config, 'x', default)`
+        # useless as a guard: the inner attribute access throws before getattr
+        # ever sees the default. The exception was swallowed by the broad
+        # handler in process_message, so a connection without a config saved
+        # the inbound message, silently sent no reply, and logged nothing the
+        # operator would notice. Connections made through Facebook OAuth had
+        # no config at all until AIConfiguration was created at setup time.
+        self.ai_config = getattr(connection, 'ai_config', None)
         try:
-            ai_config = getattr(connection, 'ai_config', None)
+            ai_config = self.ai_config
             if ai_config:
                 logger.info(f"[MH] AI Config found - Model: {ai_config.openai_model}, RAG: {ai_config.rag_enabled}")
 
@@ -158,7 +170,7 @@ class MessageHandler:
                 # Handle voice messages
                 if audio_urls and self.openai_client:
                     # Check if voice transcription is enabled
-                    voice_enabled = getattr(self.connection.ai_config, 'voice_transcription_enabled', True)
+                    voice_enabled = getattr(self.ai_config, 'voice_transcription_enabled', True)
                     if voice_enabled:
                         logger.info("[MH] Voice message detected!")
                         for audio_url in audio_urls:
@@ -232,6 +244,7 @@ class MessageHandler:
                 return True
 
             # Diamond Token pre-check (charge the page owner)
+            pending_charge = None
             can_afford, cost, balance = pre_check(self.connection.user, 'messenger_reply')
             if not can_afford:
                 logger.warning(f"[MH] Insufficient diamonds for messenger reply (cost={cost}, balance={balance})")
@@ -258,18 +271,18 @@ class MessageHandler:
 
                 response_text = response_data['response']
 
-                # Deduct Diamond Tokens after successful AI generation
-                deduct_diamonds(
-                    user=self.connection.user,
-                    feature='messenger_reply',
-                    provider='openai',
-                    raw_tokens=response_data.get('tokens', 0),
-                    model_used=response_data.get('model', ''),
-                )
-            
+                # Charge only once the reply actually reaches Facebook -- see
+                # the deduct_diamonds call after _send_facebook_message below.
+                # Deducting here billed the page owner for replies that never
+                # went out whenever the send failed or the handler raised.
+                pending_charge = {
+                    'raw_tokens': response_data.get('tokens', 0),
+                    'model_used': response_data.get('model', ''),
+                }
+
             # Check if voice reply is enabled
-            voice_reply_enabled = getattr(self.connection.ai_config, 'voice_reply_enabled', False)
-            voice_model = getattr(self.connection.ai_config, 'voice_model', 'nova')
+            voice_reply_enabled = getattr(self.ai_config, 'voice_reply_enabled', False)
+            voice_model = getattr(self.ai_config, 'voice_model', 'nova')
             
             # Save bot message
             bot_message = Message.objects.create(
@@ -311,6 +324,22 @@ class MessageHandler:
             if success:
                 bot_message.delivered = True
                 bot_message.save()
+
+                # Bill now that the reply is actually delivered. The fallback
+                # text sent when the owner is out of diamonds has no
+                # pending_charge, so it stays free.
+                if pending_charge:
+                    try:
+                        deduct_diamonds(
+                            user=self.connection.user,
+                            feature='messenger_reply',
+                            provider='openai',
+                            raw_tokens=pending_charge['raw_tokens'],
+                            model_used=pending_charge['model_used'],
+                        )
+                    except Exception as e:
+                        logger.error(f"[MH] Diamond deduction failed after send: {e}")
+
                 logger.info("[MH] Response sent successfully!")
             else:
                 bot_message.failed = True
@@ -613,7 +642,7 @@ NOT IMPORTANT (is_important: false):
             return None
         
         try:
-            if not self.connection.ai_config.image_understanding_enabled:
+            if not self.ai_config.image_understanding_enabled:
                 return None
             
             # Get image description
@@ -625,7 +654,7 @@ NOT IMPORTANT (is_important: false):
             search_query = f"{user_question} {image_description}"
             context_text = ""
             
-            if self.rag_engine and self.connection.ai_config.rag_enabled:
+            if self.rag_engine and self.ai_config.rag_enabled:
                 relevant_chunks = self.rag_engine.retrieve_relevant_chunks(
                     search_query, self.connection
                 )
@@ -783,7 +812,7 @@ Be specific and factual — extract only what is visible.
             try:
                 # Transcribe using OpenAI Whisper
                 import openai
-                openai.api_key = self.connection.ai_config.openai_api_key
+                openai.api_key = self.ai_config.openai_api_key
                 
                 with open(temp_path, 'rb') as audio_file:
                     # Don't specify language - let Whisper auto-detect
@@ -817,7 +846,7 @@ Be specific and factual — extract only what is visible.
             logger.info("[MH] Generating voice response...")
 
             import openai
-            openai.api_key = self.connection.ai_config.openai_api_key
+            openai.api_key = self.ai_config.openai_api_key
             
             response = openai.audio.speech.create(
                 model="tts-1",  # or "tts-1-hd" for higher quality
@@ -945,9 +974,9 @@ Do NOT use markdown formatting.
 
             result = service.chat_completion(
                 messages=messages,
-                model=self.connection.ai_config.openai_model,
-                temperature=self.connection.ai_config.temperature,
-                max_tokens=self.connection.ai_config.max_tokens,
+                model=self.ai_config.openai_model,
+                temperature=self.ai_config.temperature,
+                max_tokens=self.ai_config.max_tokens,
             )
 
             if not result.success:
@@ -1084,7 +1113,20 @@ Do NOT use markdown formatting.
                     timeout=10
                 )
                 if response.status_code != 200:
-                    logger.error(f"Send failed: {response.text}")
+                    # Tagged [MH] and carrying Meta's error code so this is
+                    # greppable alongside the rest of the message pipeline --
+                    # an untagged "Send failed" hid a broken bot for days.
+                    err = {}
+                    try:
+                        err = response.json().get('error', {})
+                    except Exception:
+                        pass
+                    logger.error(
+                        f"[MH] Send failed to {recipient_id} "
+                        f"(HTTP {response.status_code}, code={err.get('code')}, "
+                        f"subcode={err.get('error_subcode')}): "
+                        f"{err.get('message') or response.text[:300]}"
+                    )
                     return False
                 time.sleep(0.5)
             

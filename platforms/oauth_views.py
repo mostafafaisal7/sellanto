@@ -204,6 +204,36 @@ def _webhook_already_verified():
     return False
 
 
+def _ensure_ai_config(connection):
+    """
+    Guarantee the Messenger bot has an AIConfiguration row.
+
+    AIConfiguration is a reverse OneToOne on MessengerConnection, and it was
+    only ever created lazily by AIConfigurationView when the user opened the AI
+    settings page. A user who connected through Facebook OAuth and never opened
+    that page ended up with a connection whose `.ai_config` access raises
+    RelatedObjectDoesNotExist -- which MessageHandler swallowed, so the bot
+    stored every inbound message and answered none of them.
+
+    Best-effort: a failure here must never block the OAuth flow.
+    """
+    try:
+        from messenger_bot.models import AIConfiguration
+
+        _, created = AIConfiguration.objects.get_or_create(connection=connection)
+        if created:
+            logger.info(
+                f'[FB Messenger] Created default AIConfiguration for page '
+                f'{connection.page_name}. The bot replies with greeting_text '
+                f'until an API key is set in AI settings.'
+            )
+    except Exception as e:
+        logger.warning(
+            f'[FB Messenger] Could not ensure AIConfiguration for '
+            f'{getattr(connection, "page_name", "?")}: {e}'
+        )
+
+
 def _fetch_business_pages(user_token):
     """
     Fetch Pages that live in a Meta Business Portfolio.
@@ -936,6 +966,13 @@ def facebook_setup_messenger(request):
                 )
                 created = True
 
+        # Every connection needs an AIConfiguration row. Nothing else in the
+        # OAuth path created one -- it was only ever made lazily when the user
+        # opened the AI settings page (api/views.py AIConfigurationView), so a
+        # user who connected and never visited settings got a bot that received
+        # messages and silently replied to none of them.
+        _ensure_ai_config(connection)
+
         logger.info(
             f'[FB Messenger] Connection {"created" if created else "updated"} '
             f'for {request.user.username} → page {page_name} '
@@ -1479,7 +1516,7 @@ def _auto_setup_messenger(user, connected_pages, request):
                 ])
                 logger.info(f'[FB OAuth] Auto-messenger: updated user connection to page {page_name}')
             except MessengerConnection.DoesNotExist:
-                MessengerConnection.objects.create(
+                connection = MessengerConnection.objects.create(
                     user=user,
                     page_id=page_id,
                     page_name=page_name,
@@ -1489,6 +1526,9 @@ def _auto_setup_messenger(user, connected_pages, request):
                     is_active=True,
                 )
                 logger.info(f'[FB OAuth] Auto-messenger: created new connection for page {page_name}')
+
+        # Without this the bot receives messages and silently replies to none.
+        _ensure_ai_config(connection)
     except Exception as e:
         logger.error(f'[FB OAuth] Auto-messenger: MessengerConnection save failed: {e}')
 
