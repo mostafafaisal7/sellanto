@@ -1238,10 +1238,28 @@ class AdminCheckSubscriptionView(APIView):
         except Exception as e:
             diagnosis = f'Error checking subscription: {str(e)}'
 
+        # A confirmed subscription proves Meta accepted this webhook URL and
+        # verify token, so the app-level handshake demonstrably happened. Repair
+        # the flag here -- otherwise the only writer is the GET challenge branch
+        # Meta never calls twice, and this button could report a healthy page
+        # while the UI kept badging it "Webhook unverified".
+        if is_subscribed and not conn.is_webhook_verified:
+            conn.is_webhook_verified = True
+            conn.save(update_fields=['is_webhook_verified'])
+            diagnosis += ' Marked webhook as verified.'
+
+        if is_subscribed:
+            from platforms.oauth_views import webhook_verified_config_key
+            SiteConfiguration.set(
+                webhook_verified_config_key(), '1',
+                'Meta completed the app-level webhook handshake for this Facebook app.'
+            )
+
         result = {
             'is_subscribed': is_subscribed,
             'subscribed_fields': subscribed_fields,
             'missing_fields': missing_fields,
+            'is_webhook_verified': conn.is_webhook_verified,
             'diagnosis': diagnosis,
         }
         if app_mode_info:

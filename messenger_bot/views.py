@@ -432,6 +432,17 @@ def webhook(request):
             is_webhook_verified=False,
         ).update(is_webhook_verified=True)
 
+        # Remember it at the app level too. Meta never re-sends this challenge,
+        # and disconnecting deletes every MessengerConnection row -- without a
+        # durable flag, the next reconnect would look unverified forever.
+        # Keyed per Facebook app id so repointing the deployment at a different
+        # Meta app does not inherit this app's handshake.
+        from platforms.oauth_views import webhook_verified_config_key
+        SiteConfiguration.set(
+            webhook_verified_config_key(), '1',
+            'Meta completed the app-level webhook handshake for this Facebook app.'
+        )
+
         logger.info(f'[Webhook] App-level webhook verified by Meta. Marked {updated} connections as verified.')
         return HttpResponse(challenge, content_type='text/plain')
 

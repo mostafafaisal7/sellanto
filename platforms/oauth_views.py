@@ -145,6 +145,65 @@ def _config_is_complete(cfg):
     return bool(cfg['app_id'] and cfg['app_secret'] and cfg['redirect_uri'])
 
 
+def webhook_verified_config_key(app_id=None):
+    """
+    SiteConfiguration key holding the app-level webhook verification flag.
+
+    Scoped per Facebook app id. Verification is a property of the (app,
+    webhook URL, verify token) triple, so pointing the deployment at a
+    different Meta app must NOT inherit the old app's handshake -- that would
+    report a webhook Meta has never called as verified.
+    """
+    from accounts.models import SiteConfiguration
+
+    if app_id is None:
+        app_id = SiteConfiguration.get('facebook_app_id', '')
+    app_id = (app_id or '').strip()
+    return f'messenger_webhook_verified:{app_id}' if app_id else 'messenger_webhook_verified'
+
+
+def _webhook_already_verified():
+    """
+    Has Meta already verified our webhook at the APP level?
+
+    Meta sends the GET hub.challenge once per app, not once per Page, and it
+    never re-sends it. So a Page connected after that first handshake is
+    already covered -- creating its row with is_webhook_verified=False leaves
+    a flag nothing will ever flip back, and the UI cries "Webhook unverified"
+    on a bot that works fine. Disconnect/reconnect reproduced exactly that.
+
+    Three sources of proof, cheapest first:
+
+    1. Any already-verified connection -- but this evidence is deleted with the
+       rows on disconnect (facebook_disconnect), which is the whole bug.
+    2. The persistent app-level flag the webhook view sets on a successful
+       challenge.
+    3. Bootstrap: a saved messenger_verify_token means the admin completed the
+       Meta Console handshake (Meta will not save a webhook whose challenge
+       failed). Without this, the flag can never be written on a deployment
+       whose handshake already happened -- its only writer is the GET branch
+       Meta will never call again, so the fallback could never bootstrap and
+       every reconnect stayed unverified forever.
+    """
+    from accounts.models import SiteConfiguration
+
+    if MessengerConnection.objects.filter(is_webhook_verified=True).exists():
+        return True
+
+    if SiteConfiguration.get(webhook_verified_config_key(), ''):
+        return True
+
+    if SiteConfiguration.get('messenger_verify_token', '').strip():
+        # Record it so later calls take the cheap path above.
+        SiteConfiguration.set(
+            webhook_verified_config_key(), '1',
+            'Meta completed the app-level webhook handshake for this Facebook app.'
+        )
+        return True
+
+    return False
+
+
 def _fetch_business_pages(user_token):
     """
     Fetch Pages that live in a Meta Business Portfolio.
@@ -824,8 +883,9 @@ def facebook_setup_messenger(request):
     webhook_url = f"{base_url}/messenger/webhook/"
 
     # ── Save MessengerConnection (always — even if webhook subscription failed) ─
-    # is_webhook_verified is ONLY set True by Meta's GET verification request
-    # (messenger_bot/views.py webhook view). We never force it True here.
+    # is_webhook_verified is set True by Meta's GET verification request
+    # (messenger_bot/views.py webhook view), or inherited from an earlier
+    # verification — see _webhook_already_verified().
     try:
         # Lookup by page_id first (the unique constraint field) to avoid
         # IntegrityError when the same page was previously connected by this
@@ -837,32 +897,41 @@ def facebook_setup_messenger(request):
             connection.page_access_token = page_token
             connection.webhook_url       = webhook_url
             connection.is_active         = True
+            # Heal a stale False. Never downgrade an already-verified row.
+            if not connection.is_webhook_verified:
+                connection.is_webhook_verified = _webhook_already_verified()
             connection.save(update_fields=[
-                'user_id', 'page_name', 'page_access_token', 'webhook_url', 'is_active'
+                'user_id', 'page_name', 'page_access_token', 'webhook_url', 'is_active',
+                'is_webhook_verified',
             ])
             created = False
         except MessengerConnection.DoesNotExist:
             try:
                 connection = MessengerConnection.objects.get(user=request.user)
-                # Update existing user connection — preserve is_webhook_verified
+                # Update existing user connection — never downgrade an
+                # already-verified row, but heal a stale False.
                 connection.page_id           = page_id
                 connection.page_name         = page_name
                 connection.page_access_token = page_token
                 connection.webhook_url       = webhook_url
                 connection.is_active         = True
+                if not connection.is_webhook_verified:
+                    connection.is_webhook_verified = _webhook_already_verified()
                 connection.save(update_fields=[
-                    'page_id', 'page_name', 'page_access_token', 'webhook_url', 'is_active'
+                    'page_id', 'page_name', 'page_access_token', 'webhook_url', 'is_active',
+                    'is_webhook_verified',
                 ])
                 created = False
             except MessengerConnection.DoesNotExist:
-                # New connection — webhook not yet verified by Meta
+                # New connection — inherits app-level verification if Meta has
+                # already run the handshake for this app.
                 connection = MessengerConnection.objects.create(
                     user=request.user,
                     page_id=page_id,
                     page_name=page_name,
                     page_access_token=page_token,
                     webhook_url=webhook_url,
-                    is_webhook_verified=False,
+                    is_webhook_verified=_webhook_already_verified(),
                     is_active=True,
                 )
                 created = True
@@ -1385,8 +1454,12 @@ def _auto_setup_messenger(user, connected_pages, request):
             connection.page_access_token = page_token
             connection.webhook_url       = webhook_url
             connection.is_active         = True
+            # Heal a stale False. Never downgrade an already-verified row.
+            if not connection.is_webhook_verified:
+                connection.is_webhook_verified = _webhook_already_verified()
             connection.save(update_fields=[
                 'user_id', 'page_name', 'page_access_token', 'webhook_url', 'is_active',
+                'is_webhook_verified',
             ])
             logger.info(f'[FB OAuth] Auto-messenger: updated existing connection for page {page_name}')
         except MessengerConnection.DoesNotExist:
@@ -1397,8 +1470,12 @@ def _auto_setup_messenger(user, connected_pages, request):
                 connection.page_access_token = page_token
                 connection.webhook_url       = webhook_url
                 connection.is_active         = True
+                # Heal a stale False. Never downgrade an already-verified row.
+                if not connection.is_webhook_verified:
+                    connection.is_webhook_verified = _webhook_already_verified()
                 connection.save(update_fields=[
                     'page_id', 'page_name', 'page_access_token', 'webhook_url', 'is_active',
+                    'is_webhook_verified',
                 ])
                 logger.info(f'[FB OAuth] Auto-messenger: updated user connection to page {page_name}')
             except MessengerConnection.DoesNotExist:
@@ -1408,7 +1485,7 @@ def _auto_setup_messenger(user, connected_pages, request):
                     page_name=page_name,
                     page_access_token=page_token,
                     webhook_url=webhook_url,
-                    is_webhook_verified=False,
+                    is_webhook_verified=_webhook_already_verified(),
                     is_active=True,
                 )
                 logger.info(f'[FB OAuth] Auto-messenger: created new connection for page {page_name}')
